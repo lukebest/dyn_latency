@@ -194,6 +194,54 @@
 
     /* params table compact */
     .params td:first-child { color: var(--muted); width: 38%; }
+
+    /* deep-dive analysis blocks */
+    .insight {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.25rem 1.5rem; margin: 1.25rem 0;
+    }
+    .insight.accent { border-left: 3px solid var(--accent); }
+    .insight.warn { border-left: 3px solid var(--warn); }
+    .insight.ok { border-left: 3px solid var(--ok); }
+    .insight h4 {
+      font-size: .92rem; font-weight: 600; color: var(--accent2);
+      margin: 0 0 .75rem;
+    }
+    .insight p:last-child, .insight ul:last-child, .insight ol:last-child { margin-bottom: 0; }
+    .flow-steps {
+      list-style: none; margin: .75rem 0 0; padding: 0;
+      counter-reset: step;
+    }
+    .flow-steps li {
+      position: relative; padding: .5rem 0 .5rem 2rem;
+      border-left: 2px solid var(--border); margin-left: .6rem;
+      font-size: .9rem;
+    }
+    .flow-steps li::before {
+      counter-increment: step;
+      content: counter(step);
+      position: absolute; left: -0.65rem; top: .45rem;
+      width: 1.25rem; height: 1.25rem; border-radius: 50%;
+      background: var(--surface2); border: 1px solid var(--border);
+      font-size: .7rem; font-weight: 700; color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .flow-steps li:last-child { border-left-color: transparent; }
+    .compare-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0;
+    }
+    @media (max-width: 700px) { .compare-grid { grid-template-columns: 1fr; } }
+    .compare-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1rem;
+    }
+    .compare-card h5 { font-size: .82rem; color: var(--muted); margin-bottom: .5rem; text-transform: uppercase; letter-spacing: .04em; }
+    .callout {
+      padding: .85rem 1.1rem; border-radius: 8px; margin: 1rem 0;
+      font-size: .9rem; background: rgba(94,234,212,.08);
+      border: 1px solid rgba(94,234,212,.25);
+    }
+    h4.sub { font-size: .95rem; font-weight: 600; margin: 1.25rem 0 .6rem; color: var(--text); }
   </style>
 </head>
 <body>
@@ -210,9 +258,11 @@
       <a href="#results">仿真结果</a>
       <a href="#decomp">5.1 时延分解</a>
       <a href="#spreading">5.2 拥塞扩散</a>
+      <a href="#spreading-deep">↳ 5.2 图解</a>
       <a href="#hotspot">5.3 热点扫描</a>
       <a href="#planes">5.4 多平面</a>
       <a href="#nodes">5.5 节点扩展</a>
+      <a href="#nodes-deep">↳ 5.5 为何线重合</a>
       <a href="#grid">5.6 P×N 网格</a>
       <a href="#interpret">解读与边界</a>
       <a href="#reproduce">复现</a>
@@ -390,6 +440,86 @@
           <figcaption>热点 rank 0 三方案均贴在 incast floor（≈371 µs）；冷 rank 1–15 在基线下被顶到 ~380 µs（≈11×），SHMEM-POP 拉回 ~33 µs。</figcaption>
         </figure>
         <p>每 rank 平均 dispatch 完成时间：Oracle 55 µs → <strong class="hl-danger">Baseline 380 µs</strong> → SHMEM-POP 54 µs（冷 rank 均值 34 → 380 → 33 µs）。</p>
+
+        <div id="spreading-deep" class="insight accent">
+          <h4>深度解读：这张图在画什么？</h4>
+          <ul>
+            <li><strong>横轴</strong>：16 个 rank（0 = hot rank，承载 4 个热点专家）</li>
+            <li><strong>纵轴</strong>：每个 rank 作为<strong>接收方</strong>的 dispatch 完成时间 <code>recv_done[dst]</code>——该 rank 收齐所有发往自己的 token 的时刻</li>
+            <li><strong>虚线</strong>：hot rank 的 incast floor ≈ <strong>371 µs</strong>（热点 rank 下行链路串行化的物理下界）</li>
+            <li><strong>makespan</strong>（全局完成时间）= 所有 rank 中 <code>recv_done</code> 的<strong>最大值</strong>，不是平均值</li>
+          </ul>
+        </div>
+
+        <h4 class="sub">仿真数据（ρ_h=0.5，N=16，P=1）</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>方案</th><th>hot rank 0</th><th>冷 rank 1–15 均值</th><th>冷 rank 范围</th><th>makespan</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Oracle</strong></td>
+                <td class="num">370.8 µs</td>
+                <td class="num hl">34.2 µs</td>
+                <td class="num">30.9–36.9</td>
+                <td class="num">370.8 µs</td>
+              </tr>
+              <tr>
+                <td><strong>Baseline</strong></td>
+                <td class="num">370.8 µs</td>
+                <td class="num hl-danger">380.3 µs</td>
+                <td class="num">367.5–395.5</td>
+                <td class="num hl-warn">395.5 µs</td>
+              </tr>
+              <tr>
+                <td><strong>SHMEM-POP</strong></td>
+                <td class="num">371.8 µs</td>
+                <td class="num hl">32.8 µs</td>
+                <td class="num">26.1–37.1</td>
+                <td class="num">371.8 µs</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="compare-grid">
+          <div class="compare-card">
+            <h5>Rank 0（三根柱子都到虚线）</h5>
+            <p>三方案都在 ~371 µs。热点 rank 的<strong>下行链路</strong>是硬瓶颈，incast 串行时间不可优化——无论调度多聪明，这根柱子的高度都改不了。</p>
+          </div>
+          <div class="compare-card">
+            <h5>Rank 1–15（分歧在这里）</h5>
+            <p><span style="color:var(--oracle)">■</span> Oracle / <span style="color:var(--shmempop)">■</span> SHMEM-POP：冷 rank 只收少量流量，~33 µs 完成。<br>
+            <span style="color:var(--baseline)">■</span> Baseline：冷 rank 被顶到 ~368–396 µs，约 <strong class="hl-danger">11× 膨胀</strong>（34 µs → 380 µs）。</p>
+          </div>
+        </div>
+
+        <div class="insight warn">
+          <h4>拥塞扩散机制（Baseline 为什么把冷 rank 拖慢？）</h4>
+          <p>Baseline 使用<strong>单 FIFO 源端队列 + 128 KB 交换机缓存 + 无损 CBFC</strong>，没有 VoQ 隔离、没有接收端配速。当队头 chunk 发往 rank 0 且被阻塞时，<code>_pick_uplink()</code> 直接返回 <code>None</code>（HOL block），排在后面的冷流 chunk 也无法发出。</p>
+          <ol class="flow-steps">
+            <li><strong>大量流量涌向 rank 0</strong>：ρ_h=0.5 → 约 45% 路由命中 hot rank</li>
+            <li><strong>rank 0 输出口缓存（128 KB）很快被填满</strong></li>
+            <li><strong>CBFC 反压</strong>：发往 rank 0 的 uplink 被 <code>_eligible()</code> 拒绝（缓存满则不可发送）</li>
+            <li><strong>队头阻塞（HOL）</strong>：每个源 rank 只有一个 FIFO。若队头 chunk 的去向是 rank 0 且被阻塞，<strong>排在后面的、发往冷 rank 的 chunk 也不能发</strong>——哪怕冷 rank 的输出口完全空闲</li>
+            <li><strong>结果</strong>：喂热点的源 rank 长时间卡在「等 rank 0」，冷 rank 收不到数据，完成时间被顶到接近「热点流排空」的时刻（~370 µs）</li>
+          </ol>
+          <p style="margin-top:.85rem;">红色柱子从 rank 1 到 15 呈<strong>阶梯上升</strong>（367 → 396 µs），不是随机噪声，而是各源 rank FIFO 排空顺序不同造成的。</p>
+        </div>
+
+        <div class="insight ok">
+          <h4>SHMEM-POP 如何打断这条链？</h4>
+          <ul>
+            <li><strong>VoQ 隔离</strong>：rank 0 堵，只堵「→rank 0」那条 VoQ；→rank 3、→rank 7 等冷流照常发</li>
+            <li><strong>ESC 信用配速</strong>：在途量 ≤ BDP（25 KB），交换机缓存填不满，反压很少触发</li>
+          </ul>
+        </div>
+
+        <div class="callout">
+          <strong>核心 takeaway：</strong>makespan 只差 ~24 µs（6%），但非关键路径（冷 rank）差了 ~11×。
+          这张图展示的是「受害者流」层面的拥塞扩散，<em>不是</em>关键路径上的 headroom。
+        </div>
       </section>
 
       <section id="hotspot">
@@ -445,6 +575,94 @@
               <tr><td>128</td><td class="num">2571.8 / 2601.7 / 2572.7</td><td class="num">5142.9 / 5162.7 / 5143.7</td></tr>
             </tbody>
           </table>
+        </div>
+
+        <div id="nodes-deep" class="insight accent">
+          <h4>深度解读：为什么各方案 makespan 差距很小？</h4>
+          <p><code>node_sweep.png</code> 的纵轴是 <strong>makespan</strong>（最慢 rank 的完成时间），不是 per-rank 均值。N 增大时三方案几乎重合，主要有四个原因。</p>
+        </div>
+
+        <h4 class="sub">原因 1：makespan 由 hot rank 的 incast floor 决定，且 floor ∝ N</h4>
+        <p>N 从 16 → 128 时，每个 rank 仍发 batch=32 token，ρ_h=0.5 不变，打到 hot rank 的总字节量近似随 N 线性增长，floor 随之线性上升。可优化的 headroom <strong>绝对值</strong>一直 ~25–30 µs，但占 floor 的比例从 6.6% 降到 1.2%——在 0–2600 µs 的纵轴上，25 µs 的缝隙肉眼几乎看不见。</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>N</th><th>dispatch floor</th><th>Baseline</th><th>SHMEM-POP</th><th>headroom（绝对值）</th><th>headroom（占比）</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>16</td><td class="num">371 µs</td><td class="num">395.5 µs</td><td class="num">371.8 µs</td><td class="num hl-warn">24.6 µs</td><td class="num hl-warn">6.6%</td></tr>
+              <tr><td>64</td><td class="num">1426 µs</td><td class="num">1452.2 µs</td><td class="num">1427.2 µs</td><td class="num">25.8 µs</td><td class="num">1.8%</td></tr>
+              <tr><td>128</td><td class="num">2572 µs</td><td class="num">2601.7 µs</td><td class="num">2572.7 µs</td><td class="num">29.8 µs</td><td class="num">1.2%</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4 class="sub">原因 2：N 增大后，Baseline 的 makespan 也贴近 floor</h4>
+        <p>5.2 展示的是 N=16 时冷 rank 被拖到 ~380 µs；N 变大后情况不同——冷 rank 完成时间也被拉到与 hot rank 几乎同一量级：</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>N</th><th>Baseline hot rank</th><th>Baseline 冷 rank 均值</th><th>Baseline 冷 rank max</th><th>Oracle 冷 rank 均值</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>16</td>
+                <td class="num">370.8 µs</td>
+                <td class="num hl-danger">380.3 µs</td>
+                <td class="num">395.5 µs</td>
+                <td class="num hl">34.2 µs</td>
+              </tr>
+              <tr>
+                <td>64</td>
+                <td class="num">1426.2 µs</td>
+                <td class="num">1431.4 µs</td>
+                <td class="num">1452.2 µs</td>
+                <td class="num hl">37.9 µs</td>
+              </tr>
+              <tr>
+                <td>128</td>
+                <td class="num">2571.7 µs</td>
+                <td class="num">2573.0 µs</td>
+                <td class="num">2601.7 µs</td>
+                <td class="num hl">41.5 µs</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>N=64/128 时，Baseline 的冷 rank 与 hot rank 只差 5–30 µs。<strong>makespan = max(所有 rank)</strong>，本来就由最慢的 hot rank 决定；冷 rank 再慢也只多出几十 µs，三条线自然更贴。拥塞扩散的「受害者」故事在 N=16 最明显；N 变大后，绝对 makespan 上 Baseline 与 Oracle/SHMEM-POP 的差距并没有同比放大。</p>
+
+        <h4 class="sub">原因 3：Oracle / SHMEM-POP 的 makespan 本来就 ≈ floor</h4>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>N</th><th>Oracle makespan</th><th>SHMEM-POP makespan</th><th>floor</th><th>POP gap</th></tr></thead>
+            <tbody>
+              <tr><td>16</td><td class="num">370.8 µs</td><td class="num">371.8 µs</td><td class="num">371.0 µs</td><td class="num hl">0.84 µs</td></tr>
+              <tr><td>64</td><td class="num">1426.2 µs</td><td class="num">1427.2 µs</td><td class="num">1426.4 µs</td><td class="num hl">0.84 µs</td></tr>
+              <tr><td>128</td><td class="num">2571.7 µs</td><td class="num">2572.7 µs</td><td class="num">2571.8 µs</td><td class="num hl">0.84 µs</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>绿线、蓝线与黑虚线重合是<strong>预期行为</strong>——它们已经打到了 incast 下界。</p>
+
+        <h4 class="sub">原因 4：5.5 和 5.2 回答的是不同问题</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>维度</th><th>5.2（per-rank）</th><th>5.5（node sweep）</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>指标</td><td>每个 rank 的完成时间</td><td>全局 makespan（max）</td></tr>
+              <tr><td>关注点</td><td>冷 rank 是否被拖累</td><td>规模扩大后 floor 如何变</td></tr>
+              <tr><td>Baseline 的问题</td><td class="hl-danger">冷 rank 11× 膨胀（可见）</td><td>makespan 只比 floor 多 ~1–2%（几乎不可见）</td></tr>
+              <tr><td>SHMEM-POP 的价值</td><td class="hl">保护冷流（33 µs vs 380 µs）</td><td>关键路径贴 floor（与 Oracle 一样）</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <strong>一句话总结：</strong>5.2 展示<strong>非关键路径上的拥塞扩散</strong>（冷 rank 11×）；5.5 展示<strong>关键路径 makespan 随 N 线性恶化</strong>（makespan ≈ incast floor ∝ N）。
+          差距小不代表优化无效，而是 incast 硬墙随 N 放大后，相对优化空间被「淹没」了。
+          评估 SHMEM-POP 价值应看 <strong>per-rank 冷流完成时间</strong> 或 <strong>p50/均值/抖动</strong>，不能只看 makespan。
         </div>
       </section>
 
