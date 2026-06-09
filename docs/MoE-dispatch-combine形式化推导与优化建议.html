@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MoE 网络动态时延 — 形式化推导与优化建议</title>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(','\\)']], displayMath: [['\\[','\\]']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --surface2: #243044;
+      --border: #2d3f56;
+      --text: #e8edf4;
+      --muted: #8b9cb3;
+      --accent: #3d9cf5;
+      --accent2: #5eead4;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --ok: #22c55e;
+      --font: "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --mono: "SF Mono", "JetBrains Mono", "Fira Code", monospace;
+      --radius: 10px;
+      --shadow: 0 4px 24px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.65; font-size: 15px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .layout { display: grid; grid-template-columns: 270px 1fr; min-height: 100vh; }
+    @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } .sidebar { position: static; height: auto; } }
+    .sidebar {
+      position: sticky; top: 0; height: 100vh; overflow-y: auto;
+      background: var(--surface); border-right: 1px solid var(--border); padding: 1.5rem 1rem;
+    }
+    .sidebar h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 1.25rem 0 .5rem; }
+    .sidebar h2:first-child { margin-top: 0; }
+    .sidebar nav a { display: block; padding: .35rem .6rem; border-radius: 6px; color: var(--muted); font-size: .88rem; }
+    .sidebar nav a:hover, .sidebar nav a.active { background: var(--surface2); color: var(--text); text-decoration: none; }
+    .brand { font-weight: 700; font-size: .95rem; color: var(--text); margin-bottom: .25rem; }
+    .brand-sub { font-size: .78rem; color: var(--muted); line-height: 1.4; }
+
+    main { padding: 2rem 2.5rem 4rem; max-width: 1080px; }
+    @media (max-width: 640px) { main { padding: 1.25rem; } }
+
+    .hero {
+      background: linear-gradient(135deg, #1a2a42 0%, #0f1a28 60%, #0f1419 100%);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 2rem 2.25rem; margin-bottom: 2.5rem; box-shadow: var(--shadow);
+    }
+    .hero h1 { font-size: 1.6rem; font-weight: 700; line-height: 1.3; margin-bottom: .75rem; }
+    .hero .meta { display: flex; flex-wrap: wrap; gap: .5rem 1rem; font-size: .82rem; color: var(--muted); }
+    .tag { display: inline-block; padding: .2rem .55rem; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border); font-size: .78rem; color: var(--accent2); }
+    .hero-quote { margin-top: 1.25rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent2); background: rgba(94,234,212,.06); border-radius: 0 var(--radius) var(--radius) 0; font-size: .95rem; }
+
+    section { margin-bottom: 3rem; scroll-margin-top: 1.5rem; }
+    h2.sec-title { font-size: 1.35rem; font-weight: 700; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+    h3 { font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 .75rem; color: var(--accent2); }
+    h4 { font-size: .95rem; font-weight: 600; margin: 1.1rem 0 .5rem; }
+    p { margin-bottom: .85rem; }
+    ul, ol { margin: 0 0 1rem 1.25rem; }
+    li { margin-bottom: .4rem; }
+    strong { color: #fff; }
+
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.25rem; }
+    .card .label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .card .value { font-size: 1.35rem; font-weight: 700; margin: .25rem 0; font-variant-numeric: tabular-nums; }
+    .card .sub { font-size: .8rem; color: var(--muted); }
+    .card.accent { border-color: var(--accent); }
+    .card.warn { border-color: var(--warn); }
+    .card.ok { border-color: var(--ok); }
+
+    .table-wrap { overflow-x: auto; margin: 1rem 0 1.5rem; border-radius: var(--radius); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th, td { padding: .6rem .85rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { background: var(--surface2); color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(61,156,245,.04); }
+    td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: .84rem; }
+    .hl { color: var(--accent2); font-weight: 600; }
+    .hl-warn { color: var(--warn); font-weight: 600; }
+    .hl-danger { color: var(--danger); font-weight: 600; }
+    .params td:first-child { color: var(--muted); width: 22%; font-family: var(--mono); font-size: .84rem; }
+
+    .eq-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-left: 3px solid var(--accent); border-radius: var(--radius);
+      padding: 1rem 1.25rem; margin: 1.1rem 0; overflow-x: auto;
+    }
+    .eq-box.primary { border-left-color: var(--accent2); background: rgba(94,234,212,.04); }
+    .eq-box.warn { border-left-color: var(--warn); }
+    .eq-label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .5rem; }
+
+    .insight {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.25rem 1.5rem; margin: 1.25rem 0;
+    }
+    .insight.accent { border-left: 3px solid var(--accent); }
+    .insight.warn { border-left: 3px solid var(--warn); }
+    .insight.ok { border-left: 3px solid var(--ok); }
+    .insight h4 { font-size: .92rem; font-weight: 600; color: var(--accent2); margin: 0 0 .75rem; }
+
+    .callout {
+      padding: .9rem 1.15rem; border-radius: 8px; margin: 1rem 0;
+      font-size: .9rem; background: rgba(94,234,212,.08); border: 1px solid rgba(94,234,212,.25);
+    }
+    .callout.warn { background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.3); }
+
+    .rec-priority { list-style: none; margin-left: 0; counter-reset: pri; }
+    .rec-priority li {
+      position: relative; padding: .9rem 1rem .9rem 2.6rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: .65rem;
+    }
+    .rec-priority li::before {
+      counter-increment: pri; content: counter(pri);
+      position: absolute; left: .85rem; top: .9rem;
+      width: 1.4rem; height: 1.4rem; border-radius: 50%;
+      background: var(--accent); color: #fff; font-size: .75rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    code { font-family: var(--mono); background: var(--surface2); padding: .15rem .4rem; border-radius: 4px; font-size: .84rem; color: var(--accent2); }
+    pre { font-family: var(--mono); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; overflow-x: auto; font-size: .82rem; margin: 1rem 0; }
+
+    footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: .8rem; color: var(--muted); }
+    mjx-container { color: var(--text) !important; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">形式化推导</div>
+    <div class="brand-sub">单交换机多平面 · 无损 CBFC · MoE EP</div>
+    <h2>目录</h2>
+    <nav>
+      <a href="#model">1 模型与记号</a>
+      <a href="#static">2 静态时延</a>
+      <a href="#floor">3 incast floor</a>
+      <a href="#scaling">3.1 MoE 标度律</a>
+      <a href="#spread">4 拥塞扩散</a>
+      <a href="#buffer">5 缓存需求</a>
+      <a href="#unified">6 统一结果</a>
+      <a href="#verify">7 仿真校验</a>
+      <a href="#advice">8 工程建议</a>
+      <a href="#tldr">决策顺序</a>
+    </nav>
+    <h2>关联</h2>
+    <nav>
+      <a href="MoE-dispatch-combine仿真报告.html">← 仿真数据报告</a>
+      <a href="MoE-dispatch-combine动态时延优化上限-仿真.md">Markdown 原文</a>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="hero">
+      <h1>单交换机多平面拓扑下<br>网络动态时延的形式化推导与优化建议</h1>
+      <div class="meta">
+        <span class="tag">解析推导</span>
+        <span class="tag">incast floor</span>
+        <span class="tag">拥塞扩散</span>
+        <span class="tag">工程杠杆排序</span>
+      </div>
+      <p style="margin-top:1rem;color:var(--muted);font-size:.9rem;">
+        基于离散事件仿真（<a href="MoE-dispatch-combine仿真报告.html">仿真报告</a>）的结构抽象：
+        单台非阻塞输出排队交换机、逐 chunk 多平面条带（ideal multi-rail）、全程无损 CBFC。
+      </p>
+      <div class="hero-quote">
+        动态时延 = <strong>不可优化的 incast 串行</strong>（\(\propto hN/P\)）+
+        <strong>可优化的扩散惩罚</strong>（\(\propto hN/(1-h)\)，由源端 VoQ + 接收端信用消除）。
+      </div>
+    </header>
+
+    <div class="cards">
+      <div class="card accent">
+        <div class="label">incast floor</div>
+        <div class="value">\(W^\star/(PB)\)</div>
+        <div class="sub">调度无关，只能改物理</div>
+      </div>
+      <div class="card warn">
+        <div class="label">冷流膨胀因子</div>
+        <div class="value">\(h(N{-}1)/(1{-}h)\)</div>
+        <div class="sub">FIFO+CBFC，\(\propto N\)</div>
+      </div>
+      <div class="card ok">
+        <div class="label">SHMEM-POP 缓存</div>
+        <div class="value">\(O(\text{BDP})\)</div>
+        <div class="sub">vs 基线 \(O(N/P\cdot\text{BDP})\)</div>
+      </div>
+      <div class="card">
+        <div class="label">关键路径残差</div>
+        <div class="value">~25 µs</div>
+        <div class="sub">\(\Delta_{ramp}\)，不随 \(N\) 增长</div>
+      </div>
+    </div>
+
+    <!-- §1 -->
+    <section id="model">
+      <h2 class="sec-title">1 模型与记号</h2>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>符号</th><th>含义</th></tr></thead>
+          <tbody>
+            <tr><td>\(N\)</td><td>端侧节点数（= EP size）</td></tr>
+            <tr><td>\(P\)</td><td>平面 / rail 数</td></tr>
+            <tr><td>\(B\)</td><td>单链路带宽（bytes/s）；有效瓶颈速率 \(P\cdot B\)</td></tr>
+            <tr><td>\(M[i][j]\)</td><td>源 \(i\) → 目的 \(j\) 字节数（dispatch / combine 流量矩阵）</td></tr>
+            <tr><td>\(U_i=\sum_j M[i][j]\)</td><td>源 \(i\) 上行 egress 负载</td></tr>
+            <tr><td>\(D_j=\sum_i M[i][j]\)</td><td>目的 \(j\) 下行 ingress 负载（incast 量）</td></tr>
+            <tr><td>\(d_{prop}, L_{sw}, s\)</td><td>单跳传播、交换流水线、单 chunk 序列化 \(s=\text{chunk}/B\)</td></tr>
+            <tr><td>RTT, BDP</td><td>端到端往返；\(\text{BDP}=B\cdot\text{RTT}\)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>拓扑约束</strong>：单台非阻塞 crossbar、输出排队；逐 chunk 跨平面条带；全程无损 CBFC（缓存满 → 链路级反压，零丢包）。</p>
+      <p><strong>源端纪律</strong>：</p>
+      <ul>
+        <li><strong>Baseline</strong>：单 FIFO / 源（HOL 阻塞）</li>
+        <li><strong>Oracle / SHMEM-POP</strong>：per-(src,dst) VoQ 隔离；SHMEM-POP 另加接收端信用窗 \(=\) BDP</li>
+      </ul>
+    </section>
+
+    <!-- §2 -->
+    <section id="static">
+      <h2 class="sec-title">2 静态时延（与负载无关）</h2>
+      <p>单包穿越空网的固定流水线开销：</p>
+      <div class="eq-box">
+        <div class="eq-label">静态时延</div>
+        \[ T_{static} = \underbrace{2s}_{\text{上下行序列化}} + \underbrace{2d_{prop}}_{\text{上下行传播}} + L_{sw} \]
+      </div>
+      <p>代入 chunk=4 KB、\(B=25\) GB/s：\(2s\approx0.33\,\mu s\)，\(2d_{prop}=0.2\,\mu s\)，\(L_{sw}=0.3\,\mu s\) → <strong>\(T_{static}\approx 0.83\,\mu s\)</strong>。任何调度均不能优化（除非改 chunk 粒度或物理参数）。</p>
+    </section>
+
+    <!-- §3 -->
+    <section id="floor">
+      <h2 class="sec-title">3 关键路径 makespan：incast floor 推导</h2>
+      <p>设系统瓶颈端口承载字节量：</p>
+      <div class="eq-box">
+        \[ W^\star = \max\!\Big(\max_i U_i,\ \max_j D_j\Big) \]
+      </div>
+      <p>dispatch 阶段瓶颈为热点 rank 的<strong>下行</strong> \(D_{hot}\)；combine 阶段为热点 rank 的<strong>上行</strong> \(U_{hot}\)。</p>
+
+      <div class="insight accent">
+        <h4>命题（makespan 与调度无关）</h4>
+        <p>在 work-conserving 输出排队交换机中，只要瓶颈端口聚合 ingress 速率 \(>\) drain 速率 \(P\cdot B\)（incast 恒成立），该端口 ramp-up 后<strong>永不空闲</strong>，故：</p>
+      </div>
+      <div class="eq-box primary">
+        <div class="eq-label">关键路径 makespan</div>
+        \[ \boxed{\,T_{slow} = T_{static} + \frac{W^\star}{P\cdot B} + \Delta_{ramp}\,} \]
+      </div>
+      <p>其中 \(\Delta_{ramp}=O(\text{buffer}/(PB))\) 为首字节到达 + FIFO 排序残差，<strong>有界且不随 \(W^\star\) 增长</strong>。定义主项为 incast floor：</p>
+      <div class="eq-box">
+        \[ T_{incast} = \frac{W^\star}{P\cdot B} \]
+      </div>
+      <p><strong>含义</strong>：只要瓶颈链路持续满负荷，makespan 由该链路串行时间决定，与 VoQ/FIFO 调度顺序基本无关——<em>incast 部分不可优化</em>（只能改 \(P,B,W^\star\)）。</p>
+
+      <section id="scaling">
+        <h3>3.1 代入 MoE 流量：四条标度律</h3>
+        <p>设每 rank batch \(T\) token、top-\(k\) 路由、单 token-expert \(b\) 字节；热点 rank 实测入向份额 \(h=D_{hot}/(\text{总字节})\)。总字节 \(=N\cdot T\cdot k\cdot b\)，故：</p>
+        <div class="eq-box primary">
+          \[ \boxed{\,T_{incast} = \frac{h\cdot N\cdot T\cdot k\cdot b}{P\cdot B}\,} \]
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>标度</th><th>含义</th><th>仿真验证</th></tr></thead>
+            <tbody>
+              <tr><td class="hl">\(\propto 1/P\)</td><td>加平面是降 floor 的唯一物理手段</td><td class="num">§5.4：371→47 µs（×1/8）；网格 \(P\cdot\)floor ≈ 常数</td></tr>
+              <tr><td class="hl">\(\propto N\)</td><td>单交换机 floor 随 EP 线性恶化</td><td class="num">§5.5：371 / 1426 / 2572 µs</td></tr>
+              <tr><td class="hl">\(\propto h\)</td><td>热点份额线性抬高 floor</td><td class="num">§5.3：随 ρ_h 线性上升</td></tr>
+              <tr><td class="hl">\(b_{comb}=2b_{disp}\)</td><td>combine 恰为 dispatch 2×</td><td class="num">网格热力图精确 2×</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- §4 -->
+    <section id="spread">
+      <h2 class="sec-title">4 拥塞扩散（per-flow 动态时延）推导</h2>
+      <p>关键路径之外，真正可优化的大块在<strong>冷流</strong>（非热点 rank 的完成时间）。</p>
+
+      <h3>4.1 FIFO + CBFC（Baseline）：冷流被顶到 ≈ 热点 makespan</h3>
+      <p>源 \(i\) 单 FIFO 内热/冷 chunk 按注入序交错。热点输出口缓存满 → CBFC 反压 → FIFO 队头热 chunk 阻塞 → <strong>其后所有冷 chunk 一并停住</strong>（HOL）。冷流最后完成时间 ≈ 源 FIFO 排空时间 ≈ 受热点反压支配 ≈ \(T_{hot}\)。</p>
+      <p>冷流自身下界 \(T_{cold}^{floor}=T_{static}+D_{cold}/(PB)\)，膨胀因子：</p>
+      <div class="eq-box warn">
+        <div class="eq-label">冷流膨胀因子（Baseline）</div>
+        \[ \boxed{\ \eta_{cold} = \frac{T_{cold}^{base}}{T_{cold}^{floor}} \approx \frac{D_{hot}}{D_{cold}} = \frac{h}{(1-h)/(N-1)} = \frac{h\,(N-1)}{1-h}\ } \]
+      </div>
+      <p><strong>关键推论</strong>：\(\eta_{cold}\propto N\)——拥塞扩散随规模线性恶化，比 floor 更值得在大规模下治理。</p>
+
+      <h3>4.2 VoQ + 接收端信用（SHMEM-POP）：扩散归零</h3>
+      <p>per-(src,dst) VoQ 使热点只阻塞自身队列；接收端信用窗把每目的在途量钳在 1×BDP，缓存填不满 → 反压几乎不触发：</p>
+      <div class="eq-box ok">
+        \[ T_{cold}^{pop} = T_{static}+\frac{D_{cold}}{P\cdot B},\qquad \eta_{cold}\to 1 \]
+      </div>
+    </section>
+
+    <!-- §5 -->
+    <section id="buffer">
+      <h2 class="sec-title">5 缓存需求的推导</h2>
+      <p>要让开环 FIFO 也「不触发反压」从而 baseline 贴 floor，交换机热点输出口须吸收所有并发源的在途突发。并发源数 ≈ \(N-1\)，逐 chunk 摊到 \(P\) 平面，每源至多 1×BDP 在途：</p>
+      <div class="eq-box warn">
+        <div class="eq-label">Baseline 匹配缓存（贴 floor 所需）</div>
+        \[ \boxed{\ \text{Buffer}_{match}(N,P) \approx \text{BDP}\cdot\left\lceil\frac{N-1}{P}\right\rceil \ \propto\ \frac{N}{P}\ } \]
+      </div>
+      <p>SHMEM-POP 用接收端信用把总在途量钳死，缓存恒为 \(O(\text{BDP})\)：</p>
+      <div class="eq-box ok">
+        \[ \text{Buffer}_{pop} = c\cdot\text{BDP}\quad(\text{常数}\approx 98\ \text{KB，与 }N,P\text{ 无关}) \]
+      </div>
+      <p>仿真：N=128 / P=1 时 \(\text{Buffer}_{match}\approx 3.1\) MB/口 vs POP 98 KB（省 ~32×）。</p>
+    </section>
+
+    <!-- §6 -->
+    <section id="unified">
+      <h2 class="sec-title">6 统一形式化结果</h2>
+      <div class="eq-box primary">
+        <div class="eq-label">单流网络时延分解</div>
+        \[ \boxed{
+        \begin{aligned}
+        T_{flow}(f)=\ &\underbrace{T_{static}}_{\text{固定，不可优}}
+        +\underbrace{\frac{W^\star}{P B}}_{\text{incast floor，}\propto\,hN/P\ \text{（不可优，只能改物理）}}\\
+        &+\underbrace{\mathbb{1}[\text{FIFO,无信用}]\cdot\Big(\frac{W^\star}{P B}-\frac{D_f}{P B}\Big)}_{\text{扩散惩罚，}\propto\,hN/(1-h)\ \text{（可优，VoQ+信用}\to 0\text{）}}
+        \end{aligned}} \]
+      </div>
+      <ul>
+        <li><strong>关键路径（\(f=\) hot）</strong>：第三项 = 0，\(T_{slow}\approx T_{static}+W^\star/(PB)\)，调度无关。</li>
+        <li><strong>冷流（\(f=\) cold）</strong>：第三项主导，SHMEM-POP 消除的部分，且随 \(N\) 线性放大。</li>
+      </ul>
+    </section>
+
+    <!-- §7 -->
+    <section id="verify">
+      <h2 class="sec-title">7 仿真校验（与解析式对照）</h2>
+
+      <h3>7.1 冷流膨胀：实测 vs \(h(N-1)/(1-h)\)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>\(N\)</th><th>实测 \(\eta_{cold}\)</th><th>实测 \(h\)</th><th>公式 \(h(N-1)/(1-h)\)</th></tr></thead>
+          <tbody>
+            <tr><td>16</td><td class="num hl-danger">11.1×</td><td class="num">0.447</td><td class="num">12.1</td></tr>
+            <tr><td>64</td><td class="num hl-danger">37.8×</td><td class="num">0.411</td><td class="num">43.9</td></tr>
+            <tr><td>128</td><td class="num hl-danger">62.1×</td><td class="num">0.367</td><td class="num">73.7</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>7.2 关键路径残差 \(\Delta_{cong}\)（Baseline − floor）</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>\(N\)</th><th>floor (µs)</th><th>\(\Delta_{cong}\) base</th><th>POP − floor</th></tr></thead>
+          <tbody>
+            <tr><td>16</td><td class="num">371.0</td><td class="num hl-warn">24.6 µs</td><td class="num hl">0.84 µs</td></tr>
+            <tr><td>64</td><td class="num">1426.4</td><td class="num">25.8 µs</td><td class="num hl">0.84 µs</td></tr>
+            <tr><td>128</td><td class="num">2571.8</td><td class="num">29.8 µs</td><td class="num hl">0.84 µs</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>\(\Delta_{cong}\) 绝对值近乎常数 → 正是 \(\Delta_{ramp}\) 不随 \(W^\star\) 增长的体现；SHMEM-POP gap 恒为 0.84 µs ≈ \(O(\text{RTT})\)。</p>
+
+      <h3>7.3 floor 标度 \( \propto N/P \)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>\(P\)</th><th>dispatch floor：N=16 / 64 / 128 (µs)</th><th>\(P\times\)floor@N=16</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td class="num">371 / 1426 / 2572</td><td class="num">371</td></tr>
+            <tr><td>2</td><td class="num">186 / 714 / 1286</td><td class="num">372</td></tr>
+            <tr><td>4</td><td class="num">93 / 357 / 644</td><td class="num">373</td></tr>
+            <tr><td>8</td><td class="num">47 / 179 / 322</td><td class="num">377</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- §8 -->
+    <section id="advice">
+      <h2 class="sec-title">8 工程优化建议（按公式杠杆排序）</h2>
+      <p>按「作用于哪一项 / 杠杆大小」分三组。\(P,b,h\) 在 floor 上是<strong>乘性</strong>的——同时下手收益相乘。</p>
+
+      <h3>A. 压低 incast floor \(W^\star/(PB)\)（唯一能动 makespan 的途径）</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>杠杆</th><th>公式依据</th><th>工程建议</th><th>量化收益（仿真/推导）</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>加平面 \(P\)</strong></td>
+              <td>floor \(\propto 1/P\)</td>
+              <td>最优先。热点 rank 入/出向拆到多平面逐 chunk 条带（multi-rail）</td>
+              <td class="num hl">P=1→8：371→47 µs（×1/8）</td>
+            </tr>
+            <tr>
+              <td><strong>降载荷 \(b\)</strong></td>
+              <td>floor \(\propto b\)</td>
+              <td>dispatch 已 FP8；<strong>重点压 combine</strong>（2× 大头）：BF16→FP8/低比特、激活压缩</td>
+              <td class="num">combine 减半 → floor 减半</td>
+            </tr>
+            <tr>
+              <td><strong>降热点 \(h\)</strong></td>
+              <td>floor \(\propto h\)</td>
+              <td>aux-loss 均衡、专家副本/热专家多放置、capacity-factor 限流、动态路由</td>
+              <td class="num">\(h\) 0.45→0.2 ≈ floor 再降 2×</td>
+            </tr>
+            <tr>
+              <td><strong>拓扑分层</strong></td>
+              <td>floor \(\propto N\)</td>
+              <td>勿把整个 EP 塞进单交换机；Clos/分层，分散热点扇入</td>
+              <td class="num">N 128→16 同 P 下 floor ×1/8</td>
+            </tr>
+            <tr>
+              <td><strong>提带宽 \(B\)</strong></td>
+              <td>floor \(\propto 1/B\)</td>
+              <td>升级链路速率（次优先，受物理/成本约束）</td>
+              <td class="num">线性</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>B. 消除扩散惩罚 \(\propto hN/(1-h)\)（保护冷流/尾延迟）</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>杠杆</th><th>公式依据</th><th>工程建议</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>源端 VoQ 隔离</strong></td>
+              <td>消除 \(\mathbb{1}[\text{FIFO}]\)</td>
+              <td>per-destination 队列；热点只阻塞自身 VoQ，杜绝 HOL。把 \(\eta_{cold}\) 从 \(O(N)\) 拉回 1</td>
+            </tr>
+            <tr>
+              <td><strong>接收端信用配速</strong></td>
+              <td>在途量 \(\le\) BDP</td>
+              <td>防缓存溢出 → 防 CBFC 反压树；保证不触发链路级联回压</td>
+            </tr>
+            <tr>
+              <td><strong>不靠深缓存</strong></td>
+              <td>\(\text{Buffer}_{match}\propto N/P\)</td>
+              <td>N=128 需 ~3.1 MB/口（数百 MB 片上 SRAM，不现实）。把流控从交换机 SRAM 移到端侧信用窗（\(O(\text{BDP})\)）</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>C. 压低残差 \(\Delta_{ramp}\) 与隐藏硬墙</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>杠杆</th><th>依据</th><th>工程建议</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Push/预热 ≤ 1 RTT</strong></td>
+              <td>\(\Delta\) 含首字节 ramp</td>
+              <td>元数据/信用预交换与 ramp 重叠，gap 钳在 \(O(\text{RTT})\)（仿真 0.84 µs）</td>
+            </tr>
+            <tr>
+              <td><strong>计算-通信重叠</strong></td>
+              <td>floor 是硬墙</td>
+              <td>专家计算 wave 与通信重叠；端到端由 \(\max(\text{compute},\text{comm})\) 决定</td>
+            </tr>
+            <tr>
+              <td><strong>优化目标对齐</strong></td>
+              <td>makespan 不可优、扩散可优</td>
+              <td><strong>勿用 makespan 评估调度</strong>；应优化 p50/均值/抖动/SM 占用</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tldr">
+      <h2 class="sec-title">决策顺序（TL;DR）</h2>
+      <ol class="rec-priority">
+        <li><strong>先加平面 + 压 combine 载荷 + 做负载均衡</strong>（降 floor，\(P,b,h\) 乘性收益，<em>唯一能动 makespan</em>）。</li>
+        <li><strong>再上 VoQ + 接收端信用</strong>（消除 \(\propto N\) 的冷流扩散；交换机缓存从 \(O(N/P\cdot\text{BDP})\) 降到 \(O(\text{BDP})\)）。</li>
+        <li><strong>用计算重叠藏掉剩余硬墙</strong>，并以 p50/抖动而非 makespan 衡量收益。</li>
+      </ol>
+
+      <div class="callout warn">
+        <strong>常见误区</strong>：在 node_sweep 图里三方案 makespan 几乎重合，不代表优化无效——
+        那只是 incast floor（\(\propto N\)）淹没了 ~25 µs 的 \(\Delta_{ramp}\)。
+        真实收益在 per-rank 冷流（§5.2：11×→1×）和缓存效率（§5.6：32×）上。
+      </div>
+    </section>
+
+    <footer>
+      <p>形式化推导 · 对齐 <a href="MoE-dispatch-combine仿真报告.html">MoE dispatch/combine 仿真报告</a> · SHMEM-POP §1.12 方法学</p>
+      <p>数据来源：<code>results/summary.json</code> · 生成时间：2026-06-09</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.sidebar nav a[href^="#"]');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id));
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
