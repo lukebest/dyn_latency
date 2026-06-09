@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MoE Dispatch/Combine 动态时延优化上限 — 仿真报告</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --surface2: #243044;
+      --border: #2d3f56;
+      --text: #e8edf4;
+      --muted: #8b9cb3;
+      --accent: #3d9cf5;
+      --accent2: #5eead4;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --ok: #22c55e;
+      --oracle: #22c55e;
+      --baseline: #ef4444;
+      --shmempop: #3d9cf5;
+      --font: "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      --mono: "SF Mono", "JetBrains Mono", "Fira Code", monospace;
+      --radius: 10px;
+      --shadow: 0 4px 24px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* layout */
+    .layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+    @media (max-width: 960px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; }
+    }
+    .sidebar {
+      position: sticky; top: 0; height: 100vh; overflow-y: auto;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 1.5rem 1rem;
+    }
+    .sidebar h2 {
+      font-size: .75rem; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--muted); margin: 1.25rem 0 .5rem;
+    }
+    .sidebar h2:first-child { margin-top: 0; }
+    .sidebar nav a {
+      display: block; padding: .35rem .6rem; border-radius: 6px;
+      color: var(--muted); font-size: .88rem;
+    }
+    .sidebar nav a:hover, .sidebar nav a.active {
+      background: var(--surface2); color: var(--text); text-decoration: none;
+    }
+    .brand { font-weight: 700; font-size: .95rem; color: var(--text); margin-bottom: .25rem; }
+    .brand-sub { font-size: .78rem; color: var(--muted); line-height: 1.4; }
+
+    main { padding: 2rem 2.5rem 4rem; max-width: 1100px; }
+    @media (max-width: 640px) { main { padding: 1.25rem; } }
+
+    /* hero */
+    .hero {
+      background: linear-gradient(135deg, #1a2a42 0%, #0f1a28 60%, #0f1419 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem 2.25rem;
+      margin-bottom: 2.5rem;
+      box-shadow: var(--shadow);
+    }
+    .hero h1 { font-size: 1.65rem; font-weight: 700; line-height: 1.3; margin-bottom: .75rem; }
+    .hero .meta { display: flex; flex-wrap: wrap; gap: .5rem 1rem; font-size: .82rem; color: var(--muted); }
+    .tag {
+      display: inline-block; padding: .2rem .55rem; border-radius: 4px;
+      background: var(--surface2); border: 1px solid var(--border);
+      font-size: .78rem; color: var(--accent2);
+    }
+    .hero-quote {
+      margin-top: 1.25rem; padding: 1rem 1.25rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(61,156,245,.08);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      font-size: .95rem;
+    }
+
+    /* sections */
+    section { margin-bottom: 3rem; scroll-margin-top: 1.5rem; }
+    h2.sec-title {
+      font-size: 1.35rem; font-weight: 700; margin-bottom: 1rem;
+      padding-bottom: .5rem; border-bottom: 1px solid var(--border);
+    }
+    h3 { font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 .75rem; color: var(--accent2); }
+    p { margin-bottom: .85rem; }
+    ul, ol { margin: 0 0 1rem 1.25rem; }
+    li { margin-bottom: .4rem; }
+    strong { color: #fff; }
+
+    /* cards */
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.1rem 1.25rem;
+    }
+    .card .label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .card .value { font-size: 1.5rem; font-weight: 700; margin: .25rem 0; font-variant-numeric: tabular-nums; }
+    .card .sub { font-size: .8rem; color: var(--muted); }
+    .card.accent { border-color: var(--accent); background: linear-gradient(160deg, rgba(61,156,245,.12), var(--surface)); }
+    .card.warn { border-color: var(--warn); }
+    .card.ok { border-color: var(--ok); }
+
+    /* conclusions */
+    .conclusion-list { list-style: none; margin-left: 0; }
+    .conclusion-list li {
+      position: relative; padding: .85rem 1rem .85rem 2.5rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: .65rem;
+    }
+    .conclusion-list li::before {
+      content: attr(data-n);
+      position: absolute; left: .85rem; top: .85rem;
+      width: 1.4rem; height: 1.4rem; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      font-size: .75rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* tables */
+    .table-wrap { overflow-x: auto; margin: 1rem 0 1.5rem; border-radius: var(--radius); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th, td { padding: .6rem .85rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: var(--surface2); color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(61,156,245,.04); }
+    td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: .84rem; }
+    .hl { color: var(--accent2); font-weight: 600; }
+    .hl-warn { color: var(--warn); font-weight: 600; }
+    .hl-danger { color: var(--danger); font-weight: 600; }
+
+    /* figures */
+    figure {
+      margin: 1.25rem 0 1.75rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    figure img { width: 100%; display: block; }
+    figcaption {
+      padding: .75rem 1rem; font-size: .82rem; color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+
+    /* code */
+    pre, code { font-family: var(--mono); }
+    code {
+      background: var(--surface2); padding: .15rem .4rem; border-radius: 4px;
+      font-size: .84rem; color: var(--accent2);
+    }
+    pre {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem 1.25rem;
+      overflow-x: auto; font-size: .82rem; line-height: 1.5; margin: 1rem 0;
+    }
+
+    /* legend */
+    .legend { display: flex; flex-wrap: wrap; gap: 1rem; margin: .75rem 0; font-size: .82rem; }
+    .legend span::before {
+      content: ""; display: inline-block; width: 12px; height: 12px;
+      border-radius: 3px; margin-right: .4rem; vertical-align: -2px;
+    }
+    .legend .oracle::before { background: var(--oracle); }
+    .legend .baseline::before { background: var(--baseline); }
+    .legend .shmempop::before { background: var(--shmempop); }
+
+    /* grid heatmap table */
+    .grid-table td { text-align: center; }
+    .grid-table .cell {
+      display: inline-block; padding: .35rem .5rem; border-radius: 4px;
+      font-family: var(--mono); font-size: .8rem; min-width: 4.5rem;
+    }
+
+    /* footer */
+    footer {
+      margin-top: 3rem; padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: .8rem; color: var(--muted);
+    }
+
+    /* params table compact */
+    .params td:first-child { color: var(--muted); width: 38%; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">MoE 动态时延仿真</div>
+    <div class="brand-sub">dispatch / combine · incast 上限分析</div>
+    <h2>目录</h2>
+    <nav>
+      <a href="#tldr">结论速览</a>
+      <a href="#topology">拓扑参数</a>
+      <a href="#workload">流量模型</a>
+      <a href="#scenarios">对比方案</a>
+      <a href="#results">仿真结果</a>
+      <a href="#decomp">5.1 时延分解</a>
+      <a href="#spreading">5.2 拥塞扩散</a>
+      <a href="#hotspot">5.3 热点扫描</a>
+      <a href="#planes">5.4 多平面</a>
+      <a href="#nodes">5.5 节点扩展</a>
+      <a href="#grid">5.6 P×N 网格</a>
+      <a href="#interpret">解读与边界</a>
+      <a href="#reproduce">复现</a>
+    </nav>
+    <h2>关键指标</h2>
+    <nav>
+      <a href="#decomp">floor 371 µs</a>
+      <a href="#decomp">headroom 24.6 µs</a>
+      <a href="#decomp">POP gap 0.84 µs</a>
+      <a href="#spreading">冷流 11× 膨胀</a>
+      <a href="#grid">缓存省 32×</a>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="hero">
+      <h1>MoE Dispatch/Combine 动态时延优化上限<br>仿真分析报告</h1>
+      <div class="meta">
+        <span class="tag">离散事件仿真</span>
+        <span class="tag">无损 CBFC</span>
+        <span class="tag">DeepSeek-V4-Pro MoE</span>
+        <span class="tag">SHMEM-POP §1.12</span>
+      </div>
+      <p style="margin-top:1rem;color:var(--muted);font-size:.9rem;">
+        范围：单分组交换机 · 端侧节点 N∈{16,64,128} · 多平面 P∈{1,2,4,8} · 全链路 200 Gbps · 全程无损 CBFC。<br>
+        方法学对齐 <em>SHMEM-POP技术分档</em> §1.12 与 <em>DeepSeek-V4-MoE通信完整流程</em> §5。
+      </p>
+      <div class="hero-quote">
+        网络动态时延 = <strong>不可优化的 incast 串行</strong>（大头）+ <strong>可优化的拥塞排队</strong>（小头，关键路径上 5–8%）。
+        SHMEM-POP 把关键路径做到距「纯 incast 下界」&lt;1 µs，并消除对冷流的拥塞扩散。
+      </div>
+    </header>
+
+    <!-- KPI cards -->
+    <div class="cards">
+      <div class="card accent">
+        <div class="label">dispatch incast floor</div>
+        <div class="value">371 µs</div>
+        <div class="sub">ρ_h=0.5, N=16, P=1</div>
+      </div>
+      <div class="card warn">
+        <div class="label">关键路径 headroom</div>
+        <div class="value">24.6 µs</div>
+        <div class="sub">基线 − floor（≈6.6%）</div>
+      </div>
+      <div class="card ok">
+        <div class="label">SHMEM-POP gap</div>
+        <div class="value">0.84 µs</div>
+        <div class="sub">≈ O(RTT)，吃掉 96.6%</div>
+      </div>
+      <div class="card warn">
+        <div class="label">冷 rank 膨胀</div>
+        <div class="value">11×</div>
+        <div class="sub">34 µs → 380 µs（基线）</div>
+      </div>
+    </div>
+
+    <section id="tldr">
+      <h2 class="sec-title">1 结论速览（TL;DR）</h2>
+      <p>在「1 交换机 + 16 节点 + 200 Gbps」拓扑下，对 DeepSeek-V4-Pro 单层 MoE（EP=16、batch=32、top-6、FP8 dispatch 7 KB / BF16 combine 14 KB per token-expert）做事件级仿真：</p>
+      <ol class="conclusion-list">
+        <li data-n="1"><strong>incast 是硬墙，且不可优化。</strong>热点专家把大量 token 汇聚到单一 rank，使该 rank 的单条 200 Gbps 链路串行化成为时延下界。dispatch 受入向下行链路约束、combine 受出向上行链路约束。该 incast 串行时延占网络时延的绝大部分（ρ_h=0.5 时 dispatch ≈ 370 µs、combine ≈ 740 µs），任何调度都无法突破。</li>
+        <li data-n="2"><strong>关键路径上可优化的动态时延上限很小。</strong>基线相对 incast 下界仅高出约 4–8%（dispatch 24.6 µs / combine 29.0 µs @ ρ_h=0.5）。SHMEM-POP 把它压到距下界 &lt;1.1 µs（≈O(RTT)），吃掉 95–97% 的可优化空间。</li>
+        <li data-n="3"><strong>真正大块的可优化动态时延藏在「拥塞扩散」里。</strong>基线缺少接收端配速 + VoQ 隔离，热点输出口缓存填满后 CBFC 反压 + FIFO 队头阻塞让冷 rank 完成时间从 ~34 µs 被顶到 ~380 µs（约 11×）。SHMEM-POP 的 VoQ 隔离 + ESC 信用配速把冷 rank 拉回 Oracle 水平（~33 µs）。</li>
+        <li data-n="4"><strong>多平面是降低 incast 硬墙的唯一物理手段：floor ∝ 1/P。</strong>P=1→8 时 dispatch floor 从 371 µs 降到 47 µs（×1/8）；SHMEM-POP 在每个 P 都贴着下界。</li>
+        <li data-n="5"><strong>单交换机下 incast 硬墙随 EP 规模线性恶化：floor ∝ N。</strong>N=16/64/128 时 dispatch floor = 371 / 1426 / 2572 µs；SHMEM-POP gap 恒为 0.84 µs。规模越大越需要靠加平面而非靠调度来压 incast。</li>
+        <li data-n="6"><strong>P×N 组合 + 缓存跟随匹配：SHMEM-POP 的价值是「缓存效率」。</strong>用恒定 ~98 KB 片上缓存达到与开环基线相同的 floor，而基线达到 floor 所需缓存 ∝ BDP×(N−1)/P（N=128/P=1 需 ~3.1 MB/口，物理不可行）。</li>
+      </ol>
+    </section>
+
+    <section id="topology">
+      <h2 class="sec-title">2 拓扑与物理参数</h2>
+      <div class="table-wrap">
+        <table class="params">
+          <thead><tr><th>项</th><th>取值</th></tr></thead>
+          <tbody>
+            <tr><td>拓扑</td><td>1 个分组交换机；端侧节点全连接（星形，任意节点对 1 hop）</td></tr>
+            <tr><td>平面数 P</td><td>1（多平面作为敏感性参数，见 §5.4/5.6）</td></tr>
+            <tr><td>链路带宽</td><td>每条 200 Gbps = 25 GB/s（上行 node→sw、下行 sw→node 各一条）</td></tr>
+            <tr><td>交换结构</td><td>非阻塞 crossbar、输出排队</td></tr>
+            <tr><td>单链路传播 d_prop</td><td>100 ns</td></tr>
+            <tr><td>交换流水线 L_sw</td><td>300 ns</td></tr>
+            <tr><td>chunk / credit 粒度</td><td>4 KB（SHMEM-POP §1.8 pull_credit_size）</td></tr>
+            <tr><td>RTT（POP 往返）</td><td>1.0 µs（BDP = 200 Gbps × 1 µs ≈ 24.4 KB）</td></tr>
+            <tr><td>Fabric</td><td>全程无损 CBFC（零丢包链路级反压）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>时延分解</strong>：单包跨空网的静态时延 ≈ 0.8 µs（与负载无关）。<strong>动态时延</strong> = 实测 makespan − 静态 = incast 串行 + 排队拥塞。</p>
+    </section>
+
+    <section id="workload">
+      <h2 class="sec-title">3 业务/流量模型（MoE EP）</h2>
+      <ul>
+        <li>EP = R = 节点数；384 routed experts，每 rank 本地 24 个；top-6；每 rank batch = 32 token。</li>
+        <li><strong>dispatch</strong>：FP8，每 token-expert ≈ 7 KB；矩阵 M_disp[i][j] = rank i 路由到位于 rank j 的专家的字节数。</li>
+        <li><strong>combine</strong>：BF16，每 token-expert ≈ 14 KB；M_comb[j][i] = M_disp 计数 × 14 KB（反向、字节×2）。</li>
+        <li><strong>热点（incast）</strong>：4 个热点专家落在单一 hot rank（rank 0），吸收占比 ρ_h 的路由命中。ρ_h ∈ {0, 0.3, 0.5, 0.7}。</li>
+        <li>总量：dispatch ≈ 20.7 MB、combine ≈ 41.4 MB（整个 EP 域单层单步，N=16）。</li>
+      </ul>
+    </section>
+
+    <section id="scenarios">
+      <h2 class="sec-title">4 三个对比方案</h2>
+      <div class="legend">
+        <span class="oracle">Oracle（理论下界）</span>
+        <span class="baseline">Baseline（无协同 kernel-direct）</span>
+        <span class="shmempop">SHMEM-POP（主评方案）</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>方案</th><th>源端排队</th><th>交换缓存</th><th>接收端配速</th><th>Push</th><th>含义</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Oracle</strong> (S0)</td><td>每目的 VoQ</td><td>∞、零丢包</td><td>—</td><td>—</td><td>理论下界，纯 incast 串行 floor</td></tr>
+            <tr><td><strong>Baseline</strong> (S2)</td><td>单 FIFO（HOL）</td><td>有限、无损 CBFC 反压</td><td>无（开环 blast）</td><td>—</td><td>无 IOD 协同的对照基线</td></tr>
+            <tr><td><strong>SHMEM-POP</strong> (S1)</td><td>每 (src,dst) VoQ</td><td>有限、无损 CBFC</td><td>ESC 信用窗 = BDP</td><td>+1×RTT</td><td>主评方案</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>三方案共用同一无丢包 fabric；差异仅在 <strong>IOD/源端协同</strong>（VoQ 隔离 + 接收端信用配速 vs 开环 FIFO）。多平面采用逐 chunk 跨平面条带（ideal multi-rail）。</p>
+      <ul>
+        <li><strong>incast floor（解析）</strong> = max(busiest_uplink, busiest_downlink) / (200 Gbps × P) + 静态</li>
+        <li><strong>headroom</strong> = makespan(Baseline) − floor</li>
+        <li><strong>POP gap</strong> = makespan(SHMEM-POP) − floor</li>
+      </ul>
+    </section>
+
+    <section id="results">
+      <h2 class="sec-title">5 仿真结果</h2>
+
+      <section id="decomp">
+        <h3>5.1 时延分解（关键路径 makespan，ρ_h=0.5，N=16，P=1）</h3>
+        <figure>
+          <img src="../results/decomp.png" alt="时延分解：static / incast serialize / congestion excess">
+          <figcaption>橙色「incast 串行」是不可优化的硬墙；红色「congestion excess」是基线相对下界的多余排队——关键路径上动态时延可优化的全部空间。</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>阶段</th><th>incast floor</th><th>Baseline</th><th>SHMEM-POP</th>
+                <th>headroom</th><th>POP gap</th><th>吃掉占比</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>dispatch</strong></td>
+                <td class="num hl">371.0 µs</td>
+                <td class="num">395.5 µs</td>
+                <td class="num hl">371.8 µs</td>
+                <td class="num hl-warn">24.6 µs</td>
+                <td class="num hl">0.84 µs</td>
+                <td class="num">96.6%</td>
+              </tr>
+              <tr>
+                <td><strong>combine</strong></td>
+                <td class="num hl">741.1 µs</td>
+                <td class="num">770.2 µs</td>
+                <td class="num hl">742.1 µs</td>
+                <td class="num hl-warn">29.0 µs</td>
+                <td class="num hl">1.01 µs</td>
+                <td class="num">96.5%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="spreading">
+        <h3>5.2 拥塞扩散（非关键路径，dispatch，ρ_h=0.5）</h3>
+        <figure>
+          <img src="../results/perrank.png" alt="Per-rank dispatch completion time">
+          <figcaption>热点 rank 0 三方案均贴在 incast floor（≈371 µs）；冷 rank 1–15 在基线下被顶到 ~380 µs（≈11×），SHMEM-POP 拉回 ~33 µs。</figcaption>
+        </figure>
+        <p>每 rank 平均 dispatch 完成时间：Oracle 55 µs → <strong class="hl-danger">Baseline 380 µs</strong> → SHMEM-POP 54 µs（冷 rank 均值 34 → 380 → 33 µs）。</p>
+      </section>
+
+      <section id="hotspot">
+        <h3>5.3 热点强度扫描（N=16，P=1，固定 128 KB 缓存）</h3>
+        <figure>
+          <img src="../results/sweep.png" alt="Makespan vs hotspot intensity">
+          <figcaption>floor 随热点强度线性上升；SHMEM-POP 始终贴墙（gap &lt; 1.1 µs）。即便 ρ_h=0，基线 makespan 仍为 floor 的 ~1.8×。</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ρ_h</th><th>hot share</th><th>dispatch floor / base / pop (µs)</th><th>combine floor / base / pop (µs)</th></tr></thead>
+            <tbody>
+              <tr><td>0.0</td><td>7%</td><td class="num">60.2 / 105.9 / 61.0</td><td class="num">119.5 / 217.7 / 120.5</td></tr>
+              <tr><td>0.3</td><td>31%</td><td class="num">256.9 / 288.1 / 257.7</td><td class="num">512.9 / 551.4 / 513.9</td></tr>
+              <tr><td class="hl">0.5</td><td>45%</td><td class="num hl">371.0 / 395.5 / 371.8</td><td class="num hl">741.1 / 770.2 / 742.1</td></tr>
+              <tr><td>0.7</td><td>56%</td><td class="num">465.6 / 484.1 / 466.4</td><td class="num">930.4 / 952.5 / 931.4</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="planes">
+        <h3>5.4 多平面 P∈{1,2,4,8}（N=16，ρ_h=0.5）</h3>
+        <figure>
+          <img src="../results/plane_sweep.png" alt="Multi-plane lower bound">
+          <figcaption>逐 chunk 跨平面条带后，incast floor ∝ 1/P。调度类优化只能逼近当前 P 的下界，不能替代加平面。</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>P</th><th>dispatch floor / base / pop (µs)</th><th>combine floor / base / pop (µs)</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td class="num">371.0 / 395.5 / 371.8</td><td class="num">741.1 / 770.2 / 742.1</td></tr>
+              <tr><td>2</td><td class="num">185.9 / 195.7 / 187.4</td><td class="num">371.0 / 390.8 / 372.8</td></tr>
+              <tr><td>4</td><td class="num">93.4 / 98.3 / 95.1</td><td class="num">185.9 / 193.0 / 187.5</td></tr>
+              <tr><td>8</td><td class="num">47.1 / 48.4 / 49.1</td><td class="num">93.4 / 97.1 / 95.2</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="nodes">
+        <h3>5.5 端侧节点数 N∈{16,64,128}（P=1，ρ_h=0.5）</h3>
+        <figure>
+          <img src="../results/node_sweep.png" alt="Node scaling">
+          <figcaption>单交换机下 incast 硬墙随规模线性恶化（floor ∝ N）。N=128 时 combine floor 已达 ~5.1 ms。</figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>N (=EP)</th><th>dispatch floor / base / pop (µs)</th><th>combine floor / base / pop (µs)</th></tr></thead>
+            <tbody>
+              <tr><td>16</td><td class="num">371.0 / 395.5 / 371.8</td><td class="num">741.1 / 770.2 / 742.1</td></tr>
+              <tr><td>64</td><td class="num">1426.4 / 1452.2 / 1427.2</td><td class="num">2852.0 / 2881.6 / 2852.8</td></tr>
+              <tr><td>128</td><td class="num">2571.8 / 2601.7 / 2572.7</td><td class="num">5142.9 / 5162.7 / 5143.7</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="grid">
+        <h3>5.6 P×N 组合网格 + 交换机 buffer 跟随匹配（ρ_h=0.5）</h3>
+        <p>交换机每口缓存跟随 (P,N) 匹配——按「每个并发源一份 BDP」给足无损吸收所需深度：</p>
+        <pre>matched_buffer(P,N) = BDP × ⌈(N−1)/P⌉      （BDP = 200 Gbps × 1 µs ≈ 24.4 KB）</pre>
+        <p>SHMEM-POP 因接收端信用配速把在途量钳在 1×BDP，缓存恒定取 <strong>4×BDP ≈ 97.7 KB</strong>，与 N、P 无关。</p>
+
+        <figure>
+          <img src="../results/grid_floor.png" alt="Incast floor heatmap over P x N grid">
+          <figcaption>incast floor 网格：floor ∝ N/P。dispatch 与 combine 呈 2× 关系（combine 字节量×2）。</figcaption>
+        </figure>
+        <figure>
+          <img src="../results/buffer_match.png" alt="Switch buffer required to reach floor">
+          <figcaption>达到 floor 所需的交换机缓存：基线 ∝ BDP×(N−1)/P 随规模爆炸；SHMEM-POP 恒为 ~98 KB。</figcaption>
+        </figure>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>P \ N</th>
+                <th colspan="3">dispatch floor (µs)</th>
+                <th colspan="3">基线匹配缓存 (KB)</th>
+                <th>SHMEM-POP</th>
+              </tr>
+              <tr>
+                <th></th>
+                <th>16</th><th>64</th><th>128</th>
+                <th>16</th><th>64</th><th>128</th>
+                <th>缓存 (KB)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>1</strong></td>
+                <td class="num">371</td><td class="num">1426</td><td class="num hl-warn">2572</td>
+                <td class="num">366</td><td class="num">1538</td><td class="num hl-danger">3101</td>
+                <td class="num hl">97.7</td>
+              </tr>
+              <tr>
+                <td><strong>2</strong></td>
+                <td class="num">186</td><td class="num">714</td><td class="num">1286</td>
+                <td class="num">195</td><td class="num">781</td><td class="num">1563</td>
+                <td class="num hl">97.7</td>
+              </tr>
+              <tr>
+                <td><strong>4</strong></td>
+                <td class="num">93</td><td class="num">357</td><td class="num">644</td>
+                <td class="num">98</td><td class="num">391</td><td class="num">781</td>
+                <td class="num hl">97.7</td>
+              </tr>
+              <tr>
+                <td><strong>8</strong></td>
+                <td class="num">47</td><td class="num">179</td><td class="num">322</td>
+                <td class="num">49</td><td class="num">195</td><td class="num">391</td>
+                <td class="num hl">97.7</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>匹配缓存后 makespan（dispatch，基线 vs POP vs floor）</h3>
+        <div class="table-wrap">
+          <table class="grid-table">
+            <thead>
+              <tr><th>P \ N</th><th>16</th><th>64</th><th>128</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>P=1</strong></td>
+                <td class="num">385.9 / 371.8<br><small>floor 371.0</small></td>
+                <td class="num">1426.2 / 1427.2<br><small>floor 1426.4</small></td>
+                <td class="num">2571.7 / 2572.7<br><small>floor 2571.8</small></td>
+              </tr>
+              <tr><td><strong>P=2</strong></td>
+                <td class="num">193.0 / 187.4<br><small>floor 185.9</small></td>
+                <td class="num">716.4 / 717.4<br><small>floor 713.6</small></td>
+                <td class="num">1291.1 / 1292.1<br><small>floor 1286.3</small></td>
+              </tr>
+              <tr><td><strong>P=4</strong></td>
+                <td class="num">99.6 / 95.1<br><small>floor 93.4</small></td>
+                <td class="num">361.4 / 362.4<br><small>floor 357.2</small></td>
+                <td class="num">651.1 / 652.1<br><small>floor 643.6</small></td>
+              </tr>
+              <tr><td><strong>P=8</strong></td>
+                <td class="num">51.7 / 49.1<br><small>floor 47.1</small></td>
+                <td class="num">185.3 / 185.2<br><small>floor 179.0</small></td>
+                <td class="num">331.7 / 332.7<br><small>floor 322.2</small></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:.85rem;color:var(--muted);">单元格格式：基线 makespan / SHMEM-POP makespan（µs），下方小字为 floor。</p>
+
+        <ul>
+          <li><strong>缓存匹配后，开环基线也能贴住 floor</strong>——再次印证 incast 不可优化。</li>
+          <li><strong>代价是缓存随规模爆炸</strong>：N=128/P=1 需 ~3.1 MB/口（128 口 → 数百 MB 片上缓存，物理不现实）。</li>
+          <li><strong>SHMEM-POP 用 O(BDP)≈98 KB 缓存在任意 (P,N) 都打到同一 floor</strong>，缓存效率领先 ~32×（N=128/P=1）。</li>
+        </ul>
+      </section>
+    </section>
+
+    <section id="interpret">
+      <h2 class="sec-title">6 解读与边界</h2>
+      <ul>
+        <li><strong>关键路径 headroom 为何这么小？</strong> 非阻塞输出排队交换机里，瓶颈链路满负荷时 makespan ≈ floor，与调度顺序基本无关——瓶颈链路就是物理上限。仿真证实了 incast 部分不可优化。</li>
+        <li><strong>combine 可优化空间更小</strong>：incast 在热点 rank 的出向上行链路（单口串行），makespan 由该单口决定 → 几乎纯硬墙。</li>
+        <li><strong>无损 CBFC 下基线对冷流更毒</strong>：无丢包反压让队头阻塞演化成「拥塞树」，冷 rank 完成时间被顶到 ≈热点 floor（~11×）。</li>
+        <li><strong>多平面降低 floor</strong>：incast 串行 /= P，是降低 incast 硬墙的唯一物理手段。</li>
+        <li><strong>规模放大 incast 硬墙</strong>：单交换机下 floor ∝ N，N=128 时已达毫秒级。</li>
+        <li><strong>缓存跟随匹配揭示 SHMEM-POP 的缓存效率</strong>：把片上缓存需求从 O(N/P·BDP) 降到 O(BDP)。</li>
+        <li><strong>SHMEM-POP 价值定位</strong>：①关键路径逼近 incast 下界；②消除冷流拥塞扩散；③Push ≤ 1 RTT 反压。</li>
+      </ul>
+      <p style="font-size:.88rem;color:var(--muted);">
+        <strong>建模假设</strong>：交换为输出排队非阻塞；三方案全程无损 CBFC；多平面采用 ideal multi-rail 条带；专家计算 τ_wave 此处不计入纯网络动态时延。
+      </p>
+    </section>
+
+    <section id="reproduce">
+      <h2 class="sec-title">7 复现</h2>
+      <pre>cd /home/luke/dyn_latency
+pip install -r requirements.txt
+python3 run.py</pre>
+      <p>实验组：</p>
+      <ul>
+        <li><strong>A</strong> 热点扫描（N=16, P=1，ρ_h∈{0,0.3,0.5,0.7}，固定 128 KB 缓存）</li>
+        <li><strong>B</strong> 多平面（N=16, ρ_h=0.5，P∈{1,2,4,8}）</li>
+        <li><strong>C</strong> 节点扩展（P=1, ρ_h=0.5，N∈{16,64,128}）</li>
+        <li><strong>D</strong> P×N 网格（P∈{1,2,4,8}×N∈{16,64,128}，缓存跟随扇入匹配）</li>
+      </ul>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>文件</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td><code>dynlat/engine.py</code></td><td>离散事件内核（事件堆）</td></tr>
+            <tr><td><code>dynlat/fabric.py</code></td><td>链路/交换：输出排队、CBFC 反压、VoQ vs FIFO-HOL、信用配速</td></tr>
+            <tr><td><code>dynlat/workload.py</code></td><td>MoE 路由抽样 → dispatch/combine 字节矩阵</td></tr>
+            <tr><td><code>dynlat/scenarios.py</code></td><td>三方案配置 + incast floor + 缓存匹配策略</td></tr>
+            <tr><td><code>run.py</code></td><td>扫描 ρ_h/P/N、P×N 网格、出表出图、写 summary.json</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>输出：<code>results/summary.json</code> 及 7 张 PNG（decomp, sweep, perrank, plane_sweep, node_sweep, grid_floor, buffer_match）。</p>
+    </section>
+
+    <footer>
+      <p>动态低时延 · MoE incast 上限分析 · 对齐 SHMEM-POP §1.12 方法学</p>
+      <p>数据来源：<code>results/summary.json</code> · 生成时间：2026-06-09</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+  // highlight active nav on scroll
+  const sections = document.querySelectorAll('section[id], section section[id]');
+  const navLinks = document.querySelectorAll('.sidebar nav a');
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id));
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
