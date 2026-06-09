@@ -74,6 +74,7 @@ class _Chunk:
     flow: Flow
     nbytes: int
     seq: int
+    plane: int = 0
 
 
 class Fabric:
@@ -101,6 +102,7 @@ class Fabric:
 
         self._inflight = [[0.0] * N for _ in range(P)]     # bytes left-source, not delivered (credit)
 
+        self._stalled: set[tuple[int, int]] = set()  # (plane, src) idle but blocked
         self._pending = 0  # chunks not yet delivered
 
     # ---- construction -------------------------------------------------
@@ -116,12 +118,14 @@ class Fabric:
                 if size <= 0:
                     size = rem if rem > 0 else cb
                 rem -= cb
-                ch = _Chunk(flow=f, nbytes=max(1, size), seq=s)
+                # per-chunk striping across planes = ideal multi-rail
+                ch = _Chunk(flow=f, nbytes=max(1, size), seq=s,
+                            plane=s % self.cfg.n_planes)
                 self.eng.at(f.start, lambda c=ch: self._make_ready(c))
                 self._pending += 1
 
     def _make_ready(self, ch: _Chunk) -> None:
-        p, src, dst = ch.flow.plane, ch.flow.src, ch.flow.dst
+        p, src, dst = ch.plane, ch.flow.src, ch.flow.dst
         if self.cfg.discipline == "fifo":
             self._fifo[p][src].append(ch)
         else:
@@ -141,12 +145,20 @@ class Fabric:
         return True
 
     # ---- uplink scheduler --------------------------------------------
+    def _has_work(self, p: int, src: int) -> bool:
+        if self.cfg.discipline == "fifo":
+            return bool(self._fifo[p][src])
+        return bool(self._voq[p][src])
+
     def _poke_uplink(self, p: int, src: int) -> None:
         if self._uplink_busy[p][src]:
             return
         ch = self._pick_uplink(p, src)
         if ch is None:
+            if self._has_work(p, src):
+                self._stalled.add((p, src))   # blocked on buffer/credit
             return
+        self._stalled.discard((p, src))
         self._uplink_busy[p][src] = True
         # lossless: reserve buffer at dispatch. lossy: buffer charged on arrival.
         if not self.cfg.lossy:
@@ -236,10 +248,14 @@ class Fabric:
         self._pending -= 1
 
     def _wake_uplinks_for_dst(self, p: int, dst: int) -> None:
-        # any source that has traffic to dst (or is HOL-blocked) may now proceed
-        for src in range(self.cfg.n_nodes):
-            if not self._uplink_busy[p][src]:
-                self._poke_uplink(p, src)
+        # buffer/credit freed -> retry uplinks that were blocked
+        if not self._stalled:
+            return
+        retry = [s for s in self._stalled if s[0] == p]
+        for s in retry:
+            self._stalled.discard(s)
+        for (pp, src) in retry:
+            self._poke_uplink(pp, src)
 
     # ---- run ----------------------------------------------------------
     def run(self) -> None:

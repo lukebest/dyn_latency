@@ -43,9 +43,9 @@ def analytical_floor(cfg: FabricConfig, M: np.ndarray) -> tuple[float, float]:
     return floor, incast_serialize
 
 
-def base_phys(n_planes: int = 1) -> FabricConfig:
+def base_phys(n_planes: int = 1, n_nodes: int = 16) -> FabricConfig:
     return FabricConfig(
-        n_nodes=16, n_planes=n_planes, link_bps=200e9, chunk_bytes=4096,
+        n_nodes=n_nodes, n_planes=n_planes, link_bps=200e9, chunk_bytes=4096,
         d_prop=100e-9, l_switch=300e-9,
     )
 
@@ -57,17 +57,19 @@ def _bdp(cfg: FabricConfig) -> float:
 RTT = 1.0e-6  # platform-calibrated POP round trip (SHMEM-POP §1.8)
 
 
-def make_config(scenario: str, n_planes: int = 1) -> tuple[FabricConfig, float]:
+def make_config(scenario: str, n_planes: int = 1,
+                n_nodes: int = 16) -> tuple[FabricConfig, float]:
     """Return (FabricConfig, push_delay)."""
-    cfg = base_phys(n_planes)
+    cfg = base_phys(n_planes, n_nodes)
     if scenario == "oracle":
         return replace(cfg, discipline="voq", buffer_bytes=None,
                        credit_bytes=None, lossy=False), 0.0
     if scenario == "baseline":
-        # uncoordinated: FIFO source send queue (HOL), shallow switch buffer,
-        # lossy with retransmit -> incast collapse
-        return replace(cfg, discipline="fifo", buffer_bytes=64 * 1024,
-                       credit_bytes=None, lossy=True, rto=5e-6), 0.0
+        # uncoordinated kernel-direct, but on the SAME lossless CBFC fabric as
+        # SHMEM-POP: single FIFO source send queue (HOL) + finite per-port buffer
+        # with link-level backpressure. No receiver pacing, no VoQ isolation.
+        return replace(cfg, discipline="fifo", buffer_bytes=128 * 1024,
+                       credit_bytes=None, lossy=False), 0.0
     if scenario == "shmempop":
         bdp = _bdp(cfg)
         return replace(cfg, discipline="voq", buffer_bytes=4 * bdp,
@@ -76,8 +78,8 @@ def make_config(scenario: str, n_planes: int = 1) -> tuple[FabricConfig, float]:
 
 
 def run_phase(name: str, scenario: str, M: np.ndarray, n_planes: int = 1) -> PhaseResult:
-    cfg, push = make_config(scenario, n_planes)
-    N = cfg.n_nodes
+    N = M.shape[0]
+    cfg, push = make_config(scenario, n_planes, n_nodes=N)
     flows: list[Flow] = []
     for i in range(N):
         for j in range(N):
