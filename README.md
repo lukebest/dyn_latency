@@ -14,7 +14,10 @@ pip install -r requirements.txt
 python3 run.py
 ```
 
-生成 `results/summary.json` 与 `decomp.png / sweep.png / perrank.png`。
+生成 `results/summary.json` 与 `decomp.png / sweep.png / perrank.png /
+plane_sweep.png / node_sweep.png / grid_floor.png / buffer_match.png`。
+
+实验组 A 热点扫描、B 多平面 P、C 节点 N、**D P×N 网格（缓存跟随 (P,N) 扇入匹配）**。
 
 ## 核心结论
 
@@ -22,6 +25,7 @@ python3 run.py
 - **关键路径上可优化上限仅 ~4–8%**；SHMEM‑POP 把 makespan 做到距 incast 下界 **<1.1 µs（≈O(RTT)）**，吃掉 95–97%。
 - **真正大块的可优化时延是基线的拥塞扩散**（无损 CBFC 下更毒）：冷 rank 被 CBFC 反压 + FIFO HOL 顶到 ~11×，SHMEM‑POP（VoQ 隔离 + ESC 信用配速）将其拉回 Oracle 水平。
 - **多平面 floor∝1/P**（P=1→8: 371→47 µs），**单交换机 floor∝N**（N=16→128: 371→2572 µs）；SHMEM‑POP gap 恒为 ~0.84 µs。降 incast 硬墙靠加平面，调度负责清零硬墙之上的拥塞。
+- **P×N 网格 + 缓存匹配**：floor∝N/P；给够缓存（∝BDP×(N−1)/P）则开环基线也能贴 floor，但该缓存随规模爆炸（N=128/P=1 需 ~3.1 MB/口）。**SHMEM‑POP 用恒定 ~98 KB（O(BDP)）缓存在任意 (P,N) 达到同一 floor → 核心价值是缓存效率（省至 ~32×），而非更低 floor。**
 
 ## 结构
 
@@ -30,5 +34,5 @@ python3 run.py
 | `dynlat/engine.py` | 离散事件内核 |
 | `dynlat/fabric.py` | 链路/交换：输出排队、有限/无限缓存、无损反压、VoQ vs FIFO‑HOL、接收端信用、丢包重传 |
 | `dynlat/workload.py` | MoE 路由抽样（热点）→ dispatch/combine 字节矩阵 |
-| `dynlat/scenarios.py` | Oracle/Baseline/SHMEM‑POP 配置 + 解析 floor + runner |
-| `run.py` | 扫描 ρ_h、出表/图、写 summary.json |
+| `dynlat/scenarios.py` | Oracle/Baseline/SHMEM‑POP 配置 + 解析 floor + 缓存匹配策略（`matched_buffer`）+ runner |
+| `run.py` | 扫描 ρ_h/P/N + P×N 网格、出表/图、写 summary.json |

@@ -20,6 +20,8 @@
 
 5. **单交换机下 incast 硬墙随 EP 规模线性恶化：floor ∝ N。** N=16/64/128 时 dispatch floor = 371 / 1426 / 2572 µs；SHMEM‑POP gap 恒为 0.84 µs，与规模无关。**规模越大越需要靠加平面而非靠调度来压 incast。**
 
+6. **P×N 组合 + 缓存跟随匹配下，SHMEM‑POP 的价值是「缓存效率」：用恒定 ~98 KB 片上缓存达到与开环基线相同的 floor，而基线达到 floor 所需缓存 ∝ BDP×(N−1)/P（N=128/P=1 需 ~3.1 MB/口，物理不可行）。** floor 在网格上 ∝ N/P；只要给够缓存，关键路径就是 incast floor（再证 incast 不可优化），但「给够缓存」对基线意味着随规模爆炸的片上缓存，对 SHMEM‑POP 则恒为 O(BDP)。
+
 > 一句话：**网络动态时延 = 不可优化的 incast 串行（大头）+ 可优化的拥塞排队（小头，在关键路径上 5–8%）。SHMEM‑POP 把关键路径做到距「纯 incast 下界」<1 µs，并消除对冷流的拥塞扩散。**
 
 ---
@@ -137,6 +139,35 @@ EP=N 增大时，token‑expert 总量 ∝ N，热点 rank 在单交换机单链
 - SHMEM‑POP gap **恒为 0.84 µs，与 N 无关**；基线 headroom 维持 ~26–30 µs（占比随 N 增大而摊薄）。
 - 结论：**规模化要靠加平面（§5.4，floor/P）而非调度来压 incast**；调度（SHMEM‑POP）负责把「硬墙之上的拥塞」清零并保护冷流。
 
+### 5.6 P×N 组合网格 + 交换机 buffer 跟随匹配（ρ_h=0.5）
+
+前面 §5.1–5.3 用**固定 128 KB/口**的参考缓存，凸显欠配缓存下基线的拥塞扩散。本节把 **P∈{1,2,4,8} 与 N∈{16,64,128} 组合成网格**，并让**交换机每口缓存跟随 (P,N) 匹配**——按「每个并发源一份 BDP」给足无损吸收所需深度：
+
+```
+matched_buffer(P,N) = BDP × ⌈(N−1)/P⌉      （BDP = 200 Gbps × 1 µs ≈ 24.4 KB）
+```
+
+即热点输出口的入向扇入 (N−1) 被 P 个平面摊薄为每平面 ⌈(N−1)/P⌉，给足每源一份 BDP 即可消除链路级反压、让**开环基线也能打到 floor**。SHMEM‑POP 则因**接收端信用配速**把在途量钳在 1×BDP，缓存恒定取 **4×BDP ≈ 97.7 KB，与 N、P 无关**。
+
+**incast floor 网格（floor ∝ N/P）**：
+
+![grid_floor](../results/grid_floor.png)
+
+**达到 floor 所需的交换机缓存（核心结论）**：
+
+![buffer_match](../results/buffer_match.png)
+
+| P\N | dispatch floor (µs) 16 / 64 / 128 | 基线匹配缓存 (KB) 16 / 64 / 128 | SHMEM‑POP 缓存 |
+|---|---|---|---|
+| 1 | 371 / 1426 / 2572 | 366 / 1538 / **3101** | **97.7 KB** |
+| 2 | 186 / 714 / 1286 | 195 / 781 / 1562 | **97.7 KB** |
+| 4 | 93 / 357 / 644 | 98 / 391 / 781 | **97.7 KB** |
+| 8 | 47 / 179 / 322 | 49 / 195 / 391 | **97.7 KB** |
+
+- **buffer 跟随匹配后，开环基线也能贴住 floor**（网格内 base makespan ≈ floor，差值仅余小规模 FIFO 排序残差 ≤ 数 µs）——这说明**只要给够缓存，关键路径 makespan 就是 incast floor**，再次印证 incast 不可优化。
+- **代价是缓存随规模爆炸**：基线所需缓存 **∝ BDP×(N−1)/P**，N=128/P=1 时已需 **~3.1 MB/口**（单交换机 128 口 → 数百 MB 片上缓存，物理上不现实）。
+- **SHMEM‑POP 用 O(BDP)≈98 KB 缓存在任意 (P,N) 都打到同一 floor**：接收端信用把「缓存」从交换机片上挪到源端配速窗口，**缓存效率随 N/P 线性领先**（N=128/P=1 省 ~32×）。这才是 SHMEM‑POP 在大规模 incast 下的真正价值——**不是更低的 floor，而是用极小且恒定的片上缓存达到同一 floor**。
+
 ---
 
 ## 6 解读与边界
@@ -146,6 +177,7 @@ EP=N 增大时，token‑expert 总量 ∝ N，热点 rank 在单交换机单链
 - **无损 CBFC 下基线对冷流更毒**：无丢包反压让队头阻塞演化成「拥塞树」——喂热点的源被回压，FIFO 后续的冷 token 全等热点排空，冷 rank 完成时间被顶到 ≈热点 floor（§5.2，~11×）。VoQ 隔离 + 接收端信用配速是消除它的关键。
 - **多平面（P>1）降低 floor**：热点 rank 有 P 条下行/上行 → incast 串行 /=P（§5.4）。这是**降低 incast 硬墙的唯一物理手段**（multi‑rail），调度类优化（SHMEM‑POP）只能逼近当前 P 的下界、不能替代加平面。
 - **规模（N）放大 incast 硬墙**：单交换机下 floor∝N（§5.5），N=128 时已达毫秒级；规模化必须靠加平面，而非靠调度。
+- **缓存跟随匹配揭示 SHMEM‑POP 的缓存效率（§5.6）**：给够缓存（∝BDP×(N−1)/P）后开环基线也能打到 floor → 印证「给够缓存时关键路径=incast floor」；但该缓存随 N/P 爆炸（N=128/P=1 需 ~3.1 MB/口），而 SHMEM‑POP 借接收端信用把在途量钳在 1×BDP，用恒定 O(BDP)≈98 KB 缓存达到同一 floor。**SHMEM‑POP 在大 incast 下的核心收益不是更低 floor，而是把片上缓存需求从 O(N/P·BDP) 降到 O(BDP)。**
 - **SHMEM‑POP 的价值定位**（与 §1.7 一致）：①关键路径逼近 incast 下界（gap≈O(RTT)，与 N 无关）；②消除对冷流/受害流的拥塞扩散（均值、抖动 ~11× 改善）；③Push≤1 RTT 反压、SM 占用趋零。**它不改变 incast 硬墙，但把「硬墙之上的全部排队拥塞」基本清零。**
 
 **建模假设（影响绝对值，不改变结论）**：交换为输出排队非阻塞；**三方案全程无损 CBFC（零丢包链路级反压）**，差异仅在 IOD/源端协同（VoQ 隔离 + 接收端信用配速 vs 开环 FIFO）；多平面采用逐 chunk 跨平面条带（ideal multi‑rail，给出 P 平面理想下界）；专家计算（τ_wave）此处不计入「纯网络动态时延」，端到端含计算的流水线另议（计算通常更大且可与通信 wave 重叠）。RTT、缓存深度、平面数、节点数、chunk、热点形态均可在 `dynlat/scenarios.py` / `workload.py` 调整。
@@ -157,10 +189,10 @@ EP=N 增大时，token‑expert 总量 ∝ N，热点 rank 在单交换机单链
 ```bash
 cd /home/luke/dyn_latency
 pip install -r requirements.txt
-python3 run.py   # 出表 + results/{summary.json,decomp,sweep,perrank,plane_sweep,node_sweep}.png
+python3 run.py   # 出表 + results/{summary.json,decomp,sweep,perrank,plane_sweep,node_sweep,grid_floor,buffer_match}.png
 ```
 
-实验组：A 热点扫描（N=16,P=1，ρ_h∈{0,0.3,0.5,0.7}）；B 多平面（N=16,ρ_h=0.5，P∈{1,2,4,8}）；C 节点扩展（P=1,ρ_h=0.5，N∈{16,64,128}）。
+实验组：A 热点扫描（N=16,P=1，ρ_h∈{0,0.3,0.5,0.7}，固定 128 KB 缓存）；B 多平面（N=16,ρ_h=0.5，P∈{1,2,4,8}）；C 节点扩展（P=1,ρ_h=0.5，N∈{16,64,128}）；**D P×N 网格（P∈{1,2,4,8}×N∈{16,64,128}，ρ_h=0.5，交换机缓存跟随 (P,N) 扇入匹配）**。
 
 代码结构：
 
@@ -169,8 +201,8 @@ python3 run.py   # 出表 + results/{summary.json,decomp,sweep,perrank,plane_swe
 | `dynlat/engine.py` | 离散事件内核（事件堆） |
 | `dynlat/fabric.py` | 链路/交换模型：输出排队、有限/无限缓存、无损反压、VoQ vs FIFO‑HOL、接收端信用配速、丢包重传 |
 | `dynlat/workload.py` | MoE 路由抽样（热点）→ dispatch/combine 字节矩阵 |
-| `dynlat/scenarios.py` | Oracle/Baseline/SHMEM‑POP 配置 + 解析 incast floor + 单阶段 runner |
-| `run.py` | 扫描 ρ_h、出表、出图、写 `summary.json` |
+| `dynlat/scenarios.py` | Oracle/Baseline/SHMEM‑POP 配置 + 解析 incast floor + 缓存匹配策略（`matched_buffer`：fixed/matched）+ 单阶段 runner |
+| `run.py` | 扫描 ρ_h / P / N、P×N 网格、出表、出图、写 `summary.json` |
 
 ---
 
