@@ -265,6 +265,7 @@
       <a href="#nodes-deep">↳ 5.5 为何线重合</a>
       <a href="#grid">5.6 P×N 网格</a>
       <a href="#buffer-sweep">5.7 Buffer 扫描</a>
+      <a href="#buffer-sweep-bump">↳ 5.7 中段抬升</a>
       <a href="#interpret">解读与边界</a>
       <a href="#reproduce">复现</a>
     </nav>
@@ -854,6 +855,7 @@
           <figcaption>
             N=64：floor 升至 1426 µs，128 KB 下 dispatch 拥塞超额仍仅 25.8 µs（≈1.8%）。
             dispatch 在 768 KB 贴 floor；combine 在 1024 KB 贴 floor（2852 µs）。
+            combine 曲线在 768 KB 处可见约 +10 µs 的局部抬升（见 §5.7.1）。
             matched buffer 1538 KB 大于实际贴 floor 所需——说明「消除关键路径超额」与「按扇入公式给足无损深度」并不等价。
           </figcaption>
         </figure>
@@ -863,9 +865,84 @@
           <img src="../results/buffer_sweep_N128.png" alt="Buffer sweep N=128">
           <figcaption>
             N=128：floor 2572 µs，dispatch 需 1024 KB、combine 需 1536 KB 才贴 floor。
+            combine 在 1024 KB 处有约 +6 µs 局部抬升后继续下降（§5.7.1）。
             4 MB buffer 下冷 rank dispatch 均值仍 ~2411 µs（Oracle 仅 ~34 µs），拥塞扩散在超大 EP 下依然严重。
           </figcaption>
         </figure>
+
+        <section id="buffer-sweep-bump">
+          <h3>5.7.1 为何 N=64 / N=128 的 combine 曲线在 768 KB 或 1024 KB 处会局部上升？</h3>
+          <p>
+            放大观察可见：<strong>并非整体违背「buffer 越大越好」</strong>，而是在接近饱和的中等缓存深度出现
+            <strong>幅度很小的局部回弹</strong>（&lt;0.5% makespan），且几乎只出现在 <strong>combine</strong> 子图；
+            dispatch 曲线在三档 N 上均单调下降。典型数据点：
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>N</th><th>阶段</th><th>回弹位置</th><th>前一档 makespan</th><th>回弹点 makespan</th><th>Δ</th><th>下一档 makespan</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>64</strong></td><td>combine</td>
+                  <td class="num">768 KB</td>
+                  <td class="num">2868.1 (512 KB)</td>
+                  <td class="num hl-warn">2877.7</td>
+                  <td class="num hl-warn">+9.6 µs</td>
+                  <td class="num">2852.6 (1024 KB)</td>
+                </tr>
+                <tr>
+                  <td><strong>128</strong></td><td>combine</td>
+                  <td class="num">1024 KB</td>
+                  <td class="num">5147.9 (768 KB)</td>
+                  <td class="num hl-warn">5153.7</td>
+                  <td class="num hl-warn">+5.8 µs</td>
+                  <td class="num">5143.7 (1536 KB)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>现象本质：makespan 由「最慢冷 rank」决定，而非热点 rank</h4>
+          <p>
+            combine 阶段，热点 rank 0 的完成时间仅 <strong>~69 µs</strong>（入站流量 ~1.7 MB），
+            而 makespan 由 <strong>rank 63 / 127</strong> 等冷 origin rank 的完成时间决定（~2850–5150 µs）。
+            逐 rank 核对可见：回弹完全来自 <strong>最慢冷 rank 最后一包到达时刻推迟</strong>，
+            热点 rank 完成时间在各 buffer 点保持不变。
+          </p>
+          <p>
+            这与 §5.2 的拥塞扩散一致：基线用单 FIFO 源队列，热点方向的 chunk 堵在队头时，
+            同一源上发往冷 rank 的 chunk 被队头阻塞（HOL），冷 rank 的完成时间被人为抬高。
+          </p>
+
+          <h4>机理：中等深度 buffer 下的「延迟反压 + HOL」非单调效应</h4>
+          <p>本仿真采用<strong>无损 CBFC + 发送时预占输出口缓存</strong>（chunk 离源即占用 <code>occ[dst]</code>，下传完毕才释放）。
+            buffer 从浅变深时，系统经历三个阶段：</p>
+          <ol>
+            <li><strong>浅 buffer（100–512 KB）</strong>：输出口很快填满，CBFC 反压频繁回到源端，注入速率被提前钳制；交换机队列较浅，HOL 阻塞窗口相对短。makespan 偏高但随 buffer 增大稳步下降。</li>
+            <li><strong>中等 buffer（768 KB @ N=64，1024 KB @ N=128）</strong>：热点/expert 方向的输出口<strong>能容纳更多在途 chunk 才触发反压</strong>，交换机侧队列加深、排队时间变长；同时源端 FIFO 队头仍大量指向拥塞目的地，<strong>HOL 阻塞持续时间反而拉长</strong>——发往 rank 63/127 的 chunk 在源队列里等待更久。此时关键路径（热点 expert 上行）已接近 floor，但<strong>最慢冷 rank 的最后一包</strong>被推迟几个微秒，makespan 出现局部抬升。</li>
+            <li><strong>深 buffer（≥1–1.5 MB）</strong>：输出口几乎不再反压，交换机排队消失，源端 FIFO 按链路速率顺畅排空；冷 rank 完成时间回落，makespan 贴住 combine floor 并饱和。</li>
+          </ol>
+          <p>
+            这类似广域网里的 <strong>bufferbloat</strong>：缓存并非越小越好，但在 HOL 架构下也<strong>并非单调越大越好</strong>——
+            「中等深度」允许拥塞在交换机内<strong>更深、更久地堆积</strong>，却不足以像深缓存那样完全消除反压，
+            从而对排队的冷流产生短暂的额外伤害。抬升幅度仅 ~6–10 µs，是因为此时已非常接近 floor，
+            可优化空间本就只有 ~20–30 µs 量级。
+          </p>
+
+          <h4>为何 dispatch 不回弹、combine 更容易回弹？</h4>
+          <ul>
+            <li><strong>dispatch</strong>：makespan 由热点 rank 0 的入站 incast 决定（~35–64 MB 入站），buffer 一到 768 KB（N=64）关键路径即切换到 floor，曲线单调落地。</li>
+            <li><strong>combine</strong>：makespan 由冷 origin rank 的<strong>多源汇聚完成时间</strong>决定；各 expert 源用 FIFO 向多个 origin 发包，矩阵更稀疏、调度顺序对尾包更敏感。中等 buffer 下「交换机加深队列 + 源端 HOL」的耦合在 combine 上更显著，故局部回弹出现在 combine 曲线上。</li>
+          </ul>
+
+          <div class="callout">
+            <strong>工程含义：</strong>该回弹不是仿真错误，而是 Baseline（FIFO+HOL+CBFC）在中等缓存深度下的<strong>结构性非单调</strong>。
+            它再次说明：仅靠加大交换机 buffer 无法稳健地优化尾延迟——既不能完全消除冷流扩散（§5.2），
+            甚至在接近饱和时可能出现<strong>短暂变差</strong>。
+            SHMEM-POP 用 VoQ 切断 HOL、用接收端信用把在途量钳在 BDP，从机制上避免此类回弹，且 buffer 恒为 ~98 KB。
+          </div>
+        </section>
 
         <div class="callout">
           <strong>与 §5.6 的关系：</strong>§5.6 用 matched buffer 证明「给够缓存后基线也能贴 floor」；
@@ -875,7 +952,7 @@
         </div>
 
         <ul>
-          <li><strong>曲线形态</strong>：makespan 随 buffer 单调下降、在大 buffer 处饱和于 incast floor；combine 因流量矩阵更大、饱和点略高于 dispatch。</li>
+          <li><strong>曲线形态</strong>：总体随 buffer 增大而下降、在深 buffer 处饱和于 incast floor；combine 饱和点略高于 dispatch。N≥64 时 combine 在中等 buffer（768 KB / 1024 KB）可有 &lt;0.5% 的局部回弹（§5.7.1）。</li>
           <li><strong>128 KB 是合理参考点</strong>：三档 N 下 dispatch 拥塞超额均在 25–30 µs，占 floor 的 &lt;2%——与实验 A/C 的固定缓存设定一致。</li>
           <li><strong>贴 floor ≠ matched buffer</strong>：N=64 仅需 768 KB 即贴 dispatch floor，远低于 matched 1538 KB；工程上「够用」与「按公式无损」有差距。</li>
           <li><strong>冷流问题不随 buffer 消失</strong>：即使 4 MB，冷 rank 完成时间仍远高于 Oracle；SHMEM-POP 的 VoQ + 信用配速才是正解。</li>
@@ -892,7 +969,7 @@
         <li><strong>多平面降低 floor</strong>：incast 串行 /= P，是降低 incast 硬墙的唯一物理手段。</li>
         <li><strong>规模放大 incast 硬墙</strong>：单交换机下 floor ∝ N，N=128 时已达毫秒级。</li>
         <li><strong>缓存跟随匹配揭示 SHMEM-POP 的缓存效率</strong>：把片上缓存需求从 O(N/P·BDP) 降到 O(BDP)。</li>
-        <li><strong>buffer 扫描（§5.7）</strong>：关键路径超额对 buffer 敏感，但 128 KB 已足够小（&lt;2%）；完全贴 floor 需 768 KB–1.5 MB 随 N 增长；冷流扩散不能靠堆缓存解决。</li>
+        <li><strong>buffer 扫描（§5.7）</strong>：关键路径超额对 buffer 敏感，但 128 KB 已足够小（&lt;2%）；完全贴 floor 需 768 KB–1.5 MB 随 N 增长；冷流扩散不能靠堆缓存解决。中等 buffer 下 combine 可出现 FIFO+HOL 导致的局部回弹（§5.7.1）。</li>
         <li><strong>SHMEM-POP 价值定位</strong>：①关键路径逼近 incast 下界；②消除冷流拥塞扩散；③Push ≤ 1 RTT 反压。</li>
       </ul>
       <p style="font-size:.88rem;color:var(--muted);">
