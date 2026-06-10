@@ -6,19 +6,27 @@ Experiments:
   C. node sweep      N in {16,64,128}               (P=1, rho_h=0.5, fixed buffer)
   D. P x N grid      P in {1,2,4,8} x N in {16,64,128}, rho_h=0.5,
                      switch buffer MATCHED to the (P,N) incast fan-in
+  E. buffer sweep    baseline per-port buffer 100KB..4MB per N in {16,64,128}
+                     (P=1, rho_h=0.5)
 
 Outputs under results/:
   summary.json, decomp.png, sweep.png, perrank.png,
-  plane_sweep.png, node_sweep.png, grid_floor.png, buffer_match.png
+  plane_sweep.png, node_sweep.png, grid_floor.png, buffer_match.png,
+  buffer_sweep_compare.png, buffer_sweep_N{16,64,128}.png
+
+Usage:
+  python3 run.py              # all experiments
+  python3 run.py --only buffer  # buffer sweep only
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 
 import numpy as np
 
-from dynlat.scenarios import RTT, run_phase
+from dynlat.scenarios import RTT, matched_buffer, base_phys, run_phase
 from dynlat.workload import MoEConfig, draw_routing
 
 US = 1e6
@@ -75,8 +83,74 @@ def run_point(rho_h: float, n_planes: int = 1, n_ranks: int = 16,
     return out
 
 
+# per-output-port switch buffer sweep (KB)
+BUFFER_SWEEP_KB = [100, 128, 200, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096]
+BUFFER_SWEEP_NODES = [16, 64, 128]
+
+
+def run_buffer_sweep(rho_h: float = 0.5, n_planes: int = 1, n_ranks: int = 16,
+                     seed: int = 0) -> list[dict]:
+    """Sweep baseline switch buffer; oracle/shmempop are reference (buffer-independent)."""
+    cfg = MoEConfig(n_ranks=n_ranks, rho_h=rho_h, seed=seed)
+    routing = draw_routing(cfg)
+    disp = routing.dispatch_bytes()
+    comb = routing.combine_bytes()
+    phys = base_phys(n_planes, n_ranks)
+    match_kb = matched_buffer(phys, n_ranks) / 1024
+
+    refs: dict[str, dict] = {}
+    for phase_name, M in (("dispatch", disp), ("combine", comb)):
+        refs[phase_name] = {}
+        for sc in ("oracle", "shmempop"):
+            r = run_phase(phase_name, sc, M, n_planes=n_planes)
+            recv = r.recv_done * US
+            refs[phase_name][sc] = {
+                "makespan_us": r.makespan * US,
+                "floor_us": r.floor * US,
+                "congestion_us": (r.makespan - r.floor) * US,
+                "cold_mean_us": float(recv[1:].mean()) if len(recv) > 1 else float(recv[0]),
+            }
+
+    points = []
+    for buf_kb in BUFFER_SWEEP_KB:
+        buf_b = buf_kb * 1024
+        pt = {"buffer_KB": buf_kb, "rho_h": rho_h, "n_planes": n_planes,
+              "n_ranks": n_ranks, "matched_buffer_KB": match_kb, "phases": {}}
+        for phase_name, M in (("dispatch", disp), ("combine", comb)):
+            r = run_phase(phase_name, "baseline", M, n_planes=n_planes,
+                          baseline_buffer_bytes=buf_b)
+            recv = r.recv_done * US
+            floor = refs[phase_name]["oracle"]["floor_us"]
+            pt["phases"][phase_name] = {
+                "baseline": {
+                    "makespan_us": r.makespan * US,
+                    "floor_us": floor,
+                    "congestion_us": (r.makespan * US) - floor,
+                    "cold_mean_us": float(recv[1:].mean()) if len(recv) > 1 else float(recv[0]),
+                    "hot_us": float(recv[0]),
+                },
+                "oracle": refs[phase_name]["oracle"],
+                "shmempop": refs[phase_name]["shmempop"],
+            }
+        points.append(pt)
+    return points
+
+
+def run_buffer_sweeps(nodes: list[int] | None = None, **kwargs) -> dict[int, list[dict]]:
+    nodes = nodes or BUFFER_SWEEP_NODES
+    return {N: run_buffer_sweep(n_ranks=N, **kwargs) for N in nodes}
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="MoE dynamic latency experiments")
+    parser.add_argument("--only", choices=["buffer"], default=None,
+                        help="run a single experiment group")
+    args = parser.parse_args()
     os.makedirs(RESULTS, exist_ok=True)
+
+    if args.only == "buffer":
+        _run_buffer_only()
+        return
 
     print("### A. hotspot sweep (N=16, P=1) ###")
     rhos = [0.0, 0.3, 0.5, 0.7]
@@ -101,17 +175,39 @@ def main() -> None:
             grid[P][N] = run_point(0.5, n_planes=P, n_ranks=N, buffer_mode="matched")
     _print_grid(grid, planes, nodes)
 
+    print("\n### E. buffer sweep (N in {16,64,128}, P=1, rho_h=0.5, 100KB..4MB) ###")
+    buffer_sweeps = run_buffer_sweeps()
+    _print_buffer_sweeps(buffer_sweeps)
+
     summary = {"RTT_us": RTT * US, "link_Gbps": 200, "fabric": "lossless CBFC",
                "hotspot_sweep": rho_points,
                "plane_sweep": plane_points,
                "node_sweep": node_points,
-               "pn_grid": {str(P): {str(N): grid[P][N] for N in nodes} for P in planes}}
+               "pn_grid": {str(P): {str(N): grid[P][N] for N in nodes} for P in planes},
+               "buffer_sweep": {str(N): pts for N, pts in buffer_sweeps.items()}}
     with open(os.path.join(RESULTS, "summary.json"), "w") as fh:
         json.dump(summary, fh, indent=2)
 
     _plots(rho_points, plane_points, planes, node_points, nodes)
     _plot_grid(grid, planes, nodes)
-    print(f"\nWrote {RESULTS}/summary.json and 7 PNGs")
+    _plot_buffer_sweeps(buffer_sweeps)
+    print(f"\nWrote {RESULTS}/summary.json and 11 PNGs")
+
+
+def _run_buffer_only() -> None:
+    print("### E. buffer sweep (N in {16,64,128}, P=1, rho_h=0.5, 100KB..4MB) ###")
+    buffer_sweeps = run_buffer_sweeps()
+    _print_buffer_sweeps(buffer_sweeps)
+    path = os.path.join(RESULTS, "summary.json")
+    summary = {}
+    if os.path.exists(path):
+        with open(path) as fh:
+            summary = json.load(fh)
+    summary["buffer_sweep"] = {str(N): pts for N, pts in buffer_sweeps.items()}
+    with open(path, "w") as fh:
+        json.dump(summary, fh, indent=2)
+    _plot_buffer_sweeps(buffer_sweeps)
+    print(f"\nWrote buffer_sweep_N*.png, buffer_sweep_compare.png")
 
 
 def _print_tables(points: list[dict]) -> None:
@@ -135,6 +231,34 @@ def _print_sweep(points: list[dict], key: str, vals: list) -> None:
             print(f"  {key}={v:<4} {phase:8s} floor={a['incast_floor_us']:7.1f}  "
                   f"base={a['baseline_makespan_us']:7.1f}  "
                   f"pop={a['shmempop_makespan_us']:7.1f}  gap={a['shmempop_gap_to_floor_us']:5.2f}")
+
+
+def _saturation_buffer_kb(points: list[dict], phase: str = "dispatch",
+                          tol_us: float = 1.0) -> int | None:
+    """Smallest buffer where baseline makespan is within tol_us of floor."""
+    floor = points[0]["phases"][phase]["oracle"]["floor_us"]
+    for p in points:
+        ms = p["phases"][phase]["baseline"]["makespan_us"]
+        if ms <= floor + tol_us:
+            return p["buffer_KB"]
+    return None
+
+
+def _print_buffer_sweeps(sweeps: dict[int, list[dict]]) -> None:
+    for N, points in sweeps.items():
+        match_kb = points[0]["matched_buffer_KB"]
+        floor_d = points[0]["phases"]["dispatch"]["oracle"]["floor_us"]
+        sat_d = _saturation_buffer_kb(points, "dispatch")
+        sat_c = _saturation_buffer_kb(points, "combine")
+        print(f"\n  --- N={N}  matched={match_kb:.0f}KB  floor={floor_d:.0f}µs  "
+              f"sat_buf disp={sat_d}KB comb={sat_c}KB ---")
+        for p in points:
+            d = p["phases"]["dispatch"]["baseline"]
+            c = p["phases"]["combine"]["baseline"]
+            print(f"  buf={p['buffer_KB']:4d}KB  "
+                  f"disp: makespan={d['makespan_us']:7.1f} cong={d['congestion_us']:6.1f} "
+                  f"cold_mean={d['cold_mean_us']:6.1f}  "
+                  f"comb: makespan={c['makespan_us']:7.1f} cong={c['congestion_us']:6.1f}")
 
 
 def _print_grid(grid: dict, planes: list, nodes: list) -> None:
@@ -275,6 +399,107 @@ def _plot_grid(grid: dict, planes: list, nodes: list) -> None:
     ax.grid(alpha=0.3, which="both"); ax.legend(fontsize=8)
     fig.tight_layout(); fig.savefig(os.path.join(RESULTS, "buffer_match.png"), dpi=130)
     plt.close(fig)
+
+
+def _plot_buffer_sweep_one(points: list[dict], n_ranks: int) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    bufs = [p["buffer_KB"] for p in points]
+    match_kb = points[0]["matched_buffer_KB"]
+    cols = {"oracle": "#2ca02c", "baseline": "#d62728", "shmempop": "#1f77b4"}
+
+    fig, axes = plt.subplots(2, 2, figsize=(13, 9))
+
+    ax = axes[0, 0]
+    floor = points[0]["phases"]["dispatch"]["oracle"]["floor_us"]
+    pop = points[0]["phases"]["dispatch"]["shmempop"]["makespan_us"]
+    base = [p["phases"]["dispatch"]["baseline"]["makespan_us"] for p in points]
+    ax.plot(bufs, base, "o-", color=cols["baseline"], label="baseline makespan")
+    ax.axhline(floor, ls="--", color=cols["oracle"], label=f"incast floor ({floor:.0f} µs)")
+    ax.axhline(pop, ls=":", color=cols["shmempop"], label=f"SHMEM-POP ({pop:.0f} µs)")
+    ax.axvline(match_kb, ls="-.", color="#888", alpha=0.7,
+               label=f"matched buf ({match_kb:.0f} KB)")
+    ax.set_xscale("log", base=2); ax.set_xticks(bufs); ax.set_xticklabels(bufs, rotation=45)
+    ax.set_xlabel("switch per-port buffer (KB)"); ax.set_ylabel("makespan (µs)")
+    ax.set_title("dispatch makespan vs switch buffer"); ax.grid(alpha=0.3); ax.legend(fontsize=7)
+
+    ax = axes[0, 1]
+    floor = points[0]["phases"]["combine"]["oracle"]["floor_us"]
+    pop = points[0]["phases"]["combine"]["shmempop"]["makespan_us"]
+    base = [p["phases"]["combine"]["baseline"]["makespan_us"] for p in points]
+    ax.plot(bufs, base, "o-", color=cols["baseline"], label="baseline makespan")
+    ax.axhline(floor, ls="--", color=cols["oracle"], label=f"incast floor ({floor:.0f} µs)")
+    ax.axhline(pop, ls=":", color=cols["shmempop"], label=f"SHMEM-POP ({pop:.0f} µs)")
+    ax.axvline(match_kb, ls="-.", color="#888", alpha=0.7)
+    ax.set_xscale("log", base=2); ax.set_xticks(bufs); ax.set_xticklabels(bufs, rotation=45)
+    ax.set_xlabel("switch per-port buffer (KB)"); ax.set_ylabel("makespan (µs)")
+    ax.set_title("combine makespan vs switch buffer"); ax.grid(alpha=0.3); ax.legend(fontsize=7)
+
+    ax = axes[1, 0]
+    for phase, c in zip(("dispatch", "combine"), ("#d62728", "#ff7f0e")):
+        cong = [max(0.0, p["phases"][phase]["baseline"]["congestion_us"]) for p in points]
+        ax.plot(bufs, cong, "s-", color=c, label=f"{phase} congestion excess")
+    ax.set_xscale("log", base=2); ax.set_xticks(bufs); ax.set_xticklabels(bufs, rotation=45)
+    ax.set_xlabel("switch per-port buffer (KB)"); ax.set_ylabel("congestion excess (µs)")
+    ax.set_title("optimizable dynamic latency vs buffer"); ax.grid(alpha=0.3); ax.legend(fontsize=8)
+
+    ax = axes[1, 1]
+    for phase, c in zip(("dispatch", "combine"), ("#1f77b4", "#9467bd")):
+        cold = [p["phases"][phase]["baseline"]["cold_mean_us"] for p in points]
+        ax.plot(bufs, cold, "d-", color=c, label=f"{phase} cold-rank mean")
+    oracle_cold_d = points[0]["phases"]["dispatch"]["oracle"]["cold_mean_us"]
+    ax.axhline(oracle_cold_d, ls="--", color=cols["oracle"],
+               label=f"oracle cold mean ({oracle_cold_d:.0f} µs)")
+    ax.set_xscale("log", base=2); ax.set_xticks(bufs); ax.set_xticklabels(bufs, rotation=45)
+    ax.set_xlabel("switch per-port buffer (KB)"); ax.set_ylabel("cold-rank completion (µs)")
+    ax.set_title("congestion spreading vs buffer"); ax.grid(alpha=0.3); ax.legend(fontsize=7)
+
+    fig.suptitle(f"Switch buffer impact (baseline FIFO+CBFC, N={n_ranks}, P=1, ρ_h=0.5)")
+    fig.tight_layout()
+    fig.savefig(os.path.join(RESULTS, f"buffer_sweep_N{n_ranks}.png"), dpi=130)
+    plt.close(fig)
+
+
+def _plot_buffer_sweep_compare(sweeps: dict[int, list[dict]]) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    bufs = BUFFER_SWEEP_KB
+    n_colors = {16: "#d62728", 64: "#ff7f0e", 128: "#9467bd"}
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
+
+    for phase, ax in zip(("dispatch", "combine"), axes):
+        for N, points in sorted(sweeps.items()):
+            floor = points[0]["phases"][phase]["oracle"]["floor_us"]
+            pop = points[0]["phases"][phase]["shmempop"]["makespan_us"]
+            match_kb = points[0]["matched_buffer_KB"]
+            base = [p["phases"][phase]["baseline"]["makespan_us"] for p in points]
+            c = n_colors.get(N, "#333")
+            ax.plot(bufs, base, "o-", color=c, label=f"N={N} baseline")
+            ax.axhline(floor, ls="--", color=c, alpha=0.35)
+            ax.axvline(match_kb, ls=":", color=c, alpha=0.5)
+            if N == 16:
+                ax.axhline(pop, ls="-.", color="#1f77b4", alpha=0.6,
+                           label=f"SHMEM-POP (N=16, {pop:.0f} µs)")
+        ax.set_xscale("log", base=2); ax.set_xticks(bufs)
+        ax.set_xticklabels(bufs, rotation=45, fontsize=8)
+        ax.set_xlabel("switch per-port buffer (KB)"); ax.set_ylabel("makespan (µs)")
+        ax.set_title(f"{phase} makespan vs buffer (all N)")
+        ax.grid(alpha=0.3); ax.legend(fontsize=7)
+
+    fig.suptitle("Buffer saturation scales with N: matched buffer and floor both grow")
+    fig.tight_layout()
+    fig.savefig(os.path.join(RESULTS, "buffer_sweep_compare.png"), dpi=130)
+    plt.close(fig)
+
+
+def _plot_buffer_sweeps(sweeps: dict[int, list[dict]]) -> None:
+    for N, points in sweeps.items():
+        _plot_buffer_sweep_one(points, N)
+    _plot_buffer_sweep_compare(sweeps)
 
 
 if __name__ == "__main__":

@@ -77,11 +77,13 @@ def matched_buffer(cfg: FabricConfig, n_nodes: int) -> float:
 
 
 def make_config(scenario: str, n_planes: int = 1, n_nodes: int = 16,
-                buffer_mode: str = "fixed") -> tuple[FabricConfig, float]:
+                buffer_mode: str = "fixed",
+                baseline_buffer_bytes: float | None = None) -> tuple[FabricConfig, float]:
     """Return (FabricConfig, push_delay).
 
     buffer_mode: "fixed"   -> baseline uses a fixed reference buffer (128KB)
                  "matched" -> baseline buffer follows the (P,N) fan-in (BDP-based)
+    baseline_buffer_bytes: if set, overrides buffer_mode for baseline buffer size
     """
     cfg = base_phys(n_planes, n_nodes)
     if scenario == "oracle":
@@ -91,7 +93,12 @@ def make_config(scenario: str, n_planes: int = 1, n_nodes: int = 16,
         # uncoordinated kernel-direct, but on the SAME lossless CBFC fabric as
         # SHMEM-POP: single FIFO source send queue (HOL) + finite per-port buffer
         # with link-level backpressure. No receiver pacing, no VoQ isolation.
-        buf = matched_buffer(cfg, n_nodes) if buffer_mode == "matched" else BASE_FIXED_BUF
+        if baseline_buffer_bytes is not None:
+            buf = baseline_buffer_bytes
+        elif buffer_mode == "matched":
+            buf = matched_buffer(cfg, n_nodes)
+        else:
+            buf = BASE_FIXED_BUF
         return replace(cfg, discipline="fifo", buffer_bytes=buf,
                        credit_bytes=None, lossy=False), 0.0
     if scenario == "shmempop":
@@ -103,9 +110,11 @@ def make_config(scenario: str, n_planes: int = 1, n_nodes: int = 16,
 
 
 def run_phase(name: str, scenario: str, M: np.ndarray, n_planes: int = 1,
-              buffer_mode: str = "fixed") -> PhaseResult:
+              buffer_mode: str = "fixed",
+              baseline_buffer_bytes: float | None = None) -> PhaseResult:
     N = M.shape[0]
-    cfg, push = make_config(scenario, n_planes, n_nodes=N, buffer_mode=buffer_mode)
+    cfg, push = make_config(scenario, n_planes, n_nodes=N, buffer_mode=buffer_mode,
+                            baseline_buffer_bytes=baseline_buffer_bytes)
     flows: list[Flow] = []
     for i in range(N):
         for j in range(N):
