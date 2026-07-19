@@ -267,28 +267,28 @@ scenario ep_size batch zipf_s
 <li>**场景3** packet_spray CCT/König：mean=1.244，median=1.098</li>
 <h2>6. 双引擎对比（逐包 vs 行为级）</h2>
 <p>在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。</p>
-<p>对齐样本 **75** 组；step 比值（packet/behavioral）均值=0.294，中位数=0.160。</p>
+<p>对齐样本 **75** 组；step 比值（packet/behavioral）均值=7.647，中位数=6.236。</p>
 <pre><code>          exp  scenario       scheme     mode  batch  zipf_s  ep_size  step_packet  p99_packet  step_behav  p99_behav  step_ratio
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       11.855       7.131      63.017     49.660       0.188
-exp1_dispatch         1 packet_spray dispatch     16     0.7      128       24.901      19.030     176.041    150.431       0.141
-exp1_dispatch         1 packet_spray dispatch     16     0.9      128       32.786      26.342     240.991    212.459       0.136
-exp1_dispatch         1 packet_spray dispatch     16     0.0      128        8.414       5.268      30.879     26.766       0.272
-exp1_dispatch         1 packet_spray dispatch    256     0.3      128      152.348      94.724     976.937    334.742       0.156
-exp1_dispatch         1 packet_spray dispatch    256     0.7      128      369.395     244.392    2794.421    488.416       0.132
-exp1_dispatch         1 packet_spray dispatch    256     0.9      128      496.269     341.017    3866.590    758.112       0.128
-exp1_dispatch         1 packet_spray dispatch    256     0.0      128       81.815      66.769     386.350    346.216       0.212
-exp1_dispatch         1        ub_rg dispatch     16     0.3      128        9.911       6.390      17.595      8.028       0.563
-exp1_dispatch         1        ub_rg dispatch     16     0.7      128       23.243      18.001      42.030     23.999       0.553
-exp1_dispatch         1        ub_rg dispatch     16     0.9      128       30.985      25.517      56.441     32.968       0.549
-exp1_dispatch         1        ub_rg dispatch     16     0.0      128        6.320       4.875      10.514      6.028       0.601
-exp1_dispatch         1        ub_rg dispatch    256     0.3      128      114.755      37.860     282.526     56.330       0.406
-exp1_dispatch         1        ub_rg dispatch    256     0.7      128      328.505      88.499     645.712    158.268       0.509
-exp1_dispatch         1        ub_rg dispatch    256     0.9      128      447.637     148.422     883.780    310.895       0.507
-exp1_dispatch         1        ub_rg dispatch    256     0.0      128       45.308      34.417     168.878     49.405       0.268
-exp1_dispatch         2 packet_spray dispatch     16     0.3     1024       22.370       9.625     126.283     63.259       0.177
-exp1_dispatch         2 packet_spray dispatch     16     0.7     1024       98.638      66.252     734.342    627.347       0.134
-exp1_dispatch         2 packet_spray dispatch     16     0.9     1024      177.629     144.240    1387.209   1306.638       0.128
-exp1_dispatch         2 packet_spray dispatch     16     0.0     1024       11.618       6.328      33.146     26.107       0.351
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       63.017      49.660      11.855      7.131       5.316
+exp1_dispatch         1 packet_spray dispatch     16     0.7      128      176.041     150.431      24.901     19.030       7.070
+exp1_dispatch         1 packet_spray dispatch     16     0.9      128      240.991     212.459      32.786     26.342       7.350
+exp1_dispatch         1 packet_spray dispatch     16     0.0      128       30.879      26.766       8.414      5.268       3.670
+exp1_dispatch         1 packet_spray dispatch    256     0.3      128      976.937     334.742     152.348     94.724       6.413
+exp1_dispatch         1 packet_spray dispatch    256     0.7      128     2794.421     488.416     369.395    244.392       7.565
+exp1_dispatch         1 packet_spray dispatch    256     0.9      128     3866.590     758.112     496.269    341.017       7.791
+exp1_dispatch         1 packet_spray dispatch    256     0.0      128      386.350     346.216      81.815     66.769       4.722
+exp1_dispatch         1        ub_rg dispatch     16     0.3      128       17.595       8.028       9.911      6.390       1.775
+exp1_dispatch         1        ub_rg dispatch     16     0.7      128       42.030      23.999      23.243     18.001       1.808
+exp1_dispatch         1        ub_rg dispatch     16     0.9      128       56.441      32.968      30.985     25.517       1.822
+exp1_dispatch         1        ub_rg dispatch     16     0.0      128       10.514       6.028       6.320      4.875       1.664
+exp1_dispatch         1        ub_rg dispatch    256     0.3      128      282.526      56.330     114.755     37.860       2.462
+exp1_dispatch         1        ub_rg dispatch    256     0.7      128      645.712     158.268     328.505     88.499       1.966
+exp1_dispatch         1        ub_rg dispatch    256     0.9      128      883.780     310.895     447.637    148.422       1.974
+exp1_dispatch         1        ub_rg dispatch    256     0.0      128      168.878      49.405      45.308     34.417       3.727
+exp1_dispatch         2 packet_spray dispatch     16     0.3     1024      126.283      63.259      22.370      9.625       5.645
+exp1_dispatch         2 packet_spray dispatch     16     0.7     1024      734.342     627.347      98.638     66.252       7.445
+exp1_dispatch         2 packet_spray dispatch     16     0.9     1024     1387.209    1306.638     177.629    144.240       7.810
+exp1_dispatch         2 packet_spray dispatch     16     0.0     1024       33.146      26.107      11.618      6.328       2.853
 </code></pre>
 <p>差异主要来自：逐包栈的静态时延（传播/转发/分配）、真实控制面报文、以及 TP/Jetty 注入路径；行为级模型把这些折叠为常量 RTT/屏障。</p>
 <h2>7. 结论</h2>

@@ -35,10 +35,15 @@ def load_summaries(results: Path) -> pd.DataFrame:
             except (json.JSONDecodeError, OSError):
                 # Race with an in-flight writer (partial summary.json).
                 continue
+            # Prefer summary.json; fall back to results root name so peer merges
+            # still label engines correctly when the field is absent.
+            eng = d.get("engine")
+            if eng not in ("packet", "behavioral"):
+                eng = "packet" if results.name == "ub_rg_packet" else "behavioral"
             row = {
                 "exp": exp_dir.name,
                 "run_id": run_dir.name,
-                "engine": d.get("engine", "behavioral"),
+                "engine": eng,
                 "scenario": d.get("scenario"),
                 "scheme": d.get("scheme"),
                 "mode": d.get("mode"),
@@ -600,28 +605,43 @@ def write_report(
             "在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。\n"
         )
         keys = ["exp", "scenario", "scheme", "mode", "batch", "zipf_s", "ep_size"]
-        a = df[keys + ["step_us", "lat_p99"]].rename(
-            columns={"step_us": "step_packet", "lat_p99": "p99_packet"}
-        )
-        b = peer_df[keys + ["step_us", "lat_p99"]].rename(
-            columns={"step_us": "step_behav", "lat_p99": "p99_behav"}
-        )
-        m = a.merge(b, on=keys, how="inner")
-        if m.empty:
-            lines.append("_无对齐样本（另一引擎结果尚未齐备）。_\n")
+
+        def _by_engine(frame: pd.DataFrame) -> dict[str, pd.DataFrame]:
+            out: dict[str, pd.DataFrame] = {}
+            if frame is None or frame.empty or "engine" not in frame.columns:
+                return out
+            for eng, g in frame.groupby("engine", dropna=False):
+                name = str(eng)
+                if name not in ("packet", "behavioral"):
+                    continue
+                out[name] = g[keys + ["step_us", "lat_p99"]].copy()
+            return out
+
+        by_eng = _by_engine(df)
+        by_eng.update(_by_engine(peer_df))
+        pkt = by_eng.get("packet")
+        beh = by_eng.get("behavioral")
+        if pkt is None or beh is None:
+            lines.append("_缺少 packet 或 behavioral 一侧结果，无法做双引擎对比。_\n")
         else:
-            m["step_ratio"] = m["step_packet"] / m["step_behav"].replace(0, np.nan)
-            lines.append(
-                f"对齐样本 **{len(m)}** 组；step 比值（packet/behavioral）"
-                f"均值={m['step_ratio'].mean():.3f}，"
-                f"中位数={m['step_ratio'].median():.3f}。\n"
-            )
-            sample = m.head(20)
-            lines.append("```\n" + sample.round(3).to_string(index=False) + "\n```\n")
-            lines.append(
-                "差异主要来自：逐包栈的静态时延（传播/转发/分配）、真实控制面报文、"
-                "以及 TP/Jetty 注入路径；行为级模型把这些折叠为常量 RTT/屏障。\n"
-            )
+            a = pkt.rename(columns={"step_us": "step_packet", "lat_p99": "p99_packet"})
+            b = beh.rename(columns={"step_us": "step_behav", "lat_p99": "p99_behav"})
+            m = a.merge(b, on=keys, how="inner")
+            if m.empty:
+                lines.append("_无对齐样本（另一引擎结果尚未齐备）。_\n")
+            else:
+                m["step_ratio"] = m["step_packet"] / m["step_behav"].replace(0, np.nan)
+                lines.append(
+                    f"对齐样本 **{len(m)}** 组；step 比值（packet/behavioral）"
+                    f"均值={m['step_ratio'].mean():.3f}，"
+                    f"中位数={m['step_ratio'].median():.3f}。\n"
+                )
+                sample = m.head(20)
+                lines.append("```\n" + sample.round(3).to_string(index=False) + "\n```\n")
+                lines.append(
+                    "差异主要来自：逐包栈的静态时延（传播/转发/分配）、真实控制面报文、"
+                    "以及 TP/Jetty 注入路径；行为级模型把这些折叠为常量 RTT/屏障。\n"
+                )
 
     lines.append("## 7. 结论\n")
     lines.append(
