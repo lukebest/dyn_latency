@@ -223,56 +223,123 @@ def _plot_density(ax, samples: np.ndarray, ls: str, color: str, label: str) -> N
 
 
 def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
-    """PDF (no CDF) of the system dispatch+combine CCT for exp3_pdf runs.
+    """PDF (no CDF) of system dispatch+combine CCT for exp3_pdf runs.
 
-    One figure per (batch, zipf_s); x-axis is the completion time of a full
-    attention->dispatch->GEMV->combine iteration (roundtrip cct_us). Each seed
-    contributes one CCT sample. Curves of interest: EP=128 and EP=1024, with
-    ub_rg vs packet_spray distinguished by line style.
+    - One figure per (scenario, batch, zipf_s): all EP sizes of that scenario.
+    - One cross-scenario compare figure per (batch, zipf_s): s1-EP128 / s2-EP1024 /
+      s3-EP1024 (the previous EP128-vs-EP1024 view, plus scenario 3).
     """
     sub = df[df["exp"] == "exp3_pdf"].copy()
     if sub.empty:
         return []
     sub = sub[sub["cct_us"].notna() & (sub["cct_us"] > 0)]
-    # batch>=512 sweeps are dropped from the matrix; keep the PDF consistent.
     sub = sub[sub["batch"] < 512]
     if sub.empty:
         return []
-    ep_color = {128: "C0", 1024: "C3"}
+
     scheme_ls = {"ub_rg": "-", "packet_spray": "--"}
+    ep_color = {32: "C0", 64: "C1", 128: "C2", 256: "C4", 1024: "C3"}
+    sc_color = {1: "C0", 2: "C3", 3: "C2"}
     figs = []
+
+    # Per-scenario PDFs
+    for scenario in sorted(sub["scenario"].unique()):
+        sc = sub[sub["scenario"] == scenario]
+        eps = sorted(sc["ep_size"].dropna().unique())
+        for batch in sorted(sc["batch"].unique()):
+            for zs in sorted(sc["zipf_s"].unique()):
+                cell = sc[(sc["batch"] == batch) & np.isclose(sc["zipf_s"], zs)]
+                if cell.empty:
+                    continue
+                fig, ax = plt.subplots(figsize=(7.5, 4.5))
+                any_curve = False
+                for ep in eps:
+                    for scheme in ("ub_rg", "packet_spray"):
+                        g = cell[(cell["ep_size"] == ep) & (cell["scheme"] == scheme)]
+                        samples = g["cct_us"].to_numpy(dtype=float)
+                        samples = samples[np.isfinite(samples)]
+                        if samples.size < 2:
+                            continue
+                        label = f"EP={int(ep)} {scheme} (n={samples.size})"
+                        _plot_density(
+                            ax,
+                            samples,
+                            scheme_ls[scheme],
+                            ep_color.get(int(ep), "C0"),
+                            label,
+                        )
+                        any_curve = True
+                if not any_curve:
+                    plt.close(fig)
+                    continue
+                style_ax(
+                    ax,
+                    f"Exp3 S{int(scenario)} System CCT PDF "
+                    f"(batch={int(batch)}, S={zs:g})",
+                    "System dispatch+combine CCT (µs)  "
+                    "[attention→dispatch→GEMV→combine one iteration]",
+                    "Density",
+                )
+                path = figs_dir / f"exp3_pdf_s{int(scenario)}_b{int(batch)}_s{zs:g}.png"
+                fig.tight_layout()
+                fig.savefig(path, dpi=140)
+                plt.close(fig)
+                figs.append(path)
+
+    # Cross-scenario compare: representative EP of each topology
+    compare = [
+        (1, 128),
+        (2, 1024),
+        (3, 1024),
+    ]
     for batch in sorted(sub["batch"].unique()):
         for zs in sorted(sub["zipf_s"].unique()):
-            cell = sub[(sub["batch"] == batch) & np.isclose(sub["zipf_s"], zs)]
-            if cell.empty:
-                continue
             fig, ax = plt.subplots(figsize=(7.5, 4.5))
             any_curve = False
-            for ep in (128, 1024):
+            for scenario, ep in compare:
+                cell = sub[
+                    (sub["scenario"] == scenario)
+                    & (sub["ep_size"] == ep)
+                    & (sub["batch"] == batch)
+                    & np.isclose(sub["zipf_s"], zs)
+                ]
                 for scheme in ("ub_rg", "packet_spray"):
-                    g = cell[(cell["ep_size"] == ep) & (cell["scheme"] == scheme)]
+                    g = cell[cell["scheme"] == scheme]
                     samples = g["cct_us"].to_numpy(dtype=float)
                     samples = samples[np.isfinite(samples)]
                     if samples.size < 2:
                         continue
-                    label = f"EP={ep} {scheme} (n={samples.size})"
-                    _plot_density(ax, samples, scheme_ls[scheme], ep_color[ep], label)
+                    label = f"S{scenario} EP={ep} {scheme} (n={samples.size})"
+                    _plot_density(
+                        ax,
+                        samples,
+                        scheme_ls[scheme],
+                        sc_color[scenario],
+                        label,
+                    )
                     any_curve = True
             if not any_curve:
                 plt.close(fig)
                 continue
             style_ax(
                 ax,
-                f"Exp3 System CCT PDF (batch={int(batch)}, S={zs:g})",
+                f"Exp3 Cross-Scenario CCT PDF (batch={int(batch)}, S={zs:g})",
                 "System dispatch+combine CCT (µs)  "
                 "[attention→dispatch→GEMV→combine one iteration]",
                 "Density",
             )
-            path = figs_dir / f"exp3_pdf_b{int(batch)}_s{zs:g}.png"
+            path = figs_dir / f"exp3_pdf_compare_b{int(batch)}_s{zs:g}.png"
             fig.tight_layout()
             fig.savefig(path, dpi=140)
             plt.close(fig)
             figs.append(path)
+
+    # Drop legacy names (exp3_pdf_b16_s0.3.png) that omitted the scenario tag.
+    for stale in figs_dir.glob("exp3_pdf_b*_s*.png"):
+        try:
+            stale.unlink()
+        except OSError:
+            pass
     return figs
 
 
@@ -445,13 +512,17 @@ def write_report(
     lines.append(
         "横轴为**系统级一次迭代完成时间**（attention→dispatch→GEMV→combine 一个 roundtrip 步的 CCT，"
         "口径 = kickoff→最后一个 combine token 完成，取自 summary.json 的 `cct_us`），"
-        "**不再是逐 token 时延**。对每个 (BatchSize, Zipf S) 组合，"
+        "**不再是逐 token 时延**。对每个 (场景, BatchSize, Zipf S, EP) 组合，"
         "在多个随机种子下各跑一次 roundtrip，每次运行贡献一个系统 CCT 样本，"
         "以此得到系统 CCT 的概率密度分布（PDF，无 CDF）。\n"
     )
     lines.append(
-        "对比曲线：**EP=128**（场景1，case s1_n128）与 **EP=1024**（场景2，case s2_n1024）；"
-        "颜色区分 EP，线型区分方案（实线 ub_rg，虚线 packet_spray）。\n"
+        "覆盖三个组网场景（与实验设计 §4.2.3 一致）：\n"
+        "- **场景1** 单层 Clos：EP ∈ {32, 64, 128}\n"
+        "- **场景2** 两层 Clos：EP ∈ {256, 1024}\n"
+        "- **场景3** 两层 Clos 多平面：EP ∈ {256, 1024}\n"
+        "每场景单独出 PDF；另附跨场景对比图（S1-EP128 / S2-EP1024 / S3-EP1024）。"
+        "线型区分方案（实线 ub_rg，虚线 packet_spray）。\n"
     )
     pdf_df = df[df["exp"] == "exp3_pdf"].copy()
     pdf_df = pdf_df[pdf_df["cct_us"].notna() & (pdf_df["cct_us"] > 0)]
@@ -474,14 +545,23 @@ def write_report(
         if pdf_note:
             lines.append(pdf_note)
         stats = pdf_df.pivot_table(
-            index=["ep_size", "batch", "zipf_s"],
+            index=["scenario", "ep_size", "batch", "zipf_s"],
             columns="scheme",
             values="cct_us",
             aggfunc=["mean", "std", "count"],
         )
         lines.append("**系统 CCT 样本统计（µs，mean/std/count）**\n\n")
         lines.append("```\n" + stats.round(2).to_string() + "\n```\n")
-        for p in sorted(pdf_figs_dir.glob("exp3_pdf_b*_s*.png")):
+        for sc in sorted(pdf_df["scenario"].unique()):
+            lines.append(f"### 4.{int(sc)} 场景{int(sc)} PDF\n")
+            sc_figs = sorted(pdf_figs_dir.glob(f"exp3_pdf_s{int(sc)}_b*_s*.png"))
+            if sc_figs:
+                for p in sc_figs:
+                    lines.append(md_img(p) + "\n")
+            else:
+                lines.append("_（该场景 PDF 样本尚未齐）_\n")
+        lines.append("### 4.4 跨场景对比 PDF（S1-EP128 / S2-EP1024 / S3-EP1024）\n")
+        for p in sorted(pdf_figs_dir.glob("exp3_pdf_compare_b*_s*.png")):
             lines.append(md_img(p) + "\n")
     else:
         lines.append("_（exp3_pdf 系统 CCT 样本尚未生成，运行 `run_ub_rg_experiments.py --exp3-pdf`）_\n")

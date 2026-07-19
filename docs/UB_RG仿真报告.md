@@ -14,7 +14,7 @@
 | 2 Combine | combine | 同实验1 | 同左 | 同左 | full |
 | 3 Roundtrip | roundtrip | 1→{32,64,128}; 2/3→{256,1024} | 256 | 同左 | 上列 |
 
-引擎：**behavioral**；成功汇总运行数：**4952**。原始结果：`results/ub_rg/`。
+引擎：**behavioral**；成功汇总运行数：**16472**。原始结果：`results/ub_rg/`。
 ## 2. 实验1：倾斜专家流量下的 Dispatch
 ### 2.1 场景1
 **batch=256 对比表**
@@ -108,51 +108,155 @@ zipf_s
 ![exp2_combine_s3_step_vs_batch.png](../results/ub_rg/figures/exp2_combine_s3_step_vs_batch.png)
 ![exp2_combine_s3_throughput_vs_s.png](../results/ub_rg/figures/exp2_combine_s3_throughput_vs_s.png)
 ## 4. 实验3：系统级 Dispatch+Combine 完成时间 (CCT) PDF
-横轴为**系统级一次迭代完成时间**（attention→dispatch→GEMV→combine 一个 roundtrip 步的 CCT，口径 = kickoff→最后一个 combine token 完成，取自 summary.json 的 `cct_us`），**不再是逐 token 时延**。对每个 (BatchSize, Zipf S) 组合，在多个随机种子下各跑一次 roundtrip，每次运行贡献一个系统 CCT 样本，以此得到系统 CCT 的概率密度分布（PDF，无 CDF）。
-对比曲线：**EP=128**（场景1，case s1_n128）与 **EP=1024**（场景2，case s2_n1024）；颜色区分 EP，线型区分方案（实线 ub_rg，虚线 packet_spray）。
+横轴为**系统级一次迭代完成时间**（attention→dispatch→GEMV→combine 一个 roundtrip 步的 CCT，口径 = kickoff→最后一个 combine token 完成，取自 summary.json 的 `cct_us`），**不再是逐 token 时延**。对每个 (场景, BatchSize, Zipf S, EP) 组合，在多个随机种子下各跑一次 roundtrip，每次运行贡献一个系统 CCT 样本，以此得到系统 CCT 的概率密度分布（PDF，无 CDF）。
+覆盖三个组网场景（与实验设计 §4.2.3 一致）：
+- **场景1** 单层 Clos：EP ∈ {32, 64, 128}
+- **场景2** 两层 Clos：EP ∈ {256, 1024}
+- **场景3** 两层 Clos 多平面：EP ∈ {256, 1024}
+每场景单独出 PDF；另附跨场景对比图（S1-EP128 / S2-EP1024 / S3-EP1024）。线型区分方案（实线 ub_rg，虚线 packet_spray）。
 **系统 CCT 样本统计（µs，mean/std/count）**
 
 ```
-                             mean                   std               count      
-scheme               packet_spray    ub_rg packet_spray  ub_rg packet_spray ub_rg
-ep_size batch zipf_s                                                             
-128     16    0.0           12.87    11.47         0.38   0.39           96    96
-              0.3           20.41    18.10         0.85   0.95           96    96
-              0.7           47.01    44.85         1.36   1.33           96    96
-              0.9           62.99    60.02         1.09   1.19           96    96
-        64    0.0           42.15    29.60         0.75   0.71           96    96
-              0.3           74.84    60.54         1.76   2.50           96    96
-              0.7          180.19   166.08         2.53   2.99           96    96
-              0.9          242.73   227.62         2.46   2.36           96    96
-        256   0.0          154.41    91.88         1.12   1.23           96    96
-              0.3          289.24   225.03         3.40   5.00           96    96
-              0.7          707.54   644.01         5.67   5.69           96    96
-              0.9          957.00   890.64         4.62   4.63           96    96
-1024    16    0.0           19.65    14.38         0.41   0.33           96    96
-              0.3           34.71    33.33         1.20   1.96           96    96
-              0.7          183.88   184.59         2.98   3.66           96    96
-              0.9          342.45   341.64         3.93   4.38           96    96
-        64    0.0           47.31    36.16         0.60   0.50           96    96
-              0.3          127.51   113.61         2.31   3.31           96    96
-              0.7          717.40   708.88         5.91   7.38           96    96
-              0.9         1347.70  1337.20         6.41   8.42           96    96
-        256   0.0          165.01   107.78         1.00   1.10           96    96
-              0.3          492.49   426.30         4.82   7.13           96    96
-              0.7         2842.45  2787.33         9.99  12.47           96    96
-              0.9         5355.87  5299.03        11.16  14.67           96    96
+                                      mean                   std               count      
+scheme                        packet_spray    ub_rg packet_spray  ub_rg packet_spray ub_rg
+scenario ep_size batch zipf_s                                                             
+1        32      16    0.0           11.84    10.09         0.36   0.31           96    96
+                       0.3           14.69    12.50         0.56   0.63           96    96
+                       0.7           20.65    17.94         0.59   0.47           96    96
+                       0.9           22.85    19.72         0.59   0.31           96    96
+                 64    0.0           40.06    26.79         0.63   0.67           96    96
+                       0.3           53.51    39.23         1.30   1.42           96    96
+                       0.7           77.53    62.46         1.42   1.13           96    96
+                       0.9           86.17    70.31         1.18   0.75           96    96
+                 256   0.0          151.02    87.60         1.07   1.47           96    96
+                       0.3          207.72   142.76         2.06   2.69           96    96
+                       0.7          301.77   237.49         2.83   2.34           96    96
+                       0.9          336.56   270.74         2.38   1.57           96    96
+         64      16    0.0           12.43    10.87         0.36   0.34           96    96
+                       0.3           17.35    15.13         0.65   0.87           96    96
+                       0.7           30.85    28.25         0.92   0.80           96    96
+                       0.9           37.22    34.19         0.89   0.71           96    96
+                 64    0.0           40.98    28.17         0.55   0.72           96    96
+                       0.3           63.10    48.89         1.48   1.80           96    96
+                       0.7          116.76   102.03         1.88   1.92           96    96
+                       0.9          142.44   126.93         1.74   1.50           96    96
+                 256   0.0          152.89    89.93         1.16   1.49           96    96
+                       0.3          245.03   180.38         2.88   3.24           96    96
+                       0.7          457.04   393.24         3.75   4.22           96    96
+                       0.9          558.64   492.94         3.30   2.95           96    96
+         128     16    0.0           12.87    11.47         0.38   0.39           96    96
+                       0.3           20.41    18.10         0.85   0.95           96    96
+                       0.7           47.01    44.85         1.36   1.33           96    96
+                       0.9           62.99    60.02         1.09   1.19           96    96
+                 64    0.0           42.15    29.60         0.75   0.71           96    96
+                       0.3           74.84    60.54         1.76   2.50           96    96
+                       0.7          180.19   166.08         2.53   2.99           96    96
+                       0.9          242.73   227.62         2.46   2.36           96    96
+                 256   0.0          154.41    91.88         1.12   1.23           96    96
+                       0.3          289.24   225.03         3.40   5.00           96    96
+                       0.7          707.54   644.01         5.67   5.69           96    96
+                       0.9          957.00   890.64         4.62   4.63           96    96
+2        256     16    0.0           14.94    13.74         0.30   0.31           96    96
+                       0.3           25.11    23.59         0.84   1.41           96    96
+                       0.7           73.70    73.45         1.57   2.17           96    96
+                       0.9          109.45   107.79         1.57   1.54           96    96
+                 64    0.0           45.34    33.05         0.51   0.66           96    96
+                       0.3           90.15    75.94         1.75   2.73           96    96
+                       0.7          283.13   271.04         3.55   3.60           96    96
+                       0.9          424.64   411.31         3.61   4.14           96    96
+                 256   0.0          159.74    96.28         1.00   1.13           96    96
+                       0.3          344.64   280.20         3.92   4.44           96    96
+                       0.7         1113.56  1052.87         6.16   7.26           96    96
+                       0.9         1677.49  1614.50         6.98   6.81           96    96
+         1024    16    0.0           19.65    14.38         0.41   0.33           96    96
+                       0.3           34.71    33.33         1.20   1.96           96    96
+                       0.7          183.88   184.59         2.98   3.66           96    96
+                       0.9          342.45   341.64         3.93   4.38           96    96
+                 64    0.0           47.31    36.16         0.60   0.50           96    96
+                       0.3          127.51   113.61         2.31   3.31           96    96
+                       0.7          717.40   708.88         5.91   7.38           96    96
+                       0.9         1347.70  1337.20         6.41   8.42           96    96
+                 256   0.0          165.01   107.78         1.00   1.10           96    96
+                       0.3          492.49   426.30         4.82   7.13           96    96
+                       0.7         2842.45  2787.33         9.99  12.47           96    96
+                       0.9         5355.87  5299.03        11.16  14.67           96    96
+3        256     16    0.0           14.94    13.74         0.30   0.31           96    96
+                       0.3           25.11    23.59         0.84   1.41           96    96
+                       0.7           73.70    73.45         1.57   2.17           96    96
+                       0.9          109.45   107.79         1.57   1.54           96    96
+                 64    0.0           45.34    33.05         0.51   0.66           96    96
+                       0.3           90.15    75.94         1.75   2.73           96    96
+                       0.7          283.13   271.04         3.55   3.60           96    96
+                       0.9          424.64   411.31         3.61   4.14           96    96
+                 256   0.0          159.74    96.28         1.00   1.13           96    96
+                       0.3          344.64   280.20         3.92   4.44           96    96
+                       0.7         1113.56  1052.87         6.16   7.26           96    96
+                       0.9         1677.49  1614.50         6.98   6.81           96    96
+         1024    16    0.0           19.65    14.38         0.41   0.33           96    96
+                       0.3           34.71    33.33         1.20   1.96           96    96
+                       0.7          183.88   184.59         2.98   3.66           96    96
+                       0.9          342.45   341.64         3.93   4.38           96    96
+                 64    0.0           47.31    36.16         0.60   0.50           96    96
+                       0.3          127.51   113.61         2.31   3.31           96    96
+                       0.7          717.40   708.88         5.91   7.38           96    96
+                       0.9         1347.70  1337.20         6.41   8.42           96    96
+                 256   0.0          165.01   107.78         1.00   1.10           96    96
+                       0.3          492.49   426.30         4.82   7.13           96    96
+                       0.7         2842.45  2787.33         9.99  12.47           96    96
+                       0.9         5355.87  5299.03        11.16  14.67           96    96
 ```
-![exp3_pdf_b16_s0.3.png](../results/ub_rg/figures/exp3_pdf_b16_s0.3.png)
-![exp3_pdf_b16_s0.7.png](../results/ub_rg/figures/exp3_pdf_b16_s0.7.png)
-![exp3_pdf_b16_s0.9.png](../results/ub_rg/figures/exp3_pdf_b16_s0.9.png)
-![exp3_pdf_b16_s0.png](../results/ub_rg/figures/exp3_pdf_b16_s0.png)
-![exp3_pdf_b256_s0.3.png](../results/ub_rg/figures/exp3_pdf_b256_s0.3.png)
-![exp3_pdf_b256_s0.7.png](../results/ub_rg/figures/exp3_pdf_b256_s0.7.png)
-![exp3_pdf_b256_s0.9.png](../results/ub_rg/figures/exp3_pdf_b256_s0.9.png)
-![exp3_pdf_b256_s0.png](../results/ub_rg/figures/exp3_pdf_b256_s0.png)
-![exp3_pdf_b64_s0.3.png](../results/ub_rg/figures/exp3_pdf_b64_s0.3.png)
-![exp3_pdf_b64_s0.7.png](../results/ub_rg/figures/exp3_pdf_b64_s0.7.png)
-![exp3_pdf_b64_s0.9.png](../results/ub_rg/figures/exp3_pdf_b64_s0.9.png)
-![exp3_pdf_b64_s0.png](../results/ub_rg/figures/exp3_pdf_b64_s0.png)
+### 4.1 场景1 PDF
+![exp3_pdf_s1_b16_s0.3.png](../results/ub_rg/figures/exp3_pdf_s1_b16_s0.3.png)
+![exp3_pdf_s1_b16_s0.7.png](../results/ub_rg/figures/exp3_pdf_s1_b16_s0.7.png)
+![exp3_pdf_s1_b16_s0.9.png](../results/ub_rg/figures/exp3_pdf_s1_b16_s0.9.png)
+![exp3_pdf_s1_b16_s0.png](../results/ub_rg/figures/exp3_pdf_s1_b16_s0.png)
+![exp3_pdf_s1_b256_s0.3.png](../results/ub_rg/figures/exp3_pdf_s1_b256_s0.3.png)
+![exp3_pdf_s1_b256_s0.7.png](../results/ub_rg/figures/exp3_pdf_s1_b256_s0.7.png)
+![exp3_pdf_s1_b256_s0.9.png](../results/ub_rg/figures/exp3_pdf_s1_b256_s0.9.png)
+![exp3_pdf_s1_b256_s0.png](../results/ub_rg/figures/exp3_pdf_s1_b256_s0.png)
+![exp3_pdf_s1_b64_s0.3.png](../results/ub_rg/figures/exp3_pdf_s1_b64_s0.3.png)
+![exp3_pdf_s1_b64_s0.7.png](../results/ub_rg/figures/exp3_pdf_s1_b64_s0.7.png)
+![exp3_pdf_s1_b64_s0.9.png](../results/ub_rg/figures/exp3_pdf_s1_b64_s0.9.png)
+![exp3_pdf_s1_b64_s0.png](../results/ub_rg/figures/exp3_pdf_s1_b64_s0.png)
+### 4.2 场景2 PDF
+![exp3_pdf_s2_b16_s0.3.png](../results/ub_rg/figures/exp3_pdf_s2_b16_s0.3.png)
+![exp3_pdf_s2_b16_s0.7.png](../results/ub_rg/figures/exp3_pdf_s2_b16_s0.7.png)
+![exp3_pdf_s2_b16_s0.9.png](../results/ub_rg/figures/exp3_pdf_s2_b16_s0.9.png)
+![exp3_pdf_s2_b16_s0.png](../results/ub_rg/figures/exp3_pdf_s2_b16_s0.png)
+![exp3_pdf_s2_b256_s0.3.png](../results/ub_rg/figures/exp3_pdf_s2_b256_s0.3.png)
+![exp3_pdf_s2_b256_s0.7.png](../results/ub_rg/figures/exp3_pdf_s2_b256_s0.7.png)
+![exp3_pdf_s2_b256_s0.9.png](../results/ub_rg/figures/exp3_pdf_s2_b256_s0.9.png)
+![exp3_pdf_s2_b256_s0.png](../results/ub_rg/figures/exp3_pdf_s2_b256_s0.png)
+![exp3_pdf_s2_b64_s0.3.png](../results/ub_rg/figures/exp3_pdf_s2_b64_s0.3.png)
+![exp3_pdf_s2_b64_s0.7.png](../results/ub_rg/figures/exp3_pdf_s2_b64_s0.7.png)
+![exp3_pdf_s2_b64_s0.9.png](../results/ub_rg/figures/exp3_pdf_s2_b64_s0.9.png)
+![exp3_pdf_s2_b64_s0.png](../results/ub_rg/figures/exp3_pdf_s2_b64_s0.png)
+### 4.3 场景3 PDF
+![exp3_pdf_s3_b16_s0.3.png](../results/ub_rg/figures/exp3_pdf_s3_b16_s0.3.png)
+![exp3_pdf_s3_b16_s0.7.png](../results/ub_rg/figures/exp3_pdf_s3_b16_s0.7.png)
+![exp3_pdf_s3_b16_s0.9.png](../results/ub_rg/figures/exp3_pdf_s3_b16_s0.9.png)
+![exp3_pdf_s3_b16_s0.png](../results/ub_rg/figures/exp3_pdf_s3_b16_s0.png)
+![exp3_pdf_s3_b256_s0.3.png](../results/ub_rg/figures/exp3_pdf_s3_b256_s0.3.png)
+![exp3_pdf_s3_b256_s0.7.png](../results/ub_rg/figures/exp3_pdf_s3_b256_s0.7.png)
+![exp3_pdf_s3_b256_s0.9.png](../results/ub_rg/figures/exp3_pdf_s3_b256_s0.9.png)
+![exp3_pdf_s3_b256_s0.png](../results/ub_rg/figures/exp3_pdf_s3_b256_s0.png)
+![exp3_pdf_s3_b64_s0.3.png](../results/ub_rg/figures/exp3_pdf_s3_b64_s0.3.png)
+![exp3_pdf_s3_b64_s0.7.png](../results/ub_rg/figures/exp3_pdf_s3_b64_s0.7.png)
+![exp3_pdf_s3_b64_s0.9.png](../results/ub_rg/figures/exp3_pdf_s3_b64_s0.9.png)
+![exp3_pdf_s3_b64_s0.png](../results/ub_rg/figures/exp3_pdf_s3_b64_s0.png)
+### 4.4 跨场景对比 PDF（S1-EP128 / S2-EP1024 / S3-EP1024）
+![exp3_pdf_compare_b16_s0.3.png](../results/ub_rg/figures/exp3_pdf_compare_b16_s0.3.png)
+![exp3_pdf_compare_b16_s0.7.png](../results/ub_rg/figures/exp3_pdf_compare_b16_s0.7.png)
+![exp3_pdf_compare_b16_s0.9.png](../results/ub_rg/figures/exp3_pdf_compare_b16_s0.9.png)
+![exp3_pdf_compare_b16_s0.png](../results/ub_rg/figures/exp3_pdf_compare_b16_s0.png)
+![exp3_pdf_compare_b256_s0.3.png](../results/ub_rg/figures/exp3_pdf_compare_b256_s0.3.png)
+![exp3_pdf_compare_b256_s0.7.png](../results/ub_rg/figures/exp3_pdf_compare_b256_s0.7.png)
+![exp3_pdf_compare_b256_s0.9.png](../results/ub_rg/figures/exp3_pdf_compare_b256_s0.9.png)
+![exp3_pdf_compare_b256_s0.png](../results/ub_rg/figures/exp3_pdf_compare_b256_s0.png)
+![exp3_pdf_compare_b64_s0.3.png](../results/ub_rg/figures/exp3_pdf_compare_b64_s0.3.png)
+![exp3_pdf_compare_b64_s0.7.png](../results/ub_rg/figures/exp3_pdf_compare_b64_s0.7.png)
+![exp3_pdf_compare_b64_s0.9.png](../results/ub_rg/figures/exp3_pdf_compare_b64_s0.9.png)
+![exp3_pdf_compare_b64_s0.png](../results/ub_rg/figures/exp3_pdf_compare_b64_s0.png)
 ### 4.x Roundtrip Step vs EP（汇总）
 ![exp3_s1_step_vs_ep.png](../results/ub_rg/figures/exp3_s1_step_vs_ep.png)
 ![exp3_s2_step_vs_ep.png](../results/ub_rg/figures/exp3_s2_step_vs_ep.png)
@@ -169,7 +273,7 @@ ep_size batch zipf_s
 - **场景3** packet_spray CCT/König：mean=1.244，median=1.098
 ## 6. 双引擎对比（逐包 vs 行为级）
 在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。
-对齐样本 **61** 组；step 比值（packet/behavioral）均值=0.224，中位数=0.148。
+对齐样本 **75** 组；step 比值（packet/behavioral）均值=0.294，中位数=0.160。
 ```
           exp  scenario       scheme     mode  batch  zipf_s  ep_size  step_packet  p99_packet  step_behav  p99_behav  step_ratio
 exp1_dispatch         1 packet_spray dispatch     16     0.3      128       11.855       7.131      63.017     49.660       0.188

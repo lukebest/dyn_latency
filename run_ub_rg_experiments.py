@@ -20,8 +20,12 @@ SCHEMES = ["ub_rg", "packet_spray"]
 TOPK = 8
 SEED = 1
 
-# Exp3 PDF sweep: EP128 -> scenario 1 (s1_n128); EP1024 -> scenario 2 (s2_n1024).
-EXP3_PDF_EP_SCENARIO = {128: 1, 1024: 2}
+# Exp3 PDF: per-scenario EP sets (matches UB_RG实验设计 §4.2.3; EP512 omitted).
+EXP3_PDF_SCENARIO_EPS = {
+    1: [32, 64, 128],
+    2: [256, 1024],
+    3: [256, 1024],
+}
 EXP3_PDF_DEFAULT_BATCHES = [16, 64, 256]
 # More seeds widen empirical CCT spread for PDF tails (32→96).
 EXP3_PDF_DEFAULT_SEEDS = 96
@@ -118,24 +122,25 @@ def build_exp3_pdf_jobs(
     summary.json cct_us is one system-CCT sample. Routed to exp3_pdf/.
     """
     jobs: list[Job] = []
-    for ep, scenario in EXP3_PDF_EP_SCENARIO.items():
-        for batch in batches:
-            for zipf_s in zipf_list:
-                for scheme in SCHEMES:
-                    for sd in range(1, seeds + 1):
-                        jobs.append(
-                            Job(
-                                exp="exp3_pdf",
-                                mode="roundtrip",
-                                scenario=scenario,
-                                scheme=scheme,
-                                batch=batch,
-                                zipf_s=zipf_s,
-                                ep_size=ep,
-                                engine=engine,
-                                seed=sd,
+    for scenario, eps in EXP3_PDF_SCENARIO_EPS.items():
+        for ep in eps:
+            for batch in batches:
+                for zipf_s in zipf_list:
+                    for scheme in SCHEMES:
+                        for sd in range(1, seeds + 1):
+                            jobs.append(
+                                Job(
+                                    exp="exp3_pdf",
+                                    mode="roundtrip",
+                                    scenario=scenario,
+                                    scheme=scheme,
+                                    batch=batch,
+                                    zipf_s=zipf_s,
+                                    ep_size=ep,
+                                    engine=engine,
+                                    seed=sd,
+                                )
                             )
-                        )
     return jobs
 
 
@@ -296,7 +301,7 @@ def main() -> int:
         "--batches",
         type=str,
         default="",
-        help="Comma list of batch sizes for --exp3-pdf (default 16,64,256,1024)",
+        help="Comma list of batch sizes for --exp3-pdf (default 16,64,256)",
     )
     args = ap.parse_args()
 
