@@ -542,7 +542,9 @@ def _load_packet_summary(path: Path) -> dict[str, Any]:
     return data
 
 
-def _run_network_key(key: NetworkKey, binary: str, force: bool) -> dict[str, Any]:
+def _run_network_key(
+    key: NetworkKey, binary: str, force: bool, timeout_s: int = 0
+) -> dict[str, Any]:
     command = key.command(binary)
     record: dict[str, Any] = {
         "network_key": asdict(key),
@@ -561,7 +563,7 @@ def _run_network_key(key: NetworkKey, binary: str, force: bool) -> dict[str, Any
             pass
 
     key.out_dir.mkdir(parents=True, exist_ok=True)
-    timeout = 14_400 if key.scenario >= 2 else 3_600
+    timeout = timeout_s or (14_400 if key.scenario >= 2 else 3_600)
     started = time.monotonic()
     try:
         process = subprocess.run(
@@ -582,10 +584,14 @@ def _run_network_key(key: NetworkKey, binary: str, force: bool) -> dict[str, Any
             raise RuntimeError("packet command did not produce summary.json")
         _load_packet_summary(key.summary_path)
         record["status"] = "completed"
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         record["elapsed_s"] = time.monotonic() - started
         record["status"] = "failed"
         record["error"] = f"timeout after {timeout}s"
+        stdout = exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr = exc.stderr.decode() if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        record["stdout_tail"] = stdout[-4000:]
+        record["stderr_tail"] = stderr[-2000:]
     except Exception as exc:  # noqa: BLE001 - preserve each worker failure in ledger
         record["elapsed_s"] = time.monotonic() - started
         record["status"] = "failed"
@@ -741,6 +747,12 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=0, help="limit system jobs after filtering")
     parser.add_argument("--force", action="store_true", help="rerun packet and system outputs")
     parser.add_argument("--binary", default=None, help="explicit packet binary path")
+    parser.add_argument(
+        "--timeout-s",
+        type=int,
+        default=0,
+        help="per-packet-run wall timeout; 0 uses scenario defaults",
+    )
     parser.add_argument("--dry-run", action="store_true", help="print the exact plan only")
     return parser
 
@@ -771,6 +783,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("--workers must be non-negative")
     if args.limit < 0:
         raise SystemExit("--limit must be non-negative")
+    if args.timeout_s < 0:
+        raise SystemExit("--timeout-s must be non-negative")
 
     jobs = build_plan(args.tier, args.exp, args.scenario)
     if args.limit:
@@ -797,7 +811,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     records: list[dict[str, Any]] = []
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = {
-            executor.submit(_run_network_key, key, str(binary), args.force): key
+            executor.submit(
+                _run_network_key, key, str(binary), args.force, args.timeout_s
+            ): key
             for key in keys
         }
         for future in as_completed(futures):
@@ -863,6 +879,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "scenario": args.scenario,
             "limit": args.limit,
             "force": args.force,
+            "timeout_s": args.timeout_s,
         },
         "binary": str(binary),
         "planned": len(keys),
