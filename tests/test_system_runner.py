@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import run_ub_rg_system_experiments as runner
 
@@ -224,6 +225,18 @@ class MatrixCoverageTests(unittest.TestCase):
 
 
 class PacketPlanTests(unittest.TestCase):
+    def test_find_binary_prefers_release_over_debug(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            ns3 = Path(temporary)
+            build = ns3 / "build" / "scratch"
+            build.mkdir(parents=True)
+            release = build / "ns3.44-ub_rg-packet-experiment"
+            debug = build / "ns3.44-ub_rg-packet-experiment-debug"
+            release.touch()
+            debug.touch()
+            with mock.patch.object(runner, "NS3", ns3):
+                self.assertEqual(runner.find_binary(), release.resolve())
+
     def test_network_keys_use_actual_microbatch_batch(self):
         for job in runner.build_plan():
             expected = job.batch if job.exp == "sys1" else job.batch // job.microbatches

@@ -472,10 +472,12 @@ def find_binary(explicit: str | os.PathLike[str] | None = None) -> Path:
         raise FileNotFoundError(f"packet binary does not exist: {candidate}")
 
     build = NS3 / "build" / "scratch"
-    suffixes = ("release", "debug", "default", "optimized")
-    names = [
+    # ns-3 release builds use the unsuffixed name. Prefer optimized binaries
+    # over debug/sanitizer artifacts left by diagnostics.
+    suffixes = ("release", "optimized", "default", "debug")
+    names = [f"ns3.44-{PACKET_TARGET}"] + [
         f"ns3.44-{PACKET_TARGET}-{suffix}" for suffix in suffixes
-    ] + [f"ns3.44-{PACKET_TARGET}"]
+    ]
     for name in names:
         candidate = build / name
         if candidate.is_file():
