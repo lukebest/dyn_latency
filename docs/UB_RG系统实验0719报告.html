@@ -1,0 +1,2363 @@
+<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>
+<title>UB_RG 系统实验 0719 报告</title>
+<style>body{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#202124}table{border-collapse:collapse;width:100%;font-size:.9rem}th,td{border:1px solid #ccc;padding:.35rem .5rem;text-align:left}th{background:#f4f6f8}img{max-width:100%;height:auto;border:1px solid #ddd}code,pre{font-family:ui-monospace,monospace}pre{background:#f6f8fa;padding:1rem;overflow:auto}blockquote{border-left:4px solid #999;padding-left:1rem;color:#555}</style></head><body>
+<h1>UB_RG 系统实验 0719 报告</h1>
+<blockquote>本报告只汇总 `engine/network_engine=packet` 的逐包证据。数据缺失处明确标为“缺失”，不使用行为级结果补齐，也不插值。</blockquote>
+<p>实验定义仅以精确文件 [<code>UB_RG实验设计0719.md</code>](./UB_RG实验设计0719.md) §4.3；不引用不含 <code>0719</code> 的同名设计文档。</p>
+<blockquote>**执行状态：部分完成。** 网络任务 208 个，完成 61、失败 147；系统配置 134 个，完成 36、因网络输入失败 98。成功结果均来自场景1，场景2/3 在本轮墙钟上限内未形成可分析 summary。</blockquote>
+<h2>1. 方法与参数矩阵</h2>
+<p>方法：从每个逐包运行的 <code>summary.json</code> 读取网络 CCT/P99 证据与系统模型输出，以 <code>ledger.json</code> 核对失败、跳过和裁剪；重复点仅在绘图时取算术平均，[<code>UB_RG系统实验0719数据.csv</code>](./UB_RG系统实验0719数据.csv) 保留逐运行记录。</p>
+<table><thead><tr>
+<th>实验</th>
+<th>成功 summary</th>
+<th>tier</th>
+<th>场景</th>
+<th>网络方案</th>
+<th>B</th>
+<th>Zipf S</th>
+<th>EP</th>
+<th>L</th>
+<th>m</th>
+</tr></thead><tbody>
+<tr>
+<td>sys1</td>
+<td>14</td>
+<td>controls, main</td>
+<td>1</td>
+<td>packet_spray, ub_rg</td>
+<td>16, 256, 64</td>
+<td>0, 0.5</td>
+<td>128, 64</td>
+<td>32, 60, 94</td>
+<td>1</td>
+</tr>
+<tr>
+<td>sys2</td>
+<td>12</td>
+<td>controls, main</td>
+<td>1</td>
+<td>packet_spray, ub_rg</td>
+<td>256</td>
+<td>0, 0.5, 0.9</td>
+<td>128</td>
+<td>60</td>
+<td>1, 2, 4</td>
+</tr>
+<tr>
+<td>sys3</td>
+<td>10</td>
+<td>controls, main</td>
+<td>1</td>
+<td>packet_spray, ub_rg</td>
+<td>256</td>
+<td>0, 0.5, 1</td>
+<td>128</td>
+<td>60</td>
+<td>1, 2, 4</td>
+</tr>
+</tbody></table>
+<p>这是**实收参数矩阵**，不是对未运行配置的宣称；未出现的参数组合视为缺失或被裁剪。</p>
+<h2>2. 逐包证据来源与 packet 门禁</h2>
+<ul>
+<li>输入根目录：`/workspace/results/ub_rg_system_packet`</li>
+<li>已接受 summary：36 个；ledger：1 个</li>
+<li>门禁规则：每个可解析输入必须至少声明一个 `engine` 或 `network_engine`，且所有此类声明都必须严格等于 `packet`；runner 的 ledger 也可用`packet_only=true` 作等价声明。`behavioral` 会立即报错并停止写出。</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_packet_spray_b16_z0.5_ep128_L60_m1_sd1`：`sys1/sys1_s1_packet_spray_b16_z0.5_ep128_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb16_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb16_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_packet_spray_b256_z0.5_ep128_L32_m1_sd1`：`sys1/sys1_s1_packet_spray_b256_z0.5_ep128_L32_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb256_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb256_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_packet_spray_b256_z0.5_ep128_L60_m1_sd1`：`sys1/sys1_s1_packet_spray_b256_z0.5_ep128_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb256_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb256_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_packet_spray_b256_z0.5_ep128_L94_m1_sd1`：`sys1/sys1_s1_packet_spray_b256_z0.5_ep128_L94_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb256_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb256_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_packet_spray_b256_z0.5_ep64_L60_m1_sd1`：`sys1/sys1_s1_packet_spray_b256_z0.5_ep64_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb256_z0.5_ep64_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb256_z0.5_ep64_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_packet_spray_b256_z0_ep128_L60_m1_sd1`：`sys1/sys1_s1_packet_spray_b256_z0_ep128_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb256_z0_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb256_z0_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_packet_spray_b64_z0.5_ep128_L60_m1_sd1`：`sys1/sys1_s1_packet_spray_b64_z0.5_ep128_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb64_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb64_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_ub_rg_b16_z0.5_ep128_L60_m1_sd1`：`sys1/sys1_s1_ub_rg_b16_z0.5_ep128_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb16_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb16_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_ub_rg_b256_z0.5_ep128_L32_m1_sd1`：`sys1/sys1_s1_ub_rg_b256_z0.5_ep128_L32_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb256_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb256_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_ub_rg_b256_z0.5_ep128_L60_m1_sd1`：`sys1/sys1_s1_ub_rg_b256_z0.5_ep128_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb256_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb256_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_ub_rg_b256_z0.5_ep128_L94_m1_sd1`：`sys1/sys1_s1_ub_rg_b256_z0.5_ep128_L94_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb256_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb256_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_ub_rg_b256_z0.5_ep64_L60_m1_sd1`：`sys1/sys1_s1_ub_rg_b256_z0.5_ep64_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb256_z0.5_ep64_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb256_z0.5_ep64_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_ub_rg_b256_z0_ep128_L60_m1_sd1`：`sys1/sys1_s1_ub_rg_b256_z0_ep128_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb256_z0_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb256_z0_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys1/sys1_s1_ub_rg_b64_z0.5_ep128_L60_m1_sd1`：`sys1/sys1_s1_ub_rg_b64_z0.5_ep128_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb64_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb64_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_packet_spray_b256_z0.5_ep128_L60_m1_sd1`：`sys2/sys2_s1_packet_spray_b256_z0.5_ep128_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb256_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb256_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_packet_spray_b256_z0.5_ep128_L60_m2_sd1`：`sys2/sys2_s1_packet_spray_b256_z0.5_ep128_L60_m2_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb128_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb128_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_packet_spray_b256_z0.5_ep128_L60_m4_sd1`：`sys2/sys2_s1_packet_spray_b256_z0.5_ep128_L60_m4_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb64_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb64_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_packet_spray_b256_z0.9_ep128_L60_m2_sd1`：`sys2/sys2_s1_packet_spray_b256_z0.9_ep128_L60_m2_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb128_z0.9_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb128_z0.9_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_packet_spray_b256_z0.9_ep128_L60_m4_sd1`：`sys2/sys2_s1_packet_spray_b256_z0.9_ep128_L60_m4_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb64_z0.9_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb64_z0.9_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_packet_spray_b256_z0_ep128_L60_m2_sd1`：`sys2/sys2_s1_packet_spray_b256_z0_ep128_L60_m2_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_dispatch_mb128_z0_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_combine_mb128_z0_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_ub_rg_b256_z0.5_ep128_L60_m1_sd1`：`sys2/sys2_s1_ub_rg_b256_z0.5_ep128_L60_m1_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb256_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb256_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_ub_rg_b256_z0.5_ep128_L60_m2_sd1`：`sys2/sys2_s1_ub_rg_b256_z0.5_ep128_L60_m2_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb128_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb128_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_ub_rg_b256_z0.5_ep128_L60_m4_sd1`：`sys2/sys2_s1_ub_rg_b256_z0.5_ep128_L60_m4_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb64_z0.5_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb64_z0.5_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_ub_rg_b256_z0.9_ep128_L60_m2_sd1`：`sys2/sys2_s1_ub_rg_b256_z0.9_ep128_L60_m2_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb128_z0.9_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb128_z0.9_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_ub_rg_b256_z0.9_ep128_L60_m4_sd1`：`sys2/sys2_s1_ub_rg_b256_z0.9_ep128_L60_m4_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb64_z0.9_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb64_z0.9_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys2/sys2_s1_ub_rg_b256_z0_ep128_L60_m2_sd1`：`sys2/sys2_s1_ub_rg_b256_z0_ep128_L60_m2_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb128_z0_ep128_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb128_z0_ep128_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys3/sys3_s1_packet_spray_b256_z0.5_ep128_L60_m1_M112_N16_hidden_role_packed_sd1`：`sys3/sys3_s1_packet_spray_b256_z0.5_ep128_L60_m1_M112_N16_hidden_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_m2n_mb256_z0.5_ep128_M112_N16_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_n2m_mb256_z0.5_ep128_M112_N16_role_packed_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys3/sys3_s1_packet_spray_b256_z0.5_ep128_L60_m2_M112_N16_hidden_role_packed_sd1`：`sys3/sys3_s1_packet_spray_b256_z0.5_ep128_L60_m2_M112_N16_hidden_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_m2n_mb128_z0.5_ep128_M112_N16_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_n2m_mb128_z0.5_ep128_M112_N16_role_packed_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys3/sys3_s1_packet_spray_b256_z0.5_ep128_L60_m2_M124_N4_exposed_role_packed_sd1`：`sys3/sys3_s1_packet_spray_b256_z0.5_ep128_L60_m2_M124_N4_exposed_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_m2n_mb128_z0.5_ep128_M124_N4_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_n2m_mb128_z0.5_ep128_M124_N4_role_packed_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys3/sys3_s1_packet_spray_b256_z0.5_ep128_L60_m2_M64_N64_hidden_role_packed_sd1`：`sys3/sys3_s1_packet_spray_b256_z0.5_ep128_L60_m2_M64_N64_hidden_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_m2n_mb128_z0.5_ep128_M64_N64_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_n2m_mb128_z0.5_ep128_M64_N64_role_packed_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys3/sys3_s1_packet_spray_b256_z0.5_ep128_L60_m4_M112_N16_hidden_role_packed_sd1`：`sys3/sys3_s1_packet_spray_b256_z0.5_ep128_L60_m4_M112_N16_hidden_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_m2n_mb64_z0.5_ep128_M112_N16_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_n2m_mb64_z0.5_ep128_M112_N16_role_packed_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys3/sys3_s1_packet_spray_b256_z0_ep128_L60_m2_M112_N16_hidden_role_packed_sd1`：`sys3/sys3_s1_packet_spray_b256_z0_ep128_L60_m2_M112_N16_hidden_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_m2n_mb128_z0_ep128_M112_N16_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_n2m_mb128_z0_ep128_M112_N16_role_packed_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys3/sys3_s1_packet_spray_b256_z1_ep128_L60_m2_M112_N16_hidden_role_packed_sd1`：`sys3/sys3_s1_packet_spray_b256_z1_ep128_L60_m2_M112_N16_hidden_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_m2n_mb128_z1_ep128_M112_N16_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_packet_spray_afd_n2m_mb128_z1_ep128_M112_N16_role_packed_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys3/sys3_s1_ub_rg_b256_z0.5_ep128_L60_m2_M64_N64_hidden_role_packed_sd1`：`sys3/sys3_s1_ub_rg_b256_z0.5_ep128_L60_m2_M64_N64_hidden_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_afd_m2n_mb128_z0.5_ep128_M64_N64_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_afd_n2m_mb128_z0.5_ep128_M64_N64_role_packed_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys3/sys3_s1_ub_rg_b256_z0.5_ep128_L60_m4_M112_N16_hidden_role_packed_sd1`：`sys3/sys3_s1_ub_rg_b256_z0.5_ep128_L60_m4_M112_N16_hidden_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_afd_m2n_mb64_z0.5_ep128_M112_N16_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_afd_n2m_mb64_z0.5_ep128_M112_N16_role_packed_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<ul>
+<li>`sys3/sys3_s1_ub_rg_b256_z0_ep128_L60_m2_M112_N16_hidden_role_packed_sd1`：`sys3/sys3_s1_ub_rg_b256_z0_ep128_L60_m2_M112_N16_hidden_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_afd_m2n_mb128_z0_ep128_M112_N16_role_packed_sd1/summary.json`；`/workspace/results/ub_rg_system_packet/network/s1_ub_rg_afd_n2m_mb128_z0_ep128_M112_N16_role_packed_sd1/summary.json`；engine=packet，network_engine=缺失</li>
+</ul>
+<h2>3. Sys1：step 与 throughput</h2>
+<table><thead><tr>
+<th>run</th>
+<th>场景</th>
+<th>方案</th>
+<th>B</th>
+<th>Zipf S</th>
+<th>step (µs)</th>
+<th>token/s/device</th>
+</tr></thead><tbody>
+<tr>
+<td>sys1_s1_packet_spray_b16_z0.5_ep128_L60_m1_sd1</td>
+<td>1</td>
+<td>packet_spray</td>
+<td>16</td>
+<td>0.5</td>
+<td>23758.542</td>
+<td>673.442</td>
+</tr>
+<tr>
+<td>sys1_s1_packet_spray_b256_z0.5_ep128_L32_m1_sd1</td>
+<td>1</td>
+<td>packet_spray</td>
+<td>256</td>
+<td>0.5</td>
+<td>287549.637</td>
+<td>890.281</td>
+</tr>
+<tr>
+<td>sys1_s1_packet_spray_b256_z0.5_ep128_L60_m1_sd1</td>
+<td>1</td>
+<td>packet_spray</td>
+<td>256</td>
+<td>0.5</td>
+<td>539198.142</td>
+<td>474.779</td>
+</tr>
+<tr>
+<td>sys1_s1_packet_spray_b256_z0.5_ep128_L94_m1_sd1</td>
+<td>1</td>
+<td>packet_spray</td>
+<td>256</td>
+<td>0.5</td>
+<td>844687.662</td>
+<td>303.071</td>
+</tr>
+<tr>
+<td>sys1_s1_packet_spray_b256_z0.5_ep64_L60_m1_sd1</td>
+<td>1</td>
+<td>packet_spray</td>
+<td>256</td>
+<td>0.5</td>
+<td>238759.302</td>
+<td>1072.21</td>
+</tr>
+<tr>
+<td>sys1_s1_packet_spray_b256_z0_ep128_L60_m1_sd1</td>
+<td>1</td>
+<td>packet_spray</td>
+<td>256</td>
+<td>0</td>
+<td>56392.542</td>
+<td>4539.607</td>
+</tr>
+<tr>
+<td>sys1_s1_packet_spray_b64_z0.5_ep128_L60_m1_sd1</td>
+<td>1</td>
+<td>packet_spray</td>
+<td>64</td>
+<td>0.5</td>
+<td>71461.242</td>
+<td>895.59</td>
+</tr>
+<tr>
+<td>sys1_s1_ub_rg_b16_z0.5_ep128_L60_m1_sd1</td>
+<td>1</td>
+<td>ub_rg</td>
+<td>16</td>
+<td>0.5</td>
+<td>21856.542</td>
+<td>732.046</td>
+</tr>
+<tr>
+<td>sys1_s1_ub_rg_b256_z0.5_ep128_L32_m1_sd1</td>
+<td>1</td>
+<td>ub_rg</td>
+<td>256</td>
+<td>0.5</td>
+<td>84248.293</td>
+<td>3038.637</td>
+</tr>
+<tr>
+<td>sys1_s1_ub_rg_b256_z0.5_ep128_L60_m1_sd1</td>
+<td>1</td>
+<td>ub_rg</td>
+<td>256</td>
+<td>0.5</td>
+<td>158008.122</td>
+<td>1620.17</td>
+</tr>
+<tr>
+<td>sys1_s1_ub_rg_b256_z0.5_ep128_L94_m1_sd1</td>
+<td>1</td>
+<td>ub_rg</td>
+<td>256</td>
+<td>0.5</td>
+<td>247489.964</td>
+<td>1034.385</td>
+</tr>
+<tr>
+<td>sys1_s1_ub_rg_b256_z0.5_ep64_L60_m1_sd1</td>
+<td>1</td>
+<td>ub_rg</td>
+<td>256</td>
+<td>0.5</td>
+<td>101650.482</td>
+<td>2518.434</td>
+</tr>
+<tr>
+<td>sys1_s1_ub_rg_b256_z0_ep128_L60_m1_sd1</td>
+<td>1</td>
+<td>ub_rg</td>
+<td>256</td>
+<td>0</td>
+<td>24048.822</td>
+<td>10645.012</td>
+</tr>
+<tr>
+<td>sys1_s1_ub_rg_b64_z0.5_ep128_L60_m1_sd1</td>
+<td>1</td>
+<td>ub_rg</td>
+<td>64</td>
+<td>0.5</td>
+<td>63412.422</td>
+<td>1009.266</td>
+</tr>
+</tbody></table>
+<p><img alt='sys1 step/throughput' src='ub_rg_system_figures/sys1_step_throughput_vs_zipf.svg'></p>
+<h2>4. Sys2：m、speedup 与掩盖</h2>
+<p>Speedup 优先采用 summary 明示值；否则仅在存在同锚点 m=1 或 Sys1 step 时计算<code>baseline_step / sys2_step</code>。没有锚点则保持缺失。掩盖列优先报告 summary 明示的 mask/hidden；若只有序列化 TBO events，则精确计算“通讯事件时长中与计算事件重叠的比例”，不从 speedup 猜测。</p>
+<table><thead><tr>
+<th>run</th>
+<th>m</th>
+<th>step (µs)</th>
+<th>基线 step</th>
+<th>speedup</th>
+<th>mask</th>
+<th>token/s/device</th>
+</tr></thead><tbody>
+<tr>
+<td>sys2_s1_packet_spray_b256_z0.5_ep128_L60_m1_sd1</td>
+<td>1</td>
+<td>539198.142</td>
+<td>539198.142</td>
+<td>1</td>
+<td>0.0% 通讯重叠</td>
+<td>474.779</td>
+</tr>
+<tr>
+<td>sys2_s1_packet_spray_b256_z0.5_ep128_L60_m2_sd1</td>
+<td>2</td>
+<td>363300.455</td>
+<td>539198.142</td>
+<td>1.484</td>
+<td>5.4% 通讯重叠</td>
+<td>704.651</td>
+</tr>
+<tr>
+<td>sys2_s1_packet_spray_b256_z0.5_ep128_L60_m4_sd1</td>
+<td>4</td>
+<td>246252.935</td>
+<td>539198.142</td>
+<td>2.19</td>
+<td>16.0% 通讯重叠</td>
+<td>1039.582</td>
+</tr>
+<tr>
+<td>sys2_s1_packet_spray_b256_z0.9_ep128_L60_m2_sd1</td>
+<td>2</td>
+<td>1208718.935</td>
+<td>缺失</td>
+<td>缺失</td>
+<td>1.6% 通讯重叠</td>
+<td>211.794</td>
+</tr>
+<tr>
+<td>sys2_s1_packet_spray_b256_z0.9_ep128_L60_m4_sd1</td>
+<td>4</td>
+<td>870442.055</td>
+<td>缺失</td>
+<td>缺失</td>
+<td>4.5% 通讯重叠</td>
+<td>294.103</td>
+</tr>
+<tr>
+<td>sys2_s1_packet_spray_b256_z0_ep128_L60_m2_sd1</td>
+<td>2</td>
+<td>47655.815</td>
+<td>56392.542</td>
+<td>1.183</td>
+<td>41.4% 通讯重叠</td>
+<td>5371.852</td>
+</tr>
+<tr>
+<td>sys2_s1_ub_rg_b256_z0.5_ep128_L60_m1_sd1</td>
+<td>1</td>
+<td>158008.122</td>
+<td>158008.122</td>
+<td>1</td>
+<td>0.0% 通讯重叠</td>
+<td>1620.17</td>
+</tr>
+<tr>
+<td>sys2_s1_ub_rg_b256_z0.5_ep128_L60_m2_sd1</td>
+<td>2</td>
+<td>176699.015</td>
+<td>158008.122</td>
+<td>0.894</td>
+<td>11.2% 通讯重叠</td>
+<td>1448.791</td>
+</tr>
+<tr>
+<td>sys2_s1_ub_rg_b256_z0.5_ep128_L60_m4_sd1</td>
+<td>4</td>
+<td>214057.655</td>
+<td>158008.122</td>
+<td>0.738</td>
+<td>18.5% 通讯重叠</td>
+<td>1195.939</td>
+</tr>
+<tr>
+<td>sys2_s1_ub_rg_b256_z0.9_ep128_L60_m2_sd1</td>
+<td>2</td>
+<td>461702.615</td>
+<td>缺失</td>
+<td>缺失</td>
+<td>4.3% 通讯重叠</td>
+<td>554.469</td>
+</tr>
+<tr>
+<td>sys2_s1_ub_rg_b256_z0.9_ep128_L60_m4_sd1</td>
+<td>4</td>
+<td>404040.215</td>
+<td>缺失</td>
+<td>缺失</td>
+<td>9.8% 通讯重叠</td>
+<td>633.6</td>
+</tr>
+<tr>
+<td>sys2_s1_ub_rg_b256_z0_ep128_L60_m2_sd1</td>
+<td>2</td>
+<td>19839.899</td>
+<td>24048.822</td>
+<td>1.212</td>
+<td>99.6% 通讯重叠</td>
+<td>12903.292</td>
+</tr>
+</tbody></table>
+<p><img alt='sys2 speedup' src='ub_rg_system_figures/sys2_speedup_vs_m.svg'></p>
+<h2>5. Sys3：M:N、placement、Tc、mask 与 throughput</h2>
+<table><thead><tr>
+<th>run</th>
+<th>M:N</th>
+<th>比值</th>
+<th>placement</th>
+<th>m</th>
+<th>Tc (µs)</th>
+<th>mask</th>
+<th>step (µs)</th>
+<th>token/s/device</th>
+</tr></thead><tbody>
+<tr>
+<td>sys3_s1_packet_spray_b256_z0.5_ep128_L60_m1_M112_N16_hidden_role_packed_sd1</td>
+<td>112:16</td>
+<td>7</td>
+<td>role_packed</td>
+<td>1</td>
+<td>14716.019</td>
+<td>未通过</td>
+<td>34106.877</td>
+<td>6567.591</td>
+</tr>
+<tr>
+<td>sys3_s1_packet_spray_b256_z0.5_ep128_L60_m2_M112_N16_hidden_role_packed_sd1</td>
+<td>112:16</td>
+<td>7</td>
+<td>role_packed</td>
+<td>2</td>
+<td>7188.104</td>
+<td>未通过</td>
+<td>23671.974</td>
+<td>9462.667</td>
+</tr>
+<tr>
+<td>sys3_s1_packet_spray_b256_z0.5_ep128_L60_m2_M124_N4_exposed_role_packed_sd1</td>
+<td>124:4</td>
+<td>31</td>
+<td>role_packed</td>
+<td>2</td>
+<td>8167.507</td>
+<td>未通过</td>
+<td>28426.442</td>
+<td>8724.272</td>
+</tr>
+<tr>
+<td>sys3_s1_packet_spray_b256_z0.5_ep128_L60_m2_M64_N64_hidden_role_packed_sd1</td>
+<td>64:64</td>
+<td>1</td>
+<td>role_packed</td>
+<td>2</td>
+<td>586.993</td>
+<td>未通过</td>
+<td>10469.752</td>
+<td>12225.695</td>
+</tr>
+<tr>
+<td>sys3_s1_packet_spray_b256_z0.5_ep128_L60_m4_M112_N16_hidden_role_packed_sd1</td>
+<td>112:16</td>
+<td>7</td>
+<td>role_packed</td>
+<td>4</td>
+<td>2913.679</td>
+<td>未通过</td>
+<td>24364.98</td>
+<td>9193.523</td>
+</tr>
+<tr>
+<td>sys3_s1_packet_spray_b256_z0_ep128_L60_m2_M112_N16_hidden_role_packed_sd1</td>
+<td>112:16</td>
+<td>7</td>
+<td>role_packed</td>
+<td>2</td>
+<td>2830.876</td>
+<td>未通过</td>
+<td>14957.518</td>
+<td>14975.746</td>
+</tr>
+<tr>
+<td>sys3_s1_packet_spray_b256_z1_ep128_L60_m2_M112_N16_hidden_role_packed_sd1</td>
+<td>112:16</td>
+<td>7</td>
+<td>role_packed</td>
+<td>2</td>
+<td>8691.781</td>
+<td>未通过</td>
+<td>26679.328</td>
+<td>8396.013</td>
+</tr>
+<tr>
+<td>sys3_s1_ub_rg_b256_z0.5_ep128_L60_m2_M64_N64_hidden_role_packed_sd1</td>
+<td>64:64</td>
+<td>1</td>
+<td>role_packed</td>
+<td>2</td>
+<td>1010.763</td>
+<td>未通过</td>
+<td>11317.292</td>
+<td>11310.126</td>
+</tr>
+<tr>
+<td>sys3_s1_ub_rg_b256_z0.5_ep128_L60_m4_M112_N16_hidden_role_packed_sd1</td>
+<td>112:16</td>
+<td>7</td>
+<td>role_packed</td>
+<td>4</td>
+<td>842.493</td>
+<td>未通过</td>
+<td>20222.608</td>
+<td>11076.712</td>
+</tr>
+<tr>
+<td>sys3_s1_ub_rg_b256_z0_ep128_L60_m2_M112_N16_hidden_role_packed_sd1</td>
+<td>112:16</td>
+<td>7</td>
+<td>role_packed</td>
+<td>2</td>
+<td>361.734</td>
+<td>未通过</td>
+<td>10019.234</td>
+<td>22356.998</td>
+</tr>
+</tbody></table>
+<p>Tc 口径为 <code>max(M2N cct_us, N2M cct_us)</code>。本轮每个网络键只有 seed=1，因此这是单 seed 的逐包方向 CCT，不是跨 seed 的 CCT-P99；若未来增加多 seed，应在方向 CCT 样本上再取 P99。本报告不会用逐 token latency P99、dispatch/combine 或均值替代 Tc。</p>
+<p><img alt='sys3 Tc/throughput' src='ub_rg_system_figures/sys3_tc_throughput.svg'></p>
+<h2>6. 跨实验锚点</h2>
+<p>可比锚点至少应对齐场景、网络方案、B、Zipf S 与 L；Sys2 还需说明 m，Sys3 还需说明 M:N/placement。下图仅展示各实验**已有样本均值**作数据可用性概览，不把未完全对齐的均值解释为方案优劣。</p>
+<table><thead><tr>
+<th>实验</th>
+<th>样本数</th>
+<th>实收 step 均值 (µs)</th>
+<th>实收吞吐均值</th>
+</tr></thead><tbody>
+<tr>
+<td>sys1</td>
+<td>14</td>
+<td>197322.98</td>
+<td>2103.352</td>
+</tr>
+<tr>
+<td>sys2</td>
+<td>12</td>
+<td>392492.989</td>
+<td>2204.419</td>
+</tr>
+<tr>
+<td>sys3</td>
+<td>10</td>
+<td>20423.601</td>
+<td>11428.934</td>
+</tr>
+</tbody></table>
+<p><img alt='cross compare' src='ub_rg_system_figures/cross_experiment_compare.svg'></p>
+<h2>7. 实验结论与证据边界</h2>
+<ul>
+<li>**实验1（串行 Wide-EP）**：场景1、B=256、S=0.5、L=60 下，`ub_rg` step=158008.1 µs，Packet Spray=539198.1 µs，逐包输入对应 **3.41×** step 加速；per-device throughput 从 474.8 提升到 1620.2 token/s。</li>
+</ul>
+<ul>
+<li>**实验2（TBO）**：同一 Packet Spray 锚点，m=2/m=4 相对串行分别达到 1.48×/2.19×；这是切小 MB 后网络 CCT 变化与双 stream 重叠的共同净效应；当前矩阵未做因素消融，不能把全部加速单独归因于重叠。</li>
+</ul>
+<ul>
+<li>**TBO 并非必然获益**：`ub_rg` 的 S=0.5 锚点中，m=2/m=4 speedup 仅 0.89×/0.74×（小于 1 即退化）。这些样本只证明净效应为退化；未做消融，不能分别确定多次 CCT、启动/排空或固定每-MB计算标定的贡献。</li>
+</ul>
+<ul>
+<li>**实验3（AFD）**：已完成的 `ub_rg` 样本中，最小 Tc=361.734 µs（M:N=112:16、m=2、S=0）；1:1、m=2、S=0.5 对照 Tc=1010.763 µs。两者双向掩盖均未通过，7:1 的 S=0.5/S=1 主锚点未形成成对成功数据；逐包证据不支持“在本次记录的 fabric 配置上，m=2 可无条件隐藏 AFD 双向通信”。</li>
+</ul>
+<ul>
+<li>**规模边界**：场景2的 68 个、场景3的 72 个逐包网络任务（含 EP=256 控制点和 EP=1024 主点）在统一 120 秒墙钟上限内均未产出 summary。这些点是 **inconclusive / simulator scalability failure**，不是网络性能为零，也不能从场景1外推定量结论。</li>
+</ul>
+<h2>8. 失败、跳过与裁剪可见性</h2>
+<p>ledger/解析记录：原始网络失败 **147**，由缺失网络输入连带阻塞的系统配置 **98**；合并展示记录 245 条（两者存在因果重复，不代表 245 次独立仿真失败）。跳过 **0**，裁剪 **0**。若已有 summary 通过 packet 门禁，该 summary 仍按可复用证据纳入。</p>
+<table><thead><tr>
+<th>类别</th>
+<th>实验</th>
+<th>run</th>
+<th>原因</th>
+<th>来源</th>
+</tr></thead><tbody>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s1_packet_spray_dispatch_mb256_z0.9_ep128_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s1_ub_rg_afd_m2n_mb256_z0.5_ep128_M112_N16_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s1_ub_rg_afd_n2m_mb128_z0.5_ep128_M112_N16_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s1_ub_rg_afd_n2m_mb128_z0.5_ep128_M124_N4_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s1_ub_rg_afd_n2m_mb128_z1_ep128_M112_N16_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s1_ub_rg_afd_n2m_mb256_z0.5_ep128_M112_N16_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s1_ub_rg_combine_mb256_z0.9_ep128_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_m2n_mb128_z0.5_ep1024_M512_N512_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_m2n_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_m2n_mb128_z0.5_ep1024_M992_N32_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_m2n_mb128_z0_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_m2n_mb128_z1_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_m2n_mb256_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_m2n_mb64_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_n2m_mb128_z0.5_ep1024_M512_N512_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_n2m_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_n2m_mb128_z0.5_ep1024_M992_N32_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_n2m_mb128_z0_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_n2m_mb128_z1_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_n2m_mb256_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_afd_n2m_mb64_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_combine_mb128_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_combine_mb128_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_combine_mb128_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_combine_mb16_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_combine_mb256_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_combine_mb256_z0.5_ep256_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_combine_mb256_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_combine_mb256_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_combine_mb64_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_combine_mb64_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_dispatch_mb128_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_dispatch_mb128_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_dispatch_mb128_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_dispatch_mb16_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_dispatch_mb256_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_dispatch_mb256_z0.5_ep256_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_dispatch_mb256_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_dispatch_mb256_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_dispatch_mb64_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_packet_spray_dispatch_mb64_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_m2n_mb128_z0.5_ep1024_M512_N512_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_m2n_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_m2n_mb128_z0.5_ep1024_M992_N32_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_m2n_mb128_z0_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_m2n_mb128_z1_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_m2n_mb256_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_m2n_mb64_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_n2m_mb128_z0.5_ep1024_M512_N512_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_n2m_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_n2m_mb128_z0.5_ep1024_M992_N32_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_n2m_mb128_z0_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_n2m_mb128_z1_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_n2m_mb256_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_afd_n2m_mb64_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_combine_mb128_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_combine_mb128_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_combine_mb128_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_combine_mb16_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_combine_mb256_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_combine_mb256_z0.5_ep256_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_combine_mb256_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_combine_mb256_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_combine_mb64_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_combine_mb64_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_dispatch_mb128_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_dispatch_mb128_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_dispatch_mb128_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_dispatch_mb16_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_dispatch_mb256_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_dispatch_mb256_z0.5_ep256_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_dispatch_mb256_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_dispatch_mb256_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_dispatch_mb64_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s2_ub_rg_dispatch_mb64_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_m2n_mb128_z0.5_ep1024_M512_N512_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_m2n_mb128_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_m2n_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_m2n_mb128_z0.5_ep1024_M992_N32_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_m2n_mb128_z0_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_m2n_mb128_z1_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_m2n_mb256_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_m2n_mb64_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_n2m_mb128_z0.5_ep1024_M512_N512_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_n2m_mb128_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_n2m_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_n2m_mb128_z0.5_ep1024_M992_N32_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_n2m_mb128_z0_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_n2m_mb128_z1_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_n2m_mb256_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_afd_n2m_mb64_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_combine_mb128_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_combine_mb128_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_combine_mb128_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_combine_mb16_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_combine_mb256_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_combine_mb256_z0.5_ep256_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_combine_mb256_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_combine_mb256_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_combine_mb64_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_combine_mb64_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_dispatch_mb128_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_dispatch_mb128_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_dispatch_mb128_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_dispatch_mb16_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_dispatch_mb256_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_dispatch_mb256_z0.5_ep256_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_dispatch_mb256_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_dispatch_mb256_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_dispatch_mb64_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_packet_spray_dispatch_mb64_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_m2n_mb128_z0.5_ep1024_M512_N512_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_m2n_mb128_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_m2n_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_m2n_mb128_z0.5_ep1024_M992_N32_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_m2n_mb128_z0_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_m2n_mb128_z1_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_m2n_mb256_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_m2n_mb64_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_n2m_mb128_z0.5_ep1024_M512_N512_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_n2m_mb128_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_n2m_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_n2m_mb128_z0.5_ep1024_M992_N32_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_n2m_mb128_z0_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_n2m_mb128_z1_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_n2m_mb256_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_afd_n2m_mb64_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_combine_mb128_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_combine_mb128_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_combine_mb128_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_combine_mb16_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_combine_mb256_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_combine_mb256_z0.5_ep256_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_combine_mb256_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_combine_mb256_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_combine_mb64_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_combine_mb64_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_dispatch_mb128_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_dispatch_mb128_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_dispatch_mb128_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_dispatch_mb16_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_dispatch_mb256_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_dispatch_mb256_z0.5_ep256_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_dispatch_mb256_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_dispatch_mb256_z0_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_dispatch_mb64_z0.5_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>unknown</td>
+<td>s3_ub_rg_dispatch_mb64_z0.9_ep1024_sd1</td>
+<td>timeout after 120s</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s1_packet_spray_b256_z0.9_ep128_L60_m1_sd1</td>
+<td>network inputs failed: s1_packet_spray_dispatch_mb256_z0.9_ep128_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s1_ub_rg_b256_z0.9_ep128_L60_m1_sd1</td>
+<td>network inputs failed: s1_ub_rg_combine_mb256_z0.9_ep128_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_packet_spray_b256_z0_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb256_z0_ep1024_sd1, s2_packet_spray_combine_mb256_z0_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_packet_spray_b256_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb256_z0.5_ep1024_sd1, s2_packet_spray_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_packet_spray_b256_z0.9_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb256_z0.9_ep1024_sd1, s2_packet_spray_combine_mb256_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_packet_spray_b16_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb16_z0.5_ep1024_sd1, s2_packet_spray_combine_mb16_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_packet_spray_b64_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb64_z0.5_ep1024_sd1, s2_packet_spray_combine_mb64_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_packet_spray_b256_z0.5_ep256_L60_m1_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb256_z0.5_ep256_sd1, s2_packet_spray_combine_mb256_z0.5_ep256_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_packet_spray_b256_z0.5_ep1024_L32_m1_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb256_z0.5_ep1024_sd1, s2_packet_spray_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_packet_spray_b256_z0.5_ep1024_L94_m1_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb256_z0.5_ep1024_sd1, s2_packet_spray_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_ub_rg_b256_z0_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb256_z0_ep1024_sd1, s2_ub_rg_combine_mb256_z0_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_ub_rg_b256_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb256_z0.5_ep1024_sd1, s2_ub_rg_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_ub_rg_b256_z0.9_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb256_z0.9_ep1024_sd1, s2_ub_rg_combine_mb256_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_ub_rg_b16_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb16_z0.5_ep1024_sd1, s2_ub_rg_combine_mb16_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_ub_rg_b64_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb64_z0.5_ep1024_sd1, s2_ub_rg_combine_mb64_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_ub_rg_b256_z0.5_ep256_L60_m1_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb256_z0.5_ep256_sd1, s2_ub_rg_combine_mb256_z0.5_ep256_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_ub_rg_b256_z0.5_ep1024_L32_m1_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb256_z0.5_ep1024_sd1, s2_ub_rg_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s2_ub_rg_b256_z0.5_ep1024_L94_m1_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb256_z0.5_ep1024_sd1, s2_ub_rg_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_packet_spray_b256_z0_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb256_z0_ep1024_sd1, s3_packet_spray_combine_mb256_z0_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_packet_spray_b256_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb256_z0.5_ep1024_sd1, s3_packet_spray_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_packet_spray_b256_z0.9_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb256_z0.9_ep1024_sd1, s3_packet_spray_combine_mb256_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_packet_spray_b16_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb16_z0.5_ep1024_sd1, s3_packet_spray_combine_mb16_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_packet_spray_b64_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb64_z0.5_ep1024_sd1, s3_packet_spray_combine_mb64_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_packet_spray_b256_z0.5_ep256_L60_m1_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb256_z0.5_ep256_sd1, s3_packet_spray_combine_mb256_z0.5_ep256_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_packet_spray_b256_z0.5_ep1024_L32_m1_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb256_z0.5_ep1024_sd1, s3_packet_spray_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_packet_spray_b256_z0.5_ep1024_L94_m1_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb256_z0.5_ep1024_sd1, s3_packet_spray_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_ub_rg_b256_z0_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb256_z0_ep1024_sd1, s3_ub_rg_combine_mb256_z0_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_ub_rg_b256_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb256_z0.5_ep1024_sd1, s3_ub_rg_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_ub_rg_b256_z0.9_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb256_z0.9_ep1024_sd1, s3_ub_rg_combine_mb256_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_ub_rg_b16_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb16_z0.5_ep1024_sd1, s3_ub_rg_combine_mb16_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_ub_rg_b64_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb64_z0.5_ep1024_sd1, s3_ub_rg_combine_mb64_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_ub_rg_b256_z0.5_ep256_L60_m1_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb256_z0.5_ep256_sd1, s3_ub_rg_combine_mb256_z0.5_ep256_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_ub_rg_b256_z0.5_ep1024_L32_m1_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb256_z0.5_ep1024_sd1, s3_ub_rg_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys1</td>
+<td>sys1_s3_ub_rg_b256_z0.5_ep1024_L94_m1_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb256_z0.5_ep1024_sd1, s3_ub_rg_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s1_packet_spray_b256_z0.9_ep128_L60_m1_sd1</td>
+<td>network inputs failed: s1_packet_spray_dispatch_mb256_z0.9_ep128_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s1_ub_rg_b256_z0.9_ep128_L60_m1_sd1</td>
+<td>network inputs failed: s1_ub_rg_combine_mb256_z0.9_ep128_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_packet_spray_b256_z0_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb128_z0_ep1024_sd1, s2_packet_spray_combine_mb128_z0_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_packet_spray_b256_z0.5_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb128_z0.5_ep1024_sd1, s2_packet_spray_combine_mb128_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_packet_spray_b256_z0.9_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb128_z0.9_ep1024_sd1, s2_packet_spray_combine_mb128_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_packet_spray_b256_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb256_z0.5_ep1024_sd1, s2_packet_spray_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_packet_spray_b256_z0.9_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb256_z0.9_ep1024_sd1, s2_packet_spray_combine_mb256_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_packet_spray_b256_z0.5_ep1024_L60_m4_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb64_z0.5_ep1024_sd1, s2_packet_spray_combine_mb64_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_packet_spray_b256_z0.9_ep1024_L60_m4_sd1</td>
+<td>network inputs failed: s2_packet_spray_dispatch_mb64_z0.9_ep1024_sd1, s2_packet_spray_combine_mb64_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_ub_rg_b256_z0_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb128_z0_ep1024_sd1, s2_ub_rg_combine_mb128_z0_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_ub_rg_b256_z0.5_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb128_z0.5_ep1024_sd1, s2_ub_rg_combine_mb128_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_ub_rg_b256_z0.9_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb128_z0.9_ep1024_sd1, s2_ub_rg_combine_mb128_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_ub_rg_b256_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb256_z0.5_ep1024_sd1, s2_ub_rg_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_ub_rg_b256_z0.9_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb256_z0.9_ep1024_sd1, s2_ub_rg_combine_mb256_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_ub_rg_b256_z0.5_ep1024_L60_m4_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb64_z0.5_ep1024_sd1, s2_ub_rg_combine_mb64_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s2_ub_rg_b256_z0.9_ep1024_L60_m4_sd1</td>
+<td>network inputs failed: s2_ub_rg_dispatch_mb64_z0.9_ep1024_sd1, s2_ub_rg_combine_mb64_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_packet_spray_b256_z0_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb128_z0_ep1024_sd1, s3_packet_spray_combine_mb128_z0_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_packet_spray_b256_z0.5_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb128_z0.5_ep1024_sd1, s3_packet_spray_combine_mb128_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_packet_spray_b256_z0.9_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb128_z0.9_ep1024_sd1, s3_packet_spray_combine_mb128_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_packet_spray_b256_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb256_z0.5_ep1024_sd1, s3_packet_spray_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_packet_spray_b256_z0.9_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb256_z0.9_ep1024_sd1, s3_packet_spray_combine_mb256_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_packet_spray_b256_z0.5_ep1024_L60_m4_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb64_z0.5_ep1024_sd1, s3_packet_spray_combine_mb64_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_packet_spray_b256_z0.9_ep1024_L60_m4_sd1</td>
+<td>network inputs failed: s3_packet_spray_dispatch_mb64_z0.9_ep1024_sd1, s3_packet_spray_combine_mb64_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_ub_rg_b256_z0_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb128_z0_ep1024_sd1, s3_ub_rg_combine_mb128_z0_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_ub_rg_b256_z0.5_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb128_z0.5_ep1024_sd1, s3_ub_rg_combine_mb128_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_ub_rg_b256_z0.9_ep1024_L60_m2_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb128_z0.9_ep1024_sd1, s3_ub_rg_combine_mb128_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_ub_rg_b256_z0.5_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb256_z0.5_ep1024_sd1, s3_ub_rg_combine_mb256_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_ub_rg_b256_z0.9_ep1024_L60_m1_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb256_z0.9_ep1024_sd1, s3_ub_rg_combine_mb256_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_ub_rg_b256_z0.5_ep1024_L60_m4_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb64_z0.5_ep1024_sd1, s3_ub_rg_combine_mb64_z0.5_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys2</td>
+<td>sys2_s3_ub_rg_b256_z0.9_ep1024_L60_m4_sd1</td>
+<td>network inputs failed: s3_ub_rg_dispatch_mb64_z0.9_ep1024_sd1, s3_ub_rg_combine_mb64_z0.9_ep1024_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s1_ub_rg_b256_z0.5_ep128_L60_m2_M112_N16_hidden_role_packed_sd1</td>
+<td>network inputs failed: s1_ub_rg_afd_n2m_mb128_z0.5_ep128_M112_N16_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s1_ub_rg_b256_z1_ep128_L60_m2_M112_N16_hidden_role_packed_sd1</td>
+<td>network inputs failed: s1_ub_rg_afd_n2m_mb128_z1_ep128_M112_N16_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s1_ub_rg_b256_z0.5_ep128_L60_m2_M124_N4_exposed_role_packed_sd1</td>
+<td>network inputs failed: s1_ub_rg_afd_n2m_mb128_z0.5_ep128_M124_N4_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s1_ub_rg_b256_z0.5_ep128_L60_m1_M112_N16_hidden_role_packed_sd1</td>
+<td>network inputs failed: s1_ub_rg_afd_m2n_mb256_z0.5_ep128_M112_N16_role_packed_sd1, s1_ub_rg_afd_n2m_mb256_z0.5_ep128_M112_N16_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_packet_spray_b256_z0_ep1024_L60_m2_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_packet_spray_afd_m2n_mb128_z0_ep1024_M896_N128_role_packed_sd1, s2_packet_spray_afd_n2m_mb128_z0_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_packet_spray_b256_z0.5_ep1024_L60_m2_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_packet_spray_afd_m2n_mb128_z0.5_ep1024_M896_N128_role_packed_sd1, s2_packet_spray_afd_n2m_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_packet_spray_b256_z1_ep1024_L60_m2_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_packet_spray_afd_m2n_mb128_z1_ep1024_M896_N128_role_packed_sd1, s2_packet_spray_afd_n2m_mb128_z1_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_packet_spray_b256_z0.5_ep1024_L60_m2_M512_N512_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_packet_spray_afd_m2n_mb128_z0.5_ep1024_M512_N512_role_packed_sd1, s2_packet_spray_afd_n2m_mb128_z0.5_ep1024_M512_N512_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_packet_spray_b256_z0.5_ep1024_L60_m2_M992_N32_exposed_role_packed_sd1</td>
+<td>network inputs failed: s2_packet_spray_afd_m2n_mb128_z0.5_ep1024_M992_N32_role_packed_sd1, s2_packet_spray_afd_n2m_mb128_z0.5_ep1024_M992_N32_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_packet_spray_b256_z0.5_ep1024_L60_m1_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_packet_spray_afd_m2n_mb256_z0.5_ep1024_M896_N128_role_packed_sd1, s2_packet_spray_afd_n2m_mb256_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_packet_spray_b256_z0.5_ep1024_L60_m4_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_packet_spray_afd_m2n_mb64_z0.5_ep1024_M896_N128_role_packed_sd1, s2_packet_spray_afd_n2m_mb64_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_ub_rg_b256_z0_ep1024_L60_m2_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_ub_rg_afd_m2n_mb128_z0_ep1024_M896_N128_role_packed_sd1, s2_ub_rg_afd_n2m_mb128_z0_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_ub_rg_b256_z0.5_ep1024_L60_m2_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_ub_rg_afd_m2n_mb128_z0.5_ep1024_M896_N128_role_packed_sd1, s2_ub_rg_afd_n2m_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_ub_rg_b256_z1_ep1024_L60_m2_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_ub_rg_afd_m2n_mb128_z1_ep1024_M896_N128_role_packed_sd1, s2_ub_rg_afd_n2m_mb128_z1_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_ub_rg_b256_z0.5_ep1024_L60_m2_M512_N512_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_ub_rg_afd_m2n_mb128_z0.5_ep1024_M512_N512_role_packed_sd1, s2_ub_rg_afd_n2m_mb128_z0.5_ep1024_M512_N512_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_ub_rg_b256_z0.5_ep1024_L60_m2_M992_N32_exposed_role_packed_sd1</td>
+<td>network inputs failed: s2_ub_rg_afd_m2n_mb128_z0.5_ep1024_M992_N32_role_packed_sd1, s2_ub_rg_afd_n2m_mb128_z0.5_ep1024_M992_N32_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_ub_rg_b256_z0.5_ep1024_L60_m1_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_ub_rg_afd_m2n_mb256_z0.5_ep1024_M896_N128_role_packed_sd1, s2_ub_rg_afd_n2m_mb256_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s2_ub_rg_b256_z0.5_ep1024_L60_m4_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s2_ub_rg_afd_m2n_mb64_z0.5_ep1024_M896_N128_role_packed_sd1, s2_ub_rg_afd_n2m_mb64_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_packet_spray_b256_z0_ep1024_L60_m2_M896_N128_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_packet_spray_afd_m2n_mb128_z0_ep1024_M896_N128_plane_striped_sd1, s3_packet_spray_afd_n2m_mb128_z0_ep1024_M896_N128_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_packet_spray_b256_z0.5_ep1024_L60_m2_M896_N128_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_packet_spray_afd_m2n_mb128_z0.5_ep1024_M896_N128_plane_striped_sd1, s3_packet_spray_afd_n2m_mb128_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_packet_spray_b256_z1_ep1024_L60_m2_M896_N128_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_packet_spray_afd_m2n_mb128_z1_ep1024_M896_N128_plane_striped_sd1, s3_packet_spray_afd_n2m_mb128_z1_ep1024_M896_N128_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_packet_spray_b256_z0.5_ep1024_L60_m2_M512_N512_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_packet_spray_afd_m2n_mb128_z0.5_ep1024_M512_N512_plane_striped_sd1, s3_packet_spray_afd_n2m_mb128_z0.5_ep1024_M512_N512_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_packet_spray_b256_z0.5_ep1024_L60_m2_M992_N32_exposed_plane_striped_sd1</td>
+<td>network inputs failed: s3_packet_spray_afd_m2n_mb128_z0.5_ep1024_M992_N32_plane_striped_sd1, s3_packet_spray_afd_n2m_mb128_z0.5_ep1024_M992_N32_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_packet_spray_b256_z0.5_ep1024_L60_m1_M896_N128_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_packet_spray_afd_m2n_mb256_z0.5_ep1024_M896_N128_plane_striped_sd1, s3_packet_spray_afd_n2m_mb256_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_packet_spray_b256_z0.5_ep1024_L60_m4_M896_N128_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_packet_spray_afd_m2n_mb64_z0.5_ep1024_M896_N128_plane_striped_sd1, s3_packet_spray_afd_n2m_mb64_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_packet_spray_b256_z0.5_ep1024_L60_m2_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s3_packet_spray_afd_m2n_mb128_z0.5_ep1024_M896_N128_role_packed_sd1, s3_packet_spray_afd_n2m_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_ub_rg_b256_z0_ep1024_L60_m2_M896_N128_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_ub_rg_afd_m2n_mb128_z0_ep1024_M896_N128_plane_striped_sd1, s3_ub_rg_afd_n2m_mb128_z0_ep1024_M896_N128_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_ub_rg_b256_z0.5_ep1024_L60_m2_M896_N128_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_ub_rg_afd_m2n_mb128_z0.5_ep1024_M896_N128_plane_striped_sd1, s3_ub_rg_afd_n2m_mb128_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_ub_rg_b256_z1_ep1024_L60_m2_M896_N128_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_ub_rg_afd_m2n_mb128_z1_ep1024_M896_N128_plane_striped_sd1, s3_ub_rg_afd_n2m_mb128_z1_ep1024_M896_N128_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_ub_rg_b256_z0.5_ep1024_L60_m2_M512_N512_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_ub_rg_afd_m2n_mb128_z0.5_ep1024_M512_N512_plane_striped_sd1, s3_ub_rg_afd_n2m_mb128_z0.5_ep1024_M512_N512_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_ub_rg_b256_z0.5_ep1024_L60_m2_M992_N32_exposed_plane_striped_sd1</td>
+<td>network inputs failed: s3_ub_rg_afd_m2n_mb128_z0.5_ep1024_M992_N32_plane_striped_sd1, s3_ub_rg_afd_n2m_mb128_z0.5_ep1024_M992_N32_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_ub_rg_b256_z0.5_ep1024_L60_m1_M896_N128_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_ub_rg_afd_m2n_mb256_z0.5_ep1024_M896_N128_plane_striped_sd1, s3_ub_rg_afd_n2m_mb256_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_ub_rg_b256_z0.5_ep1024_L60_m4_M896_N128_hidden_plane_striped_sd1</td>
+<td>network inputs failed: s3_ub_rg_afd_m2n_mb64_z0.5_ep1024_M896_N128_plane_striped_sd1, s3_ub_rg_afd_n2m_mb64_z0.5_ep1024_M896_N128_plane_striped_sd1</td>
+<td>ledger.json</td>
+</tr>
+<tr>
+<td>失败</td>
+<td>sys3</td>
+<td>sys3_s3_ub_rg_b256_z0.5_ep1024_L60_m2_M896_N128_hidden_role_packed_sd1</td>
+<td>network inputs failed: s3_ub_rg_afd_m2n_mb128_z0.5_ep1024_M896_N128_role_packed_sd1, s3_ub_rg_afd_n2m_mb128_z0.5_ep1024_M896_N128_role_packed_sd1</td>
+<td>ledger.json</td>
+</tr>
+</tbody></table>
+<h2>9. 数据边界：B&gt;=1024 未纳入</h2>
+<p>**B&gt;=1024 未纳入本次系统报告统计与结论。** 这是运行矩阵的显式裁剪边界，不是“性能等同于 B&lt;1024”的假设。即使目录中出现 B&gt;=1024 的意外 summary，分析器也会保留原始 CSV 证据，但报告解释应单独复核，不能外推当前图表结论。</p>
+<h2>10. 复现命令</h2>
+<pre><code>
+cd /workspace
+
+# 将父仓库维护的 §4.3 overlay 安装到锁定的 ns-3-ub 子模块
+
+python3 prepare_ns3_system_overlay.py apply
+
+cd ns-3-ub
+
+CC=gcc CXX=g++ python3.12 ./ns3 configure --enable-modules=unified-bus \
+
+  --disable-examples --disable-tests --disable-mpi --disable-mtp \
+
+  --disable-werror -d release
+
+python3.12 ./ns3 build -j 3 ub_rg-packet-experiment
+
+cd ..
+
+# 生成 main + controls 的 packet summary/ledger；不使用 behavioral 输入
+
+python3 run_ub_rg_system_experiments.py --tier all --workers 3 --timeout-s 120 --force
+
+python3 analyze_ub_rg_system_experiments.py \
+
+  --results results/ub_rg_system_packet
+
+python3 -m unittest tests.test_system_model tests.test_system_runner \
+
+  tests.test_system_analyzer
+
+</code></pre>
+<p>输出：<code>results/ub_rg_system_packet/all_summaries.csv</code>、<code>docs/UB_RG系统实验0719数据.csv</code>、<code>docs/UB_RG系统实验0719报告.md</code>、同名 HTML 与 <code>docs/ub_rg_system_figures/*.svg</code>。</p>
+</body></html>

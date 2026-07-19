@@ -268,6 +268,47 @@ class PacketPlanTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "not a packet-engine summary"):
                 runner._load_packet_summary(summary)
 
+    def test_afd_tc_uses_direction_cct_not_token_p99(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            results = Path(temporary) / "results"
+            network = results / "network"
+            job = runner.SystemJob(
+                exp="sys3",
+                tier="main",
+                scenario=1,
+                scheme="ub_rg",
+                batch=16,
+                zipf_s=0.5,
+                ep_size=16,
+                microbatches=2,
+                m_attn=12,
+                n_ffn=4,
+            )
+            with (
+                mock.patch.object(runner, "RESULTS_ROOT", results),
+                mock.patch.object(runner, "NETWORK_ROOT", network),
+            ):
+                first, second = job.network_keys
+                for key, cct, p99 in ((first, 20.0, 2.0), (second, 30.0, 3.0)):
+                    key.summary_path.parent.mkdir(parents=True, exist_ok=True)
+                    key.summary_path.write_text(
+                        json.dumps(
+                            {
+                                "engine": "packet",
+                                "cct_us": cct,
+                                "latency_all": {"p99_us": p99},
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                runner.synthesize_system_job(job, force=True)
+                summary = json.loads(job.summary_path.read_text(encoding="utf-8"))
+                self.assertEqual(summary["network_inputs"]["tc_us"], 30.0)
+                self.assertEqual(
+                    summary["network_inputs"]["tc_definition"],
+                    "max(m2n_cct_us,n2m_cct_us)",
+                )
+
     def test_network_plan_is_deduplicated_and_stable(self):
         jobs = runner.build_plan()
         keys = runner.network_plan(jobs)

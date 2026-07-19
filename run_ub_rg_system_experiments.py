@@ -630,16 +630,6 @@ def _required_float(summary: dict[str, Any], name: str, source: Path) -> float:
     return value
 
 
-def _p99(summary: dict[str, Any], source: Path) -> float:
-    try:
-        value = float(summary["latency_all"]["p99_us"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(f"{source} has no numeric latency_all.p99_us") from exc
-    if value < 0:
-        raise ValueError(f"{source} has negative latency_all.p99_us")
-    return value
-
-
 def synthesize_system_job(job: SystemJob, force: bool = False) -> str:
     """Run the pure system model from cached packet summaries."""
 
@@ -686,9 +676,12 @@ def synthesize_system_job(job: SystemJob, force: bool = False) -> str:
             "combine_cct_us": combine_us,
         }
     else:
-        m2n_p99_us = _p99(first, first_key.summary_path)
-        n2m_p99_us = _p99(second, second_key.summary_path)
-        tc_us = max(m2n_p99_us, n2m_p99_us)
+        # §4.3.3 defines Tc as one-direction communication CCT.  With one
+        # network seed per matrix row, use each packet run's phase CCT directly;
+        # a future multi-seed sweep can take the P99 across these CCT samples.
+        m2n_cct_us = _required_float(first, "cct_us", first_key.summary_path)
+        n2m_cct_us = _required_float(second, "cct_us", second_key.summary_path)
+        tc_us = max(m2n_cct_us, n2m_cct_us)
         result = simulate_sys3(
             Sys3Config(
                 layers=job.layers,
@@ -702,10 +695,11 @@ def synthesize_system_job(job: SystemJob, force: bool = False) -> str:
             )
         )
         network_inputs = {
-            "m2n_p99_us": m2n_p99_us,
-            "n2m_p99_us": n2m_p99_us,
+            "m2n_cct_us": m2n_cct_us,
+            "n2m_cct_us": n2m_cct_us,
             "tc_us": tc_us,
-            "tc_definition": "max(m2n_p99_us,n2m_p99_us)",
+            "tc_definition": "max(m2n_cct_us,n2m_cct_us)",
+            "seed_aggregation": "single-seed CCT; no cross-seed P99",
         }
 
     model = _jsonable(result)

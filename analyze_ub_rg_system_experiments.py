@@ -942,6 +942,31 @@ def build_report(
     figure_paths: list[Path],
     report_md: Path,
 ) -> str:
+    ledger_payloads: list[Mapping[str, Any]] = []
+    for ledger_path in ledgers:
+        try:
+            payload = json.loads(ledger_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, Mapping):
+            ledger_payloads.append(payload)
+    network_records = [
+        record
+        for payload in ledger_payloads
+        for record in payload.get("network_runs", [])
+        if isinstance(record, Mapping)
+    ]
+    system_records = [
+        record
+        for payload in ledger_payloads
+        for record in payload.get("system_runs", [])
+        if isinstance(record, Mapping)
+    ]
+    network_completed = sum(record.get("status") == "completed" for record in network_records)
+    network_failed = sum(record.get("status") == "failed" for record in network_records)
+    system_completed = sum(record.get("status") == "completed" for record in system_records)
+    system_failed = sum(record.get("status") == "failed" for record in system_records)
+
     by_exp = {
         experiment: [
             row
@@ -956,16 +981,23 @@ def build_report(
         "数据缺失处明确标为“缺失”，不使用行为级结果补齐，也不插值。\n"
     )
     lines.append(
-        "实验定义严格对应精确文件 "
+        "实验定义仅以精确文件 "
         "[`UB_RG实验设计0719.md`](./UB_RG实验设计0719.md) §4.3；"
         "不引用不含 `0719` 的同名设计文档。\n"
     )
+    if network_records or system_records:
+        lines.append(
+            f"> **执行状态：部分完成。** 网络任务 {len(network_records)} 个，完成 "
+            f"{network_completed}、失败 {network_failed}；系统配置 {len(system_records)} 个，"
+            f"完成 {system_completed}、因网络输入失败 {system_failed}。成功结果均来自场景1，"
+            "场景2/3 在本轮墙钟上限内未形成可分析 summary。\n"
+        )
 
     lines.append("## 1. 方法与参数矩阵\n")
     lines.append(
         "方法：从每个逐包运行的 `summary.json` 读取网络 CCT/P99 证据与系统模型输出，"
         "以 `ledger.json` 核对失败、跳过和裁剪；重复点仅在绘图时取算术平均，"
-        "`all_summaries.csv` 保留逐运行记录。\n"
+        "[`UB_RG系统实验0719数据.csv`](./UB_RG系统实验0719数据.csv) 保留逐运行记录。\n"
     )
     matrix = []
     for experiment in EXPERIMENTS:
@@ -1106,8 +1138,10 @@ def build_report(
         )
     )
     lines.append(
-        "Tc 口径为 summary 提供的单向 M2N/N2M 逐包 CCT/P99 输入；若 summary 未给出"
-        "该字段，本报告不会用 dispatch/combine 或均值臆造 Tc。\n"
+        "Tc 口径为 `max(M2N cct_us, N2M cct_us)`。本轮每个网络键只有 seed=1，"
+        "因此这是单 seed 的逐包方向 CCT，不是跨 seed 的 CCT-P99；若未来增加多 seed，"
+        "应在方向 CCT 样本上再取 P99。本报告不会用逐 token latency P99、"
+        "dispatch/combine 或均值替代 Tc。\n"
     )
     lines.append(f"![sys3 Tc/throughput]({_relative_link(report_md, figure_paths[2])})\n")
 
@@ -1148,12 +1182,123 @@ def build_report(
     )
     lines.append(f"![cross compare]({_relative_link(report_md, figure_paths[3])})\n")
 
-    lines.append("## 7. 失败、跳过与裁剪可见性\n")
+    lines.append("## 7. 实验结论与证据边界\n")
+
+    def anchor(
+        experiment: str,
+        scheme: str,
+        zipf_s: float,
+        microbatches: int,
+        *,
+        batch: int = 256,
+        attention_devices: int | None = None,
+        ffn_devices: int | None = None,
+    ) -> Mapping[str, Any] | None:
+        for row in by_exp[experiment]:
+            if (
+                row.get("scenario") == 1
+                and row.get("scheme") == scheme
+                and row.get("batch_size") == batch
+                and row.get("zipf_s") == zipf_s
+                and row.get("layers") == 60
+                and row.get("microbatches") == microbatches
+            ):
+                if attention_devices is not None and row.get("attention_devices") != attention_devices:
+                    continue
+                if ffn_devices is not None and row.get("ffn_devices") != ffn_devices:
+                    continue
+                return row
+        return None
+
+    spray_serial = anchor("sys1", "packet_spray", 0.5, 1)
+    rg_serial = anchor("sys1", "ub_rg", 0.5, 1)
+    spray_tbo2 = anchor("sys2", "packet_spray", 0.5, 2)
+    spray_tbo4 = anchor("sys2", "packet_spray", 0.5, 4)
+    rg_tbo2 = anchor("sys2", "ub_rg", 0.5, 2)
+    rg_tbo4 = anchor("sys2", "ub_rg", 0.5, 4)
+    rg_afd_11 = anchor(
+        "sys3",
+        "ub_rg",
+        0.5,
+        2,
+        attention_devices=64,
+        ffn_devices=64,
+    )
+    rg_afd_rows = [
+        row
+        for row in by_exp["sys3"]
+        if row.get("scheme") == "ub_rg" and _number(row.get("tc_us")) is not None
+    ]
+    rg_afd_min = min(rg_afd_rows, key=lambda row: float(row["tc_us"])) if rg_afd_rows else None
+
+    if spray_serial and rg_serial:
+        spray_step = float(spray_serial["step_time_us"])
+        rg_step = float(rg_serial["step_time_us"])
+        lines.append(
+            f"- **实验1（串行 Wide-EP）**：场景1、B=256、S=0.5、L=60 下，"
+            f"`ub_rg` step={rg_step:.1f} µs，Packet Spray={spray_step:.1f} µs，"
+            f"逐包输入对应 **{spray_step / rg_step:.2f}×** step 加速；"
+            f"per-device throughput 从 {float(spray_serial['throughput_tokens_s']):.1f} "
+            f"提升到 {float(rg_serial['throughput_tokens_s']):.1f} token/s。\n"
+        )
+    if spray_tbo2 and spray_tbo4 and spray_serial:
+        base = float(spray_serial["step_time_us"])
+        lines.append(
+            f"- **实验2（TBO）**：同一 Packet Spray 锚点，m=2/m=4 相对串行分别达到 "
+            f"{base / float(spray_tbo2['step_time_us']):.2f}×/"
+            f"{base / float(spray_tbo4['step_time_us']):.2f}×；"
+            "这是切小 MB 后网络 CCT 变化与双 stream 重叠的共同净效应；当前矩阵未做"
+            "因素消融，不能把全部加速单独归因于重叠。\n"
+        )
+    if rg_tbo2 and rg_tbo4 and rg_serial:
+        base = float(rg_serial["step_time_us"])
+        lines.append(
+            f"- **TBO 并非必然获益**：`ub_rg` 的 S=0.5 锚点中，m=2/m=4 speedup 仅 "
+            f"{base / float(rg_tbo2['step_time_us']):.2f}×/"
+            f"{base / float(rg_tbo4['step_time_us']):.2f}×（小于 1 即退化）。"
+            "这些样本只证明净效应为退化；未做消融，不能分别确定多次 CCT、"
+            "启动/排空或固定每-MB计算标定的贡献。\n"
+        )
+    if rg_afd_11 and rg_afd_min:
+        lines.append(
+            f"- **实验3（AFD）**：已完成的 `ub_rg` 样本中，最小 Tc="
+            f"{float(rg_afd_min['tc_us']):.3f} µs（M:N="
+            f"{rg_afd_min['attention_devices']}:{rg_afd_min['ffn_devices']}、"
+            f"m={rg_afd_min['microbatches']}、S={rg_afd_min['zipf_s']}）；"
+            f"1:1、m=2、S=0.5 对照 Tc={float(rg_afd_11['tc_us']):.3f} µs。"
+            "两者双向掩盖均未通过，7:1 的 S=0.5/S=1 主锚点未形成成对成功数据；"
+            "逐包证据不支持“在本次记录的 fabric 配置上，m=2 可无条件隐藏 AFD "
+            "双向通信”。\n"
+        )
+    completed_scenarios = {
+        int(row["scenario"])
+        for row in rows
+        if row.get("scenario") is not None and row.get("report_included", True)
+    }
+    if 2 not in completed_scenarios or 3 not in completed_scenarios:
+        scenario_network_counts = {
+            scenario: sum(
+                str(record.get("run_id", "")).startswith(f"s{scenario}_")
+                for record in network_records
+            )
+            for scenario in (2, 3)
+        }
+        lines.append(
+            f"- **规模边界**：场景2的 {scenario_network_counts[2]} 个、场景3的 "
+            f"{scenario_network_counts[3]} 个逐包网络任务（含 EP=256 控制点和 "
+            "EP=1024 主点）在统一 120 秒墙钟上限内均未产出 summary。这些点是 "
+            "**inconclusive / simulator scalability failure**，不是网络性能为零，"
+            "也不能从场景1外推定量结论。\n"
+        )
+
+    lines.append("## 8. 失败、跳过与裁剪可见性\n")
     counts = {kind: sum(issue.kind == kind for issue in issues) for kind in ("失败", "跳过", "裁剪")}
     lines.append(
-        f"ledger/解析记录：失败 **{counts['失败']}**，跳过 **{counts['跳过']}**，"
-        f"裁剪 **{counts['裁剪']}**。跳过状态保持可见；若已有 summary 通过 packet "
-        "门禁，该 summary 仍按可复用证据纳入。\n"
+        f"ledger/解析记录：原始网络失败 **{network_failed}**，由缺失网络输入连带阻塞的"
+        f"系统配置 **{system_failed}**；合并展示记录 {counts['失败']} 条（两者存在因果"
+        f"重复，不代表 {counts['失败']} 次独立仿真失败）。跳过 **{counts['跳过']}**，"
+        f"裁剪 **{counts['裁剪']}**。若已有 summary 通过 packet 门禁，该 summary 仍按"
+        "可复用证据纳入。\n"
     )
     lines.append(
         _markdown_table(
@@ -1165,14 +1310,14 @@ def build_report(
         )
     )
 
-    lines.append("## 8. 数据边界：B>=1024 未纳入\n")
+    lines.append("## 9. 数据边界：B>=1024 未纳入\n")
     lines.append(
         "**B>=1024 未纳入本次系统报告统计与结论。** 这是运行矩阵的显式裁剪边界，"
         "不是“性能等同于 B<1024”的假设。即使目录中出现 B>=1024 的意外 summary，"
         "分析器也会保留原始 CSV 证据，但报告解释应单独复核，不能外推当前图表结论。\n"
     )
 
-    lines.append("## 9. 复现命令\n")
+    lines.append("## 10. 复现命令\n")
     lines.append(
         "```bash\n"
         "cd /workspace\n"
@@ -1185,7 +1330,8 @@ def build_report(
         "python3.12 ./ns3 build -j 3 ub_rg-packet-experiment\n"
         "cd ..\n"
         "# 生成 main + controls 的 packet summary/ledger；不使用 behavioral 输入\n"
-        "python3 run_ub_rg_system_experiments.py --tier all --workers 4\n"
+        "python3 run_ub_rg_system_experiments.py --tier all --workers 3 "
+        "--timeout-s 120 --force\n"
         "python3 analyze_ub_rg_system_experiments.py \\\n"
         "  --results results/ub_rg_system_packet\n"
         "python3 -m unittest tests.test_system_model tests.test_system_runner \\\n"
@@ -1194,7 +1340,8 @@ def build_report(
     )
     lines.append(
         "输出：`results/ub_rg_system_packet/all_summaries.csv`、"
-        "`docs/UB_RG系统实验0719报告.md`、同名 HTML 与 `docs/ub_rg_system_figures/*.svg`。\n"
+        "`docs/UB_RG系统实验0719数据.csv`、`docs/UB_RG系统实验0719报告.md`、"
+        "同名 HTML 与 `docs/ub_rg_system_figures/*.svg`。\n"
     )
     return "\n".join(lines)
 
@@ -1337,6 +1484,7 @@ def analyze(
     figure_paths = make_figures(report_rows, figures_dir)
     csv_path = results_root / "all_summaries.csv"
     write_csv(rows, csv_path)
+    write_csv(rows, report_md.with_name("UB_RG系统实验0719数据.csv"))
     markdown = build_report(
         rows, issues, ledgers, results_root, figure_paths, report_md
     )
