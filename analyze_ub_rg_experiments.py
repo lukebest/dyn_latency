@@ -27,8 +27,14 @@ def load_summaries(results: Path) -> pd.DataFrame:
             summary = run_dir / "summary.json"
             if not summary.exists():
                 continue
-            with summary.open() as f:
-                d = json.load(f)
+            try:
+                text = summary.read_text()
+                if not text.strip():
+                    continue
+                d = json.loads(text)
+            except (json.JSONDecodeError, OSError):
+                # Race with an in-flight writer (partial summary.json).
+                continue
             row = {
                 "exp": exp_dir.name,
                 "run_id": run_dir.name,
@@ -192,13 +198,23 @@ def _plot_density(ax, samples: np.ndarray, ls: str, color: str, label: str) -> N
     if hi <= lo:
         ax.axvline(lo, ls=ls, color=color, alpha=0.8, label=label)
         return
-    span = hi - lo
-    xs = np.linspace(lo - 0.05 * span, hi + 0.05 * span, 256)
+    span = max(hi - lo, 1e-9)
     try:
         from scipy.stats import gaussian_kde
 
-        kde = gaussian_kde(samples)
-        ax.plot(xs, kde(xs), ls, color=color, label=label)
+        # scott factor under-smooths tiny n; widen a bit for readable PDF tails.
+        bw = max(0.5, samples.size ** (-1.0 / 5.0))
+        kde = gaussian_kde(samples, bw_method=bw)
+        pad = max(3.0 * float(np.std(samples)), 0.25 * span, 1.0)
+        xs = np.linspace(lo - pad, hi + pad, 512)
+        ys = kde(xs)
+        # trim near-zero tails so axes stay readable across EP128/EP1024
+        thr = 0.02 * float(ys.max())
+        mask = ys >= thr
+        if mask.any():
+            i0, i1 = int(np.argmax(mask)), int(len(mask) - 1 - np.argmax(mask[::-1]))
+            xs, ys = xs[i0 : i1 + 1], ys[i0 : i1 + 1]
+        ax.plot(xs, ys, ls, color=color, label=label)
     except Exception:
         bins = min(20, max(5, samples.size // 2))
         counts, edges = np.histogram(samples, bins=bins, density=True)
@@ -381,31 +397,47 @@ def write_report(
             "报告自动回退到行为级多 seed 结果。\n"
         )
 
-    def table_for(exp: str, scenario: int, batch: int) -> str:
-        s = df[(df["exp"] == exp) & (df["scenario"] == scenario) & (df["batch"] == batch)]
+    def table_for(exp: str, scenario: int, batch: int | None = None) -> tuple[str, int | None]:
+        s = df[(df["exp"] == exp) & (df["scenario"] == scenario)]
         if s.empty:
-            return "_（无数据）_\n"
+            return "_（无数据）_\n", None
+        # Prefer batch=256; if still running / missing, fall back to largest available.
+        if batch is not None and not (s["batch"] == batch).any():
+            batch = None
+        if batch is None:
+            batch = int(s["batch"].max())
+        s = s[s["batch"] == batch]
+        if s.empty:
+            return "_（无数据）_\n", None
         piv = s.pivot_table(
             index="zipf_s",
             columns="scheme",
             values=["step_us", "cct_us", "lat_p99", "hot_p99", "throughput_GBs"],
             aggfunc="mean",
         )
-        return "```\n" + piv.round(2).to_string() + "\n```\n"
+        return "```\n" + piv.round(2).to_string() + "\n```\n", batch
 
     lines.append("## 2. 实验1：倾斜专家流量下的 Dispatch\n")
     for sc in sorted(df[df["exp"] == "exp1_dispatch"]["scenario"].unique()):
         lines.append(f"### 2.{sc} 场景{sc}\n")
-        lines.append("**batch=256 对比表**\n\n")
-        lines.append(table_for("exp1_dispatch", int(sc), 256))
+        tbl, used_batch = table_for("exp1_dispatch", int(sc), 256)
+        tag = f"batch={used_batch}" if used_batch is not None else "batch=?"
+        if used_batch is not None and used_batch != 256:
+            tag += "（256 尚未齐，暂用已有最大 batch）"
+        lines.append(f"**{tag} 对比表**\n\n")
+        lines.append(tbl)
         for p in sorted(figs_dir.glob(f"exp1_dispatch_s{int(sc)}_*.png")):
             lines.append(md_img(p) + "\n")
 
     lines.append("## 3. 实验2：倾斜专家流量下的 Combine\n")
     for sc in sorted(df[df["exp"] == "exp2_combine"]["scenario"].unique()):
         lines.append(f"### 3.{sc} 场景{sc}\n")
-        lines.append("**batch=256 对比表**\n\n")
-        lines.append(table_for("exp2_combine", int(sc), 256))
+        tbl, used_batch = table_for("exp2_combine", int(sc), 256)
+        tag = f"batch={used_batch}" if used_batch is not None else "batch=?"
+        if used_batch is not None and used_batch != 256:
+            tag += "（256 尚未齐，暂用已有最大 batch）"
+        lines.append(f"**{tag} 对比表**\n\n")
+        lines.append(tbl)
         for p in sorted(figs_dir.glob(f"exp2_combine_s{int(sc)}_*.png")):
             lines.append(md_img(p) + "\n")
 
