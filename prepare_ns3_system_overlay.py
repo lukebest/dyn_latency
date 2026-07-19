@@ -19,6 +19,7 @@ NS3 = ROOT / "ns-3-ub"
 HEADER = NS3 / "src/unified-bus/model/ub-rg-experiment-app.h"
 SOURCE = NS3 / "src/unified-bus/model/ub-rg-experiment-app.cc"
 SCRATCH = NS3 / "scratch/ub_rg-packet-experiment.cc"
+SENDER = NS3 / "src/unified-bus/model/protocol/ub-rg-sender-agent.cc"
 MARKER = "dyn_latency §4.3 system overlay"
 PINNED_COMMIT = "742b5b1156c09347b8549bc0d2bb94415ce7ce50"
 
@@ -210,11 +211,15 @@ UbRgExperimentApp::BuildTokens()
         }
     }
 
+    // A standalone Combine/N2M phase gets a fresh task-id space.  The UB data
+    // path has bounded wire sequence fields; carrying the unused Dispatch id
+    // offset into a large standalone reverse phase can exceed that window.
+    uint32_t combineTid = (m_mode == "roundtrip") ? tid : 1u;
     // Combine/N2M returns every routed expert result to its originating Attention NPU.
     for (const auto& t : m_dispatchTokens)
     {
         UbRgTokenDesc r = t;
-        r.tokenId = tid++;
+        r.tokenId = combineTid++;
         r.src = t.dst;
         r.dst = t.src;
         auto [sid, hint] = assignScheduler(r.src, r.dst);
@@ -349,6 +354,12 @@ def patch_source(text: str) -> str:
     )
     text = replace_once(
         text,
+        "m_phaseCompleted % 200000 == 0",
+        "m_phaseCompleted % 10000 == 0",
+        "packet progress interval",
+    )
+    text = replace_once(
+        text,
         '    if (m_mode == "dispatch")\n'
         "    {\n"
         "        konigUs = konigOf(m_dispatchTokens);\n"
@@ -430,6 +441,37 @@ def patch_scratch(text: str) -> str:
     )
 
 
+def patch_sender(text: str) -> str:
+    text = replace_once(
+        text,
+        "    bool haveCursor = false;\n"
+        "    for (const auto& [tid, tok] : m_tokens)",
+        "    bool haveCursor = false;\n"
+        "    // dyn_latency §4.3 system overlay: pace REQ batches on VL1.  Sending\n"
+        "    // thousands of control packets at the same simulation timestamp can\n"
+        "    // overflow the control queue before CBFC reacts and permanently lose\n"
+        "    // grants in high-skew AFD cases.\n"
+        "    uint64_t requestSequence = 0;\n"
+        "    for (const auto& [tid, tok] : m_tokens)",
+        "REQ pacing state",
+    )
+    return replace_once(
+        text,
+        "            InjectToward(hintDst[sid], BuildRgPacket(hdr, 1), 1, sid % m_numPlanes);\n"
+        "            off += n;",
+        "            Ptr<Packet> request = BuildRgPacket(hdr, 1);\n"
+        "            Simulator::Schedule(MicroSeconds(requestSequence++),\n"
+        "                                &UbRgSenderAgent::InjectToward,\n"
+        "                                this,\n"
+        "                                hintDst[sid],\n"
+        "                                request,\n"
+        "                                1,\n"
+        "                                sid % m_numPlanes);\n"
+        "            off += n;",
+        "REQ paced injection",
+    )
+
+
 def baseline(path: Path) -> str:
     relative = path.relative_to(NS3).as_posix()
     return subprocess.check_output(
@@ -443,7 +485,12 @@ def apply() -> None:
     actual = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=NS3, text=True).strip()
     if actual != PINNED_COMMIT:
         raise RuntimeError(f"ns-3-ub commit {actual} is not supported; expected {PINNED_COMMIT}")
-    transforms = ((HEADER, patch_header), (SOURCE, patch_source), (SCRATCH, patch_scratch))
+    transforms = (
+        (HEADER, patch_header),
+        (SOURCE, patch_source),
+        (SCRATCH, patch_scratch),
+        (SENDER, patch_sender),
+    )
     for path, transform in transforms:
         current = path.read_text(encoding="utf-8")
         if MARKER in current:
@@ -456,7 +503,7 @@ def apply() -> None:
 
 
 def restore() -> None:
-    for path in (HEADER, SOURCE, SCRATCH):
+    for path in (HEADER, SOURCE, SCRATCH, SENDER):
         current = path.read_text(encoding="utf-8")
         original = baseline(path)
         if current != original:
