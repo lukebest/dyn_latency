@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scale-up 网络动态时延：有界时延分析与 Request/Grant 目的侧调度 · HiSilicon UB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ============ Huawei corporate theme (default: classic red) ============
+       Switch theme: copy one :root block from references/themes-huawei.md and
+       replace the variables in this section only. */
+    --paper:#f4f7fb;
+    --paper-rgb:244,247,251;
+    --card:#ffffff;
+    --ink:#20242c;
+    --ink-rgb:32,36,44;
+    --muted:#667080;
+    --line:#dce3ea;
+    --line-strong:#c1cad4;
+    --brand-red:#d20a2e;
+    --brand-red-rgb:210,10,46;
+    --brand-red-dark:#9c001f;
+    --brand-red-soft:#f8e5e9;
+    --brand-black:#14171c;
+    --brand-grey:#edf2f7;
+    --shadow:0 18px 46px rgba(15,23,42,.12);
+    --shadow-soft:0 10px 26px rgba(15,23,42,.10);
+
+    --sans:"Inter","Noto Sans SC","Microsoft YaHei UI",Arial,sans-serif;
+    --sans-zh:"Noto Sans SC","Microsoft YaHei UI",Arial,sans-serif;
+    --mono:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    background:var(--paper);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:geometricPrecision;
+  }
+  body.low-power *,body.low-power *::before,body.low-power *::after{
+    animation:none!important;
+    transition:none!important;
+    scroll-behavior:auto!important;
+  }
+
+  #deck{
+    display:flex;
+    width:100vw;
+    height:100vh;
+    transition:transform .72s cubic-bezier(.22,1,.36,1);
+  }
+  body.low-power #deck{transition:none!important}
+
+  .slide{
+    position:relative;
+    flex:0 0 100vw;
+    width:100vw;
+    height:100vh;
+    padding:7.2vh 7vw 7vh;
+    overflow:hidden;
+    background:
+      linear-gradient(180deg,rgba(255,255,255,.94),rgba(247,248,250,.96)),
+      radial-gradient(circle at 78% 12%,rgba(var(--brand-red-rgb),.08),transparent 22vw),
+      radial-gradient(circle at 12% 88%,rgba(17,17,17,.045),transparent 28vw);
+  }
+  .slide::before,
+  .slide::after{
+    content:"";
+    position:absolute;
+    pointer-events:none;
+    border-radius:999px;
+    z-index:0;
+  }
+  .slide::before{
+    width:13vw;
+    height:13vw;
+    right:6vw;
+    top:10vh;
+    background:linear-gradient(145deg,#fff,rgba(223,227,232,.95));
+    box-shadow:inset -12px -12px 22px rgba(255,255,255,.9),inset 10px 10px 26px rgba(111,118,128,.14),0 14px 28px rgba(15,23,42,.08);
+    opacity:.32;
+  }
+  .slide::after{
+    width:2.6vw;
+    height:2.6vw;
+    left:6.3vw;
+    bottom:8vh;
+    background:var(--brand-red);
+    box-shadow:13vw -72vh 0 -1.4vw rgba(var(--brand-red-rgb),.9),73vw -6vh 0 -1vw rgba(var(--brand-red-rgb),.85),82vw -78vh 0 -1.1vw rgba(var(--brand-red-rgb),.9);
+    opacity:.18;
+  }
+  .slide > *{position:relative;z-index:1}
+
+  .slide.dark{
+    color:#fff;
+    background:
+      linear-gradient(135deg,var(--brand-red-dark),var(--brand-red) 54%,#e34034),
+      radial-gradient(circle at 82% 18%,rgba(255,255,255,.22),transparent 22vw);
+  }
+  .slide.dark::before{
+    background:rgba(255,255,255,.14);
+    box-shadow:inset -10px -10px 18px rgba(255,255,255,.18),inset 10px 10px 26px rgba(0,0,0,.14);
+    opacity:.55;
+  }
+  .slide.dark::after{background:#fff;box-shadow:14vw -66vh 0 -1.5vw rgba(255,255,255,.72),72vw -7vh 0 -1vw rgba(255,255,255,.58);opacity:.24}
+
+  .brand-lockup{
+    position:absolute;
+    right:6.4vw;
+    top:4.6vh;
+    display:flex;
+    align-items:center;
+    gap:.58vw;
+    color:var(--brand-black);
+    font-weight:800;
+    letter-spacing:.01em;
+    font-size:1.08vw;
+    z-index:3;
+  }
+  .dark .brand-lockup{color:#fff}
+  .brand-mark{
+    width:1.62vw;
+    height:1.62vw;
+    flex:none;
+    color:var(--brand-red);
+    background:currentColor;
+    -webkit-mask:url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTMuNjcgNi4xNFMxLjgyIDcuOTEgMS43MiA5Ljc4di4zNWMuMDggMS41MSAxLjIyIDIuNCAxLjIyIDIuNCAxLjgzIDEuNzkgNi4yNiA0LjA0IDcuMyA0LjU1IDAgMCAuMDYuMDMuMS0uMDFsLjAyLS4wNHYtLjA0QzcuNTIgMTAuOCAzLjY3IDYuMTQgMy42NyA2LjE0ek05LjY1IDE4LjZjLS4wMi0uMDgtLjEtLjA4LS4xLS4wOGwtNy4zOC4yNmMuOCAxLjQzIDIuMTUgMi41MyAzLjU2IDIuMi45Ni0uMjUgMy4xNi0xLjc4IDMuODgtMi4zLjA2LS4wNS4wNC0uMDkuMDQtLjA5em0uMDgtLjc4QzYuNDkgMTUuNjMuMjEgMTIuMjguMjEgMTIuMjhjLS4xNS40Ni0uMi45LS4yMSAxLjN2LjA3YzAgMS4wNy40IDEuODIuNCAxLjgyLjggMS42OSAyLjM0IDIuMiAyLjM0IDIuMi43LjMgMS40LjMxIDEuNC4zMS4xMi4wMiA0LjQgMCA1LjU0IDAgLjA1IDAgLjA4LS4wNS4wOC0uMDV2LS4wNmMwLS4wMy0uMDMtLjA1LS4wMy0uMDV6TTkuMDYgMy4xOWEzLjQyIDMuNDIgMCAwMC0yLjU3IDMuMTV2LjQxYy4wMy42LjE2IDEuMDUuMTYgMS4wNS42NiAyLjkgMy44NiA3LjY1IDQuNTUgOC42NS4wNS4wNS4xLjAzLjEuMDNhLjEuMSAwIDAwLjA2LS4xYzEuMDYtMTAuNi0xLjExLTEzLjQyLTEuMTEtMTMuNDItLjMyLjAyLTEuMTkuMjMtMS4xOS4yM3ptOC4yOTkgMi4yN3MtLjQ5LTEuOC0yLjQ0LTIuMjhjMCAwLS41Ny0uMTQtMS4xNy0uMjIgMCAwLTIuMTggMi44MS0xLjEyIDEzLjQzLjAxLjA3LjA2LjA4LjA2LjA4LjA3LjAzLjEtLjAzLjEtLjAzLjcyLTEuMDMgMy45LTUuNzYgNC41NS04LjY0IDAgMCAuMzYtMS40LjAyLTIuMzR6bS0yLjkyIDEzLjA3cy0uMDcgMC0uMDkuMDVjMCAwLS4wMS4wNy4wMy4xLjcuNTEgMi44NSAyIDMuODggMi4zIDAgMCAuMTYuMDUuNDMuMDZoLjE0Yy42OS0uMDIgMS45LS4zNyAzLTIuMjZsLTcuNC0uMjV6bTcuODMtOC40MWMuMTQtMi4wNi0xLjk0LTMuOTctMS45NC0zLjk4IDAgMC0zLjg1IDQuNjYtNi42NyAxMC44IDAgMC0uMDMuMDguMDIuMTNsLjA0LjAxaC4wNmMxLjA2LS41MyA1LjQ2LTIuNzcgNy4yOC00LjU0IDAgMCAxLjE1LS45MyAxLjIxLTIuNDJ6bTEuNTIgMi4xNHMtNi4yOCAzLjM3LTkuNTIgNS41NWMwIDAtLjA1LjA0LS4wMy4xMSAwIDAgLjAzLjA2LjA3LjA2IDEuMTYgMCA1LjU2IDAgNS42Ny0uMDIgMCAwIC41Ny0uMDIgMS4yNy0uMjkgMCAwIDEuNTYtLjUgMi4zNy0yLjI3IDAgMCAuNzMtMS40NS4xNy0zLjE0eiIvPjwvc3ZnPg==") center/contain no-repeat;
+    mask:url("data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjQgMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTMuNjcgNi4xNFMxLjgyIDcuOTEgMS43MiA5Ljc4di4zNWMuMDggMS41MSAxLjIyIDIuNCAxLjIyIDIuNCAxLjgzIDEuNzkgNi4yNiA0LjA0IDcuMyA0LjU1IDAgMCAuMDYuMDMuMS0uMDFsLjAyLS4wNHYtLjA0QzcuNTIgMTAuOCAzLjY3IDYuMTQgMy42NyA2LjE0ek05LjY1IDE4LjZjLS4wMi0uMDgtLjEtLjA4LS4xLS4wOGwtNy4zOC4yNmMuOCAxLjQzIDIuMTUgMi41MyAzLjU2IDIuMi45Ni0uMjUgMy4xNi0xLjc4IDMuODgtMi4zLjA2LS4wNS4wNC0uMDkuMDQtLjA5em0uMDgtLjc4QzYuNDkgMTUuNjMuMjEgMTIuMjguMjEgMTIuMjhjLS4xNS40Ni0uMi45LS4yMSAxLjN2LjA3YzAgMS4wNy40IDEuODIuNCAxLjgyLjggMS42OSAyLjM0IDIuMiAyLjM0IDIuMi43LjMgMS40LjMxIDEuNC4zMS4xMi4wMiA0LjQgMCA1LjU0IDAgLjA1IDAgLjA4LS4wNS4wOC0uMDV2LS4wNmMwLS4wMy0uMDMtLjA1LS4wMy0uMDV6TTkuMDYgMy4xOWEzLjQyIDMuNDIgMCAwMC0yLjU3IDMuMTV2LjQxYy4wMy42LjE2IDEuMDUuMTYgMS4wNS42NiAyLjkgMy44NiA3LjY1IDQuNTUgOC42NS4wNS4wNS4xLjAzLjEuMDNhLjEuMSAwIDAwLjA2LS4xYzEuMDYtMTAuNi0xLjExLTEzLjQyLTEuMTEtMTMuNDItLjMyLjAyLTEuMTkuMjMtMS4xOS4yM3ptOC4yOTkgMi4yN3MtLjQ5LTEuOC0yLjQ0LTIuMjhjMCAwLS41Ny0uMTQtMS4xNy0uMjIgMCAwLTIuMTggMi44MS0xLjEyIDEzLjQzLjAxLjA3LjA2LjA4LjA2LjA4LjA3LjAzLjEtLjAzLjEtLjAzLjcyLTEuMDMgMy45LTUuNzYgNC41NS04LjY0IDAgMCAuMzYtMS40LjAyLTIuMzR6bS0yLjkyIDEzLjA3cy0uMDcgMC0uMDkuMDVjMCAwLS4wMS4wNy4wMy4xLjcuNTEgMi44NSAyIDMuODggMi4zIDAgMCAuMTYuMDUuNDMuMDZoLjE0Yy42OS0uMDIgMS45LS4zNyAzLTIuMjZsLTcuNC0uMjV6bTcuODMtOC40MWMuMTQtMi4wNi0xLjk0LTMuOTctMS45NC0zLjk4IDAgMC0zLjg1IDQuNjYtNi42NyAxMC44IDAgMC0uMDMuMDguMDIuMTNsLjA0LjAxaC4wNmMxLjA2LS41MyA1LjQ2LTIuNzcgNy4yOC00LjU0IDAgMCAxLjE1LS45MyAxLjIxLTIuNDJ6bTEuNTIgMi4xNHMtNi4yOCAzLjM3LTkuNTIgNS41NWMwIDAtLjA1LjA0LS4wMy4xMSAwIDAgLjAzLjA2LjA3LjA2IDEuMTYgMCA1LjU2IDAgNS42Ny0uMDIgMCAwIC41Ny0uMDIgMS4yNy0uMjkgMCAwIDEuNTYtLjUgMi4zNy0yLjI3IDAgMCAuNzMtMS40NS4xNy0zLjE0eiIvPjwvc3ZnPg==") center/contain no-repeat;
+  }
+  .dark .brand-mark{color:#fff}
+
+  .chrome{
+    position:absolute;
+    left:6.4vw;
+    right:6.4vw;
+    top:4.6vh;
+    min-height:3.2vh;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:1px solid var(--line);
+    padding-bottom:1.1vh;
+    color:var(--muted);
+    font-size:.78vw;
+    letter-spacing:.02em;
+    z-index:2;
+  }
+  .dark .chrome{border-color:rgba(255,255,255,.28);color:rgba(255,255,255,.78)}
+  .chrome .l{
+    display:flex;
+    align-items:center;
+    gap:.72vw;
+    font-weight:600;
+    color:var(--ink);
+  }
+  .dark .chrome .l{color:#fff}
+  .chrome .square{
+    width:.9vw;
+    height:.9vw;
+    background:var(--brand-red);
+    box-shadow:-.38vw -.38vw 0 0 rgba(var(--brand-red-rgb),.16);
+    flex:none;
+  }
+  .dark .chrome .square{background:#fff;box-shadow:-.38vw -.38vw 0 0 rgba(255,255,255,.22)}
+
+  .kicker{
+    font-family:var(--mono);
+    font-size:.78vw;
+    line-height:1;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--brand-red);
+    font-weight:600;
+  }
+  .dark .kicker{color:rgba(255,255,255,.82)}
+  .h-hero{
+    font-family:var(--sans-zh);
+    font-size:min(5.8vw,10.3vh);
+    line-height:1.02;
+    letter-spacing:0;
+    font-weight:900;
+  }
+  .h-xl{
+    font-family:var(--sans-zh);
+    font-size:min(4vw,7.4vh);
+    line-height:1.08;
+    font-weight:800;
+    letter-spacing:0;
+  }
+  .h-md{
+    font-family:var(--sans-zh);
+    font-size:min(2.1vw,4.1vh);
+    line-height:1.2;
+    font-weight:800;
+  }
+  .lead{
+    font-size:1.25vw;
+    line-height:1.72;
+    color:var(--muted);
+    font-weight:400;
+  }
+  .dark .lead{color:rgba(255,255,255,.84)}
+  .body-copy{
+    font-size:1vw;
+    line-height:1.82;
+    color:#444b55;
+  }
+  .dark .body-copy{color:rgba(255,255,255,.78)}
+  .meta{
+    font-family:var(--mono);
+    font-size:.76vw;
+    color:var(--muted);
+    letter-spacing:.04em;
+  }
+
+  .red-rule{height:.52vh;background:var(--brand-red);width:100%}
+  .hairline{height:1px;background:var(--line);width:100%}
+  .dark .hairline{background:rgba(255,255,255,.22)}
+
+  .red-panel{
+    background:linear-gradient(90deg,var(--brand-red),#ef4a3d);
+    color:#fff;
+    padding:4.2vh 3.4vw;
+    min-height:32vh;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    box-shadow:var(--shadow-soft);
+  }
+  .red-panel .en{
+    font-family:var(--mono);
+    border:1px solid rgba(255,255,255,.42);
+    color:rgba(255,255,255,.9);
+    padding:.5vh .72vw;
+    width:max-content;
+    font-size:.86vw;
+    letter-spacing:.08em;
+  }
+
+  .cover-shell{
+    height:100%;
+    display:grid;
+    grid-template-columns:1.05fr .95fr;
+    align-items:center;
+    gap:5vw;
+  }
+  .cover-badge{
+    width:10.4vw;
+    height:10.4vw;
+    border-radius:999px;
+    background:linear-gradient(145deg,#fff,#e9edf2);
+    box-shadow:inset -16px -16px 28px rgba(255,255,255,.95),inset 12px 12px 24px rgba(111,118,128,.14),0 22px 46px rgba(15,23,42,.14);
+    display:grid;
+    place-items:center;
+    margin-bottom:3.4vh;
+  }
+  .cover-badge .brand-mark{
+    width:5.8vw;
+    height:5.8vw;
+    color:var(--brand-red);
+  }
+  .cover-title-wrap{display:flex;flex-direction:column;gap:2.6vh}
+  .cover-subtitle{max-width:46ch}
+  .cover-wave{
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:0;
+    height:19vh;
+    background:
+      linear-gradient(8deg,var(--brand-red) 0 45%,transparent 46%),
+      linear-gradient(6deg,rgba(17,17,17,.14) 0 51%,transparent 52%);
+    opacity:.96;
+  }
+  .cover-meta{
+    position:absolute;
+    left:7vw;
+    bottom:5vh;
+    color:#fff;
+    display:grid;
+    gap:.86vh;
+    font-size:.88vw;
+    z-index:2;
+  }
+  .cover-visual{
+    min-height:48vh;
+    position:relative;
+  }
+  .orb{
+    position:absolute;
+    border-radius:50%;
+    background:linear-gradient(145deg,#fff,#e6eaef);
+    box-shadow:inset -10px -10px 20px rgba(255,255,255,.95),inset 8px 8px 20px rgba(111,118,128,.18),0 16px 28px rgba(15,23,42,.10);
+  }
+  .orb.red{background:linear-gradient(145deg,#f83230,var(--brand-red));box-shadow:0 12px 24px rgba(var(--brand-red-rgb),.26)}
+
+  .agenda-layout{
+    height:100%;
+    display:grid;
+    grid-template-columns:.72fr 1.28fr;
+    gap:5vw;
+    align-items:center;
+  }
+  .agenda-list{display:flex;flex-direction:column;gap:1.25vh}
+  .agenda-item{
+    display:grid;
+    grid-template-columns:3.6vw 1fr;
+    align-items:center;
+    min-height:6.2vh;
+    background:#e6e9ed;
+    color:#505965;
+  }
+  .agenda-item .idx{
+    height:100%;
+    display:grid;
+    place-items:center;
+    background:var(--brand-red);
+    color:#fff;
+    font-family:var(--mono);
+    font-weight:700;
+  }
+  .agenda-item .txt{padding:0 1.25vw;font-size:1.02vw;font-weight:700}
+
+  .section-layout{
+    height:100%;
+    display:grid;
+    grid-template-columns:.82fr 1.18fr;
+    gap:4.5vw;
+    align-items:center;
+  }
+  .section-no{
+    width:8vw;
+    height:8vw;
+    border-radius:999px;
+    background:#fff;
+    box-shadow:var(--shadow);
+    display:grid;
+    place-items:center;
+    color:var(--brand-red);
+    font-family:var(--mono);
+    font-size:2.2vw;
+    font-weight:800;
+    margin-bottom:2.6vh;
+  }
+
+  .grid-2,.grid-3,.grid-4{align-items:stretch}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:3vw}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:2vw}
+  .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:1.4vw}
+  .grid-12{display:grid;grid-template-columns:repeat(12,1fr);gap:1vw}
+  .span-4{grid-column:span 4}.span-5{grid-column:span 5}.span-6{grid-column:span 6}.span-7{grid-column:span 7}.span-8{grid-column:span 8}
+
+  .content-stack{display:flex;flex-direction:column;gap:2.2vh}
+  .same-size,
+  .equal-children{
+    align-items:stretch;
+  }
+  .same-size > *{
+    height:100%;
+    min-height:0;
+  }
+  .equal-children > *{
+    height:100%;
+    min-height:0;
+  }
+  .equal-children{
+    display:grid;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    box-shadow:var(--shadow-soft);
+    padding:3vh 2vw;
+  }
+  .grid-2 > .card,.grid-3 > .card,.grid-4 > .card{
+    height:100%;
+    display:flex;
+    flex-direction:column;
+  }
+  .grid-2 > .image-frame,.grid-3 > .image-frame,.grid-4 > .image-frame{height:100%}
+  .card.flat{box-shadow:none;background:#fff}
+  .mini-card{
+    min-height:0;
+    border:1px solid var(--line);
+    background:#fff;
+    padding:1.25vh 1vw;
+    display:grid;
+    grid-template-rows:auto 1fr;
+    gap:.45vh;
+  }
+  .mini-card strong{
+    color:var(--ink);
+    font-size:clamp(.84rem,.96vw,1.08rem);
+    line-height:1.22;
+    font-weight:800;
+  }
+  .mini-card .card-body{
+    font-size:clamp(.76rem,.84vw,.98rem);
+    line-height:1.34;
+  }
+  .card strong{
+    display:inline-block;
+    color:var(--ink);
+    font-weight:800;
+  }
+  .card-title{
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:clamp(1.08rem,1.34vw,1.56rem);
+    line-height:1.18;
+    font-weight:800;
+    color:var(--ink);
+    margin-bottom:1.1vh;
+  }
+  .card-body{font-size:clamp(.92rem,1.02vw,1.18rem);line-height:1.58;color:var(--muted)}
+  .num-pill{
+    display:inline-grid;
+    place-items:center;
+    min-width:2.4vw;
+    height:2.4vw;
+    border-radius:999px;
+    background:var(--brand-red);
+    color:#fff;
+    font-family:var(--mono);
+    font-weight:800;
+    margin-bottom:1.4vh;
+  }
+  .icon-disc{
+    width:4.4vw;
+    height:4.4vw;
+    border-radius:999px;
+    background:var(--brand-red);
+    color:#fff;
+    display:grid;
+    place-items:center;
+    margin-bottom:1.5vh;
+    box-shadow:0 14px 28px rgba(var(--brand-red-rgb),.22);
+  }
+  .icon-disc .lucide{width:2vw;height:2vw;stroke-width:1.8}
+
+  .timeline-v{display:grid;grid-template-columns:1fr 3vw 1fr;gap:2vw;align-items:start}
+  .tl-axis{position:relative;min-height:58vh}
+  .tl-axis::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line-strong)}
+  .tl-dot{
+    width:2.6vw;
+    height:2.6vw;
+    border-radius:999px;
+    background:var(--brand-red);
+    color:#fff;
+    display:grid;
+    place-items:center;
+    font-family:var(--mono);
+    font-weight:800;
+    margin:0 auto 6.5vh;
+    position:relative;
+    z-index:1;
+  }
+  .tl-card{min-height:10vh;border-top:3px solid var(--brand-red);padding-top:1.3vh;margin-bottom:5.4vh}
+  .tl-card .year{font-family:var(--mono);color:var(--brand-red);font-weight:800;margin-bottom:.6vh}
+
+  .bar-chart{display:flex;flex-direction:column;gap:1.35vh}
+  .bar-row{display:grid;grid-template-columns:7vw 1fr 4vw;gap:1vw;align-items:center;font-size:.9vw;color:var(--muted)}
+  .bar-track{height:2.2vh;background:#e7eaee;position:relative;overflow:hidden}
+  .bar-fill{height:100%;background:linear-gradient(90deg,var(--brand-red-dark),var(--brand-red));width:var(--v,50%)}
+  .bar-row strong{font-family:var(--mono);color:var(--ink)}
+  .stat-big{font-family:var(--mono);font-size:min(5.2vw,9vh);line-height:1;color:var(--brand-red);font-weight:800}
+
+  .process{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:0;
+    align-items:stretch;
+  }
+  .process-step{
+    position:relative;
+    background:#fff;
+    border:1px solid var(--line);
+    padding:3vh 1.6vw;
+    min-height:30vh;
+  }
+  .process-step:not(:last-child)::after{
+    content:"";
+    position:absolute;
+    right:-1.2vw;
+    top:50%;
+    transform:translateY(-50%);
+    width:0;
+    height:0;
+    border-top:1.5vw solid transparent;
+    border-bottom:1.5vw solid transparent;
+    border-left:1.2vw solid var(--brand-red);
+    z-index:2;
+  }
+
+  .arrow-timeline{
+    --axis-y:50%;
+    --line-left:4%;
+    --line-right:6.4%;
+    --line-h:5.2vh;
+    --head-right:1.5%;
+    --head-w:5vw;
+    --head-h:8vh;
+    position:relative;
+    margin-top:7vh;
+    height:36vh;
+  }
+  .arrow-timeline-line{
+    position:absolute;
+    left:var(--line-left);
+    right:var(--line-right);
+    top:var(--axis-y);
+    height:var(--line-h);
+    background:var(--brand-red);
+    transform:translateY(-50%);
+  }
+  .arrow-timeline-head{
+    position:absolute;
+    right:var(--head-right);
+    top:var(--axis-y);
+    width:var(--head-w);
+    height:var(--head-h);
+    background:var(--brand-red);
+    clip-path:polygon(0 0,100% 50%,0 100%);
+    transform:translateY(-50%);
+  }
+  .arrow-timeline-node{
+    position:absolute;
+    top:var(--axis-y);
+    width:1.8vw;
+    height:1.8vw;
+    border-radius:999px;
+    background:var(--brand-red);
+    box-shadow:0 0 0 .8vw rgba(var(--brand-red-rgb),.10);
+    transform:translate(-50%,-50%);
+    z-index:2;
+  }
+  .arrow-timeline-card{
+    position:absolute;
+    width:18vw;
+    z-index:3;
+  }
+  .arrow-timeline-card.top{top:0}
+  .arrow-timeline-card.bottom{bottom:0}
+
+  .image-frame{
+    background:#fff;
+    border:1px solid var(--line);
+    padding:.7vw;
+    box-shadow:var(--shadow-soft);
+  }
+  .image-frame img{
+    display:block;
+    width:100%;
+    height:100%;
+    object-fit:cover;
+  }
+  .r-16x9{aspect-ratio:16/9}
+  .r-16x10{aspect-ratio:16/10}
+  .r-4x3{aspect-ratio:4/3}
+  .fit-contain img{object-fit:contain;background:#fff}
+  .caption{
+    margin-top:1vh;
+    font-size:.76vw;
+    color:var(--muted);
+    line-height:1.5;
+  }
+
+  .quote-band{
+    background:linear-gradient(90deg,var(--brand-red),var(--brand-red-dark));
+    color:#fff;
+    padding:3.4vh 3vw;
+    font-family:var(--sans-zh);
+    font-size:2.4vw;
+    line-height:1.24;
+    font-weight:900;
+  }
+  .bullet-list{
+    display:grid;
+    gap:1.15vh;
+  }
+  .bullet-item{
+    display:grid;
+    grid-template-columns:1.1vw 1fr;
+    gap:1vw;
+    align-items:start;
+  }
+  .bullet-dot{
+    width:.72vw;
+    height:.72vw;
+    border-radius:50%;
+    background:var(--brand-red);
+    margin-top:.5vh;
+  }
+
+  [data-anim]{
+    opacity:0;
+    transform:translateY(16px);
+    transition:opacity .56s ease,transform .56s cubic-bezier(.22,1,.36,1);
+  }
+  .slide.active [data-anim]{opacity:1;transform:none}
+  .slide.active [data-anim]:nth-child(2){transition-delay:.06s}
+  .slide.active [data-anim]:nth-child(3){transition-delay:.12s}
+  .slide.active [data-anim]:nth-child(4){transition-delay:.18s}
+  body.low-power [data-anim],#overview [data-anim]{opacity:1!important;transform:none!important}
+
+  #hint{
+    position:fixed;
+    right:1.5vw;
+    bottom:1.8vh;
+    z-index:20;
+    color:rgba(34,37,43,.56);
+    font-size:.72vw;
+    font-family:var(--mono);
+    letter-spacing:.02em;
+    user-select:none;
+  }
+  body.low-power #hint{color:var(--brand-red)}
+  .page-no{
+    position:absolute;
+    left:2.2vw;
+    bottom:2.2vh;
+    z-index:4;
+    font-family:var(--mono);
+    font-size:.86vw;
+    line-height:1;
+    letter-spacing:.08em;
+    color:rgba(34,37,43,.42);
+    pointer-events:none;
+  }
+  .dark .page-no{color:rgba(255,255,255,.72)}
+  .hw-cover .page-no{color:rgba(255,255,255,.74)}
+  #nav{
+    position:fixed;
+    left:50%;
+    bottom:2.1vh;
+    transform:translateX(-50%);
+    display:flex;
+    gap:.55vw;
+    z-index:20;
+  }
+  #nav button{
+    width:.55vw;
+    height:.55vw;
+    border:0;
+    border-radius:50%;
+    background:rgba(34,37,43,.2);
+    cursor:pointer;
+    padding:0;
+  }
+  #nav button.active{background:var(--brand-red);transform:scale(1.35)}
+  #overview{
+    position:fixed;
+    inset:0;
+    background:rgba(10,10,10,.88);
+    z-index:30;
+    display:none;
+    grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    gap:18px;
+    padding:24px;
+    overflow:auto;
+  }
+  body.overview #overview{display:grid}
+  .thumb{
+    position:relative;
+    aspect-ratio:16/9;
+    background:#fff;
+    overflow:hidden;
+    cursor:pointer;
+    border:1px solid rgba(255,255,255,.18);
+  }
+  .thumb .slide{
+    transform:scale(.25);
+    transform-origin:top left;
+    pointer-events:none;
+  }
+
+  @media (max-width:900px){
+    .slide{padding:8vh 6vw 8vh}
+    .cover-shell,.agenda-layout,.section-layout,.grid-2{grid-template-columns:1fr;gap:3vh}
+    .grid-3,.grid-4,.process{grid-template-columns:1fr 1fr}
+    .brand-lockup{font-size:2.8vw}
+    .brand-mark{width:3.4vw;height:3.4vw}
+    .h-hero{font-size:12vw}
+    .h-xl{font-size:8.8vw}
+    .lead{font-size:3.5vw}
+    .card-title{font-size:3.6vw;white-space:normal}
+    .body-copy,.card-body{font-size:2.8vw}
+    .chrome{font-size:2.2vw}
+    .page-no{font-size:2.2vw;left:3.5vw;bottom:2.8vh}
+    #hint{font-size:2vw}
+  }
+</style>
+</head>
+<body>
+<div id="hint">← → 翻页 · B 静态 · ESC 索引</div>
+
+<div id="deck">
+<!-- ============================================================
+     SLIDES 插入区 · 在此处填充所有 <section class="slide ..."> 页面
+     页面骨架参考 references/layouts-huawei.md
+     主题色配置参考 references/themes-huawei.md
+     ============================================================ -->
+
+<!-- ============ 01 · 封面 ============ -->
+<section class="slide hw-cover" data-layout="H01" data-animate="cover">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="cover-shell">
+    <div class="cover-title-wrap">
+      <div class="cover-badge" data-anim>
+        <span class="brand-mark" aria-hidden="true"></span>
+      </div>
+      <div class="kicker" data-anim>SCALE-UP NETWORK · DYNAMIC LATENCY</div>
+      <h1 class="h-hero" data-anim>Scale-up 网络<br/>动态时延研究</h1>
+      <p class="lead cover-subtitle" data-anim>有界时延分析 · p99 时延构成拆解 · Request/Grant 目的侧调度</p>
+    </div>
+
+    <div class="cover-visual" aria-hidden="true">
+      <span class="orb red" style="width:6vw;height:6vw;right:10vw;top:3vh"></span>
+      <span class="orb" style="width:12vw;height:12vw;right:0;top:16vh"></span>
+      <span class="orb red" style="width:2.6vw;height:2.6vw;right:18vw;top:34vh"></span>
+      <span class="orb" style="width:5vw;height:5vw;right:26vw;top:8vh"></span>
+    </div>
+  </div>
+
+  <div class="cover-wave" aria-hidden="true"></div>
+  <div class="cover-meta">
+    <div>汇报对象: 海思 UB 首席专家</div>
+    <div>主题: MoE Dispatch/Combine 网络动态时延</div>
+  </div>
+</section>
+
+<!-- ============ 02 · 目录 ============ -->
+<section class="slide" data-layout="H02" data-animate="agenda">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="agenda-layout">
+    <div class="red-panel" data-anim>
+      <div class="kicker" style="color:rgba(255,255,255,.72)">CONTENT</div>
+      <h2 class="h-xl" style="margin-top:2vh">目录</h2>
+      <div class="en" style="margin-top:2vh">FROM ANALYSIS TO MECHANISM</div>
+    </div>
+
+    <div class="agenda-list">
+      <div class="agenda-item" data-anim><div class="idx">01</div><div class="txt">问题：为什么 scale-up 时延是 MoE 的系统瓶颈</div></div>
+      <div class="agenda-item" data-anim><div class="idx">02</div><div class="txt">有界时延分析：p99 时延的四层构成拆解</div></div>
+      <div class="agenda-item" data-anim><div class="idx">03</div><div class="txt">求解理论：König 下界 + (σ,ρ) + 授权节奏</div></div>
+      <div class="agenda-item" data-anim><div class="idx">04</div><div class="txt">解决方案：Request/Grant 目的侧调度</div></div>
+      <div class="agenda-item" data-anim><div class="idx">05</div><div class="txt">效果验证：仿真与量化收益</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 03 · 章节一 ============ -->
+<section class="slide dark" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">01</div>
+      <div class="kicker" style="color:rgba(255,255,255,.82)">SECTION ONE</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">问题定位</h2>
+      <p class="lead" style="margin-top:2vh">在 BSP 同步的 MoE 训练/推理中，网络时延的<strong style="color:#fff">尾部（p99）</strong>，而非均值，直接决定系统吞吐。</p>
+    </div>
+    <div data-anim>
+      <div class="quote-band" style="background:rgba(255,255,255,.12)">1&nbsp;μs 级交付差异 → 约 50% 系统吞吐退化</div>
+      <p class="body-copy" style="color:rgba(255,255,255,.82);margin-top:2.4vh">BSP 步长由“最慢者”决定：均值不重要，<strong style="color:#fff">max / p99 才是有效指标</strong>。这是本研究的出发点。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 · 背景与命题 ============ -->
+<section class="slide" data-layout="H04" data-animate="body">
+  <div class="chrome">
+    <div class="l"><span class="square"></span><span>背景与命题</span></div>
+    <div></div>
+  </div>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="height:100%;display:grid;grid-template-rows:auto 1fr;gap:3.4vh;padding-top:7vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">CONTEXT</div>
+      <h2 class="h-xl">MoE Dispatch/Combine 的通信画像</h2>
+      <div class="red-rule" style="width:8vw"></div>
+    </div>
+
+    <div class="grid-4" style="align-items:start">
+      <div class="card" data-anim>
+        <div class="card-title">BSP 同步阶段</div>
+        <p class="card-body">Dispatch / Combine 是全体节点近似 lockstep 的批量 all-to-all；每一步必须“全网确知完成”才能推进。</p>
+      </div>
+      <div class="card" data-anim>
+        <div class="card-title">目的批量已知</div>
+        <p class="card-body">门控在一次批量计算中同时给出全部 token 的目的地 —— 阶段开始时，网络就可获知完整的 N×N 需求矩阵。</p>
+      </div>
+      <div class="card" data-anim>
+        <div class="card-title">次序自由</div>
+        <p class="card-body">发送方不关心这批 token 以何种顺序发出 —— 这是把“逐包在线仲裁”换成“批量编排”的关键自由度。</p>
+      </div>
+      <div class="card" data-anim style="border-color:rgba(var(--brand-red-rgb),.34)">
+        <div class="card-title" style="color:var(--brand-red)">命题</div>
+        <p class="card-body">现网自由注入分组交换把这两个结构性先验<strong>浪费</strong>了，代价是 p99 的排队长尾。本研究要把它们用起来。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 05 · 章节二 ============ -->
+<section class="slide dark" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">02</div>
+      <div class="kicker" style="color:rgba(255,255,255,.82)">SECTION TWO</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">有界时延分析</h2>
+      <p class="lead" style="margin-top:2vh">把 scale-up 网络 p99 端到端时延拆成四层，逐层判断：<strong style="color:#fff">哪些是物理硬墙，哪些是可优化的调度产物。</strong></p>
+    </div>
+    <div data-anim>
+      <div class="quote-band" style="background:rgba(255,255,255,.12)">p99 = 静态 + incast 硬墙 + 拥塞排队 + 屏障感知</div>
+      <p class="body-copy" style="color:rgba(255,255,255,.82);margin-top:2.4vh">结论先行：真正拖高 p99 的不是 incast 硬墙，而是 <strong style="color:#fff">non-work-conserving 调度</strong>让瓶颈出口“本该忙却空转”。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 06 · p99 四层分解 ============ -->
+<section class="slide" data-layout="H07" data-animate="data">
+  <div class="chrome">
+    <div class="l"><span class="square"></span><span>p99 时延构成</span></div>
+    <div></div>
+  </div>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">DECOMPOSITION</div>
+      <h2 class="h-xl">端到端 p99 的四层拆解</h2>
+    </div>
+
+    <!-- 堆叠条 -->
+    <div class="card" data-anim style="margin-top:4vh;padding:2.6vh 1.8vw">
+      <div style="display:flex;height:7vh;width:100%;overflow:hidden;border:1px solid var(--line)">
+        <div style="width:9%;background:#c1cad4;color:#20242c;display:grid;place-items:center;font-weight:800;font-size:.8vw">静态</div>
+        <div style="width:58%;background:var(--brand-red-dark);color:#fff;display:grid;place-items:center;font-weight:800;font-size:.9vw">incast 串行（物理硬墙）</div>
+        <div style="width:22%;background:var(--brand-red);color:#fff;display:grid;place-items:center;font-weight:800;font-size:.85vw">拥塞排队</div>
+        <div style="width:11%;background:#ef7b80;color:#fff;display:grid;place-items:center;font-weight:800;font-size:.8vw">屏障</div>
+      </div>
+      <div style="display:flex;margin-top:1.1vh;font-family:var(--mono);font-size:.72vw;color:var(--muted)">
+        <div style="width:9%">不可优化</div>
+        <div style="width:58%">不可优化 · 只能加平面</div>
+        <div style="width:33%;color:var(--brand-red);font-weight:700">← 可优化空间（调度产物）</div>
+      </div>
+    </div>
+
+    <div class="grid-4" style="margin-top:3vh">
+      <div class="card flat" data-anim><div class="num-pill">01</div><div class="card-title">静态时延</div><p class="card-body">序列化×2 + 传播×2 + 交换 pipeline。单层 2 跳 ≈ 0.8&nbsp;µs，两层 4 跳 ≈ 1.5&nbsp;µs。<strong>与负载无关</strong>。</p></div>
+      <div class="card flat" data-anim><div class="num-pill">02</div><div class="card-title">incast 串行</div><p class="card-body">最热端口负载 × τ_g = König 下界。占动态时延<strong>绝大部分</strong>，∝&nbsp;N、∝&nbsp;1/P，任何调度都打不破。</p></div>
+      <div class="card flat" data-anim style="border-color:rgba(var(--brand-red-rgb),.34)"><div class="num-pill">03</div><div class="card-title" style="color:var(--brand-red)">拥塞排队</div><p class="card-body">超出下界的排队：HOL、反压拥塞树、ECMP 失衡、匹配非理想 κ。<strong>本研究主攻对象</strong>。</p></div>
+      <div class="card flat" data-anim style="border-color:rgba(var(--brand-red-rgb),.34)"><div class="num-pill">04</div><div class="card-title" style="color:var(--brand-red)">屏障感知</div><p class="card-body">软件全对全 O(N²) / allreduce 树 + 掉队者偏斜，1.5–6&nbsp;µs，随规模增长；不进数据面但进 BSP 关键路径。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 07 · incast 硬墙 ============ -->
+<section class="slide dark" data-layout="H07" data-animate="data">
+  <div class="chrome">
+    <div class="l"><span class="square"></span><span>incast 硬墙</span></div>
+    <div></div>
+  </div>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="padding-top:8vh">
+    <div class="grid-12" style="align-items:end">
+      <div class="span-5 content-stack" data-anim>
+        <div class="kicker" style="color:rgba(255,255,255,.82)">HARD WALL</div>
+        <h2 class="h-xl">incast 是硬墙，<br/>但它<em>不是</em>病根</h2>
+        <p class="lead" style="color:rgba(255,255,255,.86)">热点专家把 token 汇聚到单一 rank，单条链路串行化即为下界。规模化只能靠<strong style="color:#fff">加平面（∝1/P）</strong>，靠调度无解。</p>
+        <div>
+          <div class="stat-big" style="color:#fff">96.6%</div>
+          <div class="meta" style="color:rgba(255,255,255,.7)">SHMEM-POP 吃掉的关键路径可优化空间</div>
+        </div>
+      </div>
+
+      <div class="span-7 card" data-anim style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2)">
+        <div class="kicker" style="color:rgba(255,255,255,.7)">DISPATCH FLOOR（事件级仿真，ρ_h=0.5）</div>
+        <div class="bar-chart" style="margin-top:2vh">
+          <div class="bar-row" style="color:rgba(255,255,255,.82)"><span>N=16</span><div class="bar-track" style="background:rgba(255,255,255,.16)"><div class="bar-fill" style="--v:14%;background:rgba(255,255,255,.92)"></div></div><strong style="color:#fff">371µs</strong></div>
+          <div class="bar-row" style="color:rgba(255,255,255,.82)"><span>N=64</span><div class="bar-track" style="background:rgba(255,255,255,.16)"><div class="bar-fill" style="--v:55%;background:rgba(255,255,255,.92)"></div></div><strong style="color:#fff">1426µs</strong></div>
+          <div class="bar-row" style="color:rgba(255,255,255,.82)"><span>N=128</span><div class="bar-track" style="background:rgba(255,255,255,.16)"><div class="bar-fill" style="--v:100%;background:rgba(255,255,255,.92)"></div></div><strong style="color:#fff">2572µs</strong></div>
+        </div>
+        <div class="hairline" style="margin:2.2vh 0;background:rgba(255,255,255,.18)"></div>
+        <div class="bar-chart">
+          <div class="bar-row" style="color:rgba(255,255,255,.82)"><span>P=1</span><div class="bar-track" style="background:rgba(255,255,255,.16)"><div class="bar-fill" style="--v:100%;background:rgba(255,255,255,.92)"></div></div><strong style="color:#fff">371µs</strong></div>
+          <div class="bar-row" style="color:rgba(255,255,255,.82)"><span>P=2</span><div class="bar-track" style="background:rgba(255,255,255,.16)"><div class="bar-fill" style="--v:50%;background:rgba(255,255,255,.92)"></div></div><strong style="color:#fff">186µs</strong></div>
+          <div class="bar-row" style="color:rgba(255,255,255,.82)"><span>P=4</span><div class="bar-track" style="background:rgba(255,255,255,.16)"><div class="bar-fill" style="--v:25%;background:rgba(255,255,255,.92)"></div></div><strong style="color:#fff">93µs</strong></div>
+          <div class="bar-row" style="color:rgba(255,255,255,.82)"><span>P=8</span><div class="bar-track" style="background:rgba(255,255,255,.16)"><div class="bar-fill" style="--v:13%;background:rgba(255,255,255,.92)"></div></div><strong style="color:#fff">47µs</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 08 · non-work-conserving 洞察 ============ -->
+<section class="slide" data-layout="H27" data-animate="problem-overview">
+  <div class="chrome">
+    <div class="l"><span class="square"></span><span>核心洞察</span></div>
+    <div></div>
+  </div>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">KEY INSIGHT · NON-WORK-CONSERVING</div>
+      <h2 class="h-xl">p99 长尾 = 瓶颈出口“本该忙却空转”</h2>
+      <p class="lead">work-conserving 的定义是：只要有活等着，服务器就不空闲。现网自由注入<strong style="color:var(--brand-red)">名义守恒、实际非守恒</strong> —— 三个机制让最热出口白白空转，把完成时间顶到 König 下界之上。</p>
+    </div>
+    <div class="grid-3" style="margin-top:4vh">
+      <div class="card flat" data-anim><div class="num-pill">01</div><div class="card-title">HOL 队头阻塞</div><p class="card-body">单 FIFO 队头去往热点口的包，挡住其后本可发往<strong>空闲口</strong>的包 —— 空闲口被迫空转。</p></div>
+      <div class="card flat" data-anim><div class="num-pill">02</div><div class="card-title">反压拥塞树</div><p class="card-body">无损 CBFC 把热点回压传导给喂热点的源，FIFO 后续冷流全等热点排空 —— 冷 rank 被顶到 <strong style="color:var(--brand-red)">≈11×</strong>（380 vs 34&nbsp;µs）。</p></div>
+      <div class="card flat" data-anim><div class="num-pill">03</div><div class="card-title">匹配非理想 κ</div><p class="card-body">iSLIP 逐信元在线仲裁，出口有 eligible 输入却因入口争抢未匹配上 → 出口空转，κ≈1.1–1.8（两层 ECMP 更差）。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 09 · 章节三 ============ -->
+<section class="slide dark" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">03</div>
+      <div class="kicker" style="color:rgba(255,255,255,.82)">SECTION THREE</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">求解理论</h2>
+      <p class="lead" style="margin-top:2vh">既然拥塞是“对流量无知”的产物，那么让网络<strong style="color:#fff">在发送前就掌握完整需求</strong>，就能像 TDM 一样算出无冲突次序。</p>
+    </div>
+    <div data-anim>
+      <div class="quote-band" style="background:rgba(255,255,255,.12)">用协议（授权节奏），而非时钟（TDM），实现确定性</div>
+      <p class="body-copy" style="color:rgba(255,255,255,.82);margin-top:2.4vh">三块理论基石：König 边着色下界、(σ,ρ) 网络演算、授权节奏即分布式虚拟时隙。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 10 · 三块理论基石 ============ -->
+<section class="slide" data-layout="H05" data-animate="cards">
+  <div class="chrome">
+    <div class="l"><span class="square"></span><span>理论基石</span></div>
+    <div></div>
+  </div>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="padding-top:8vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">THEORY</div>
+      <h2 class="h-xl">从“排队消化冲突”到“调度消除冲突”</h2>
+    </div>
+
+    <div class="grid-3" style="margin-top:5vh">
+      <div class="card" data-anim>
+        <div class="icon-disc"><i data-lucide="grid-3x3"></i></div>
+        <div class="card-title">König 边着色下界</div>
+        <p class="card-body">需求矩阵按 grain 量化 = 二部多重图，Δ 色边着色使调度长度 = 最忙端口负载。<strong>分组交换可达理想 TDM 完成时间，全程无冲突。</strong></p>
+      </div>
+      <div class="card" data-anim>
+        <div class="icon-disc"><i data-lucide="waves"></i></div>
+        <div class="card-title">(σ,ρ) 网络演算</div>
+        <p class="card-body">授权节奏把到达整形为 (σ,ρ) 曲线：ρ = 线速，σ = ⌈Δ/τ_g⌉+1。排队 ≤ σ 个 grain，<strong>只与延迟“差”有关，与负载、绝对延迟无关。</strong></p>
+      </div>
+      <div class="card" data-anim>
+        <div class="icon-disc"><i data-lucide="timer"></i></div>
+        <div class="card-title">授权=虚拟时隙</div>
+        <p class="card-body">调度器每 τ_g 每出口至多签发 1 grain 授权；“收到即发、FCFS 清空”使 grant 流成为<strong>分布式软时隙</strong> —— 无需全局时钟。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 11 · 三范式对比 ============ -->
+<section class="slide" data-layout="H26" data-animate="metaphor">
+  <div class="chrome">
+    <div class="l"><span class="square"></span><span>范式对比</span></div>
+    <div></div>
+  </div>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="padding-top:7.5vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">CONTRAST</div>
+      <h2 class="h-xl">三种范式，如何取舍守恒与排队</h2>
+    </div>
+    <div class="grid-3" style="margin-top:4vh">
+      <div class="card" data-anim>
+        <div class="card-title" style="color:var(--muted)">自由注入（现网）</div>
+        <p class="card-body">名义 work-conserving，但 HOL / 反压 / κ 使其实际非守恒；排队<strong>无界</strong>长尾。</p>
+        <div class="hairline" style="margin:1.6vh 0"></div>
+        <p class="meta">全局时钟：不需要 · 排队：无界</p>
+      </div>
+      <div class="card" data-anim>
+        <div class="card-title" style="color:var(--muted)">TDM 时隙</div>
+        <p class="card-body">严格非守恒（时隙固定，流量不匹配即浪费）；用<strong>全局绝对时钟</strong>换零排队，日历需重构。</p>
+        <div class="hairline" style="margin:1.6vh 0"></div>
+        <p class="meta">全局时钟：必需 · 排队：0</p>
+      </div>
+      <div class="card" data-anim style="border-color:var(--brand-red)">
+        <div class="card-title" style="color:var(--brand-red)">Request/Grant（本方案）</div>
+        <p class="card-body">授权节奏恢复出口守恒（有活必发），入口冲突降格为<strong>有界相位顺延</strong>；排队 ≤ σ 硬上界。</p>
+        <div class="hairline" style="margin:1.6vh 0"></div>
+        <p class="meta" style="color:var(--brand-red)">全局时钟：不需要 · 排队：数个 grain</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 12 · 章节四 ============ -->
+<section class="slide dark" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">04</div>
+      <div class="kicker" style="color:rgba(255,255,255,.82)">SECTION FOUR</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">解决方案</h2>
+      <p class="lead" style="margin-top:2vh">Request/Grant 目的侧调度：先请求、后授权、按节奏注入，把冲突消解在<strong style="color:#fff">网前</strong>而非网内。</p>
+    </div>
+    <div data-anim>
+      <div class="quote-band" style="background:rgba(255,255,255,.12)">批量匹配 + 授权节奏控制 + cursor 内建屏障</div>
+      <p class="body-copy" style="color:rgba(255,255,255,.82);margin-top:2.4vh">保持 Unified Bus 分组交换语义不变，仅新增 REQ / GNT / SYNC 三类控制报文。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 13 · 协议流程 ============ -->
+<section class="slide" data-layout="H08" data-animate="process">
+  <div class="chrome">
+    <div class="l"><span class="square"></span><span>协议流程</span></div>
+    <div></div>
+  </div>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="padding-top:8vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">PROTOCOL FLOW</div>
+      <h2 class="h-xl">从 token 到 barrier 的一次闭环</h2>
+    </div>
+
+    <div class="process" style="margin-top:6vh">
+      <div class="process-step" data-anim>
+        <div class="num-pill">01</div>
+        <div class="card-title">REQ 批量登记</div>
+        <p class="card-body">发送方把 M 个 token 的 (buf, grain, dst, queue) 打包上报；末跳交换机拦截并交本机调度器。</p>
+      </div>
+      <div class="process-step" data-anim>
+        <div class="num-pill">02</div>
+        <div class="card-title">匹配 + 节奏</div>
+        <p class="card-body">调度器维护 pending 计数矩阵，每 τ_g 每出口至多授 1 grain；credit 窗口掩盖 RTT。</p>
+      </div>
+      <div class="process-step" data-anim>
+        <div class="num-pill">03</div>
+        <div class="card-title">GNT 隐式时隙</div>
+        <p class="card-body">授权按源聚批下发，路径逐 grain 钉扎（inject_port / spine）；发送方 FCFS 立即注入。</p>
+      </div>
+      <div class="process-step" data-anim>
+        <div class="num-pill">04</div>
+        <div class="card-title">SYNC 内建屏障</div>
+        <p class="card-body">出口<strong>实测转发计数</strong>对账（forwarded==expected），汇聚广播 SYNC，cursor 安全推进。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 14 · 架构：三段解耦 + 分布式 ============ -->
+<section class="slide" data-layout="H05" data-animate="cards">
+  <div class="chrome">
+    <div class="l"><span class="square"></span><span>架构要点</span></div>
+    <div></div>
+  </div>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="padding-top:8vh">
+    <div class="content-stack" data-anim>
+      <div class="kicker">ARCHITECTURE</div>
+      <h2 class="h-xl">冲突分段解耦 · 屏障内建 · 全分布式</h2>
+    </div>
+
+    <div class="grid-3" style="margin-top:5vh">
+      <div class="card" data-anim>
+        <div class="icon-disc"><i data-lucide="split"></i></div>
+        <div class="card-title">三段冲突解耦</div>
+        <p class="card-body">下行口由目的侧调度器 D_j 集中精确调度；Spine 段确定性散布；上行段统计均衡 + 小缓冲收敛。</p>
+      </div>
+      <div class="card" data-anim>
+        <div class="icon-disc"><i data-lucide="flag-triangle-right"></i></div>
+        <div class="card-title">cursor 内建屏障</div>
+        <p class="card-body">以出口转发计数精确判定“送达且全网知道”，SYNC 汇聚广播 O(N)，取代软件全对全 O(N²)。</p>
+      </div>
+      <div class="card" data-anim>
+        <div class="icon-disc"><i data-lucide="server"></i></div>
+        <div class="card-title">分布式零协调</div>
+        <p class="card-body">按出口物理属主分片，分片间几乎零通信；每分片 32–128&nbsp;KB SRAM，资源随所辖出口数增长而非全网规模。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 15 · 章节五 ============ -->
+<section class="slide dark" data-layout="H03" data-animate="section">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="section-layout">
+    <div data-anim>
+      <div class="section-no">05</div>
+      <div class="kicker" style="color:rgba(255,255,255,.82)">SECTION FIVE</div>
+      <h2 class="h-xl" style="margin-top:1.8vh">效果验证</h2>
+      <p class="lead" style="margin-top:2vh">事件级 + 行为级 + 逐包三层仿真交叉验证：完成时间贴近 König 下界，p99 与抖动显著收敛。</p>
+    </div>
+    <div data-anim>
+      <div class="quote-band" style="background:rgba(255,255,255,.12)">p99 领先 40–47% · 抖动收敛 5–7×</div>
+      <p class="body-copy" style="color:rgba(255,255,255,.82);margin-top:2.4vh">CCT/König：R/G ≈ 1.04–1.09，自由注入 ≈ 1.24–1.32。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 16 · 量化对比（完整 cursor step） ============ -->
+<section class="slide" data-layout="H07" data-animate="data">
+  <div class="chrome">
+    <div class="l"><span class="square"></span><span>量化收益</span></div>
+    <div></div>
+  </div>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="padding-top:8vh">
+    <div class="grid-12" style="align-items:end">
+      <div class="span-5 content-stack" data-anim>
+        <div class="kicker">FULL CURSOR STEP · p99</div>
+        <h2 class="h-xl">规模越大，<br/>R/G 领先越稳</h2>
+        <p class="lead">短步长赢在“内建屏障”，长步长赢在“授权节奏”—— 两端都占优，且真实热点流量会同时放大对手的两项劣势。</p>
+        <div>
+          <div class="stat-big">45%</div>
+          <div class="meta">两层网络 p99 稳定领先幅度</div>
+        </div>
+      </div>
+
+      <div class="span-7 card" data-anim>
+        <div class="kicker">p99（µs）· R/G vs 自由注入 · 越低越好</div>
+        <div class="bar-chart" style="margin-top:2vh">
+          <div class="bar-row"><span>单层 16t · RG</span><div class="bar-track"><div class="bar-fill" style="--v:8%"></div></div><strong>3.0</strong></div>
+          <div class="bar-row"><span>单层 16t · 自由</span><div class="bar-track"><div class="bar-fill" style="--v:14%;background:#c1cad4"></div></div><strong>5.4</strong></div>
+          <div class="bar-row"><span>单层 64t · RG</span><div class="bar-track"><div class="bar-fill" style="--v:13%"></div></div><strong>4.8</strong></div>
+          <div class="bar-row"><span>单层 64t · 自由</span><div class="bar-track"><div class="bar-fill" style="--v:20%;background:#c1cad4"></div></div><strong>7.5</strong></div>
+          <div class="bar-row"><span>单层 1024t · RG</span><div class="bar-track"><div class="bar-fill" style="--v:71%"></div></div><strong>27</strong></div>
+          <div class="bar-row"><span>单层 1024t · 自由</span><div class="bar-track"><div class="bar-fill" style="--v:100%;background:#c1cad4"></div></div><strong>37.5</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 17 · 缓冲与冷流保护 ============ -->
+<section class="slide" data-layout="H15" data-animate="kpi-dashboard">
+  <div class="chrome">
+    <div class="l"><span class="square"></span><span>结构性收益</span></div>
+    <div></div>
+  </div>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div class="grid-12" style="padding-top:9vh;align-items:center">
+    <div class="span-7 card" data-anim>
+      <div class="kicker">达到 incast 下界所需的交换机缓存 / 口</div>
+      <div class="bar-chart" style="margin-top:2.6vh">
+        <div class="bar-row"><span>自由注入 N=128/P=1</span><div class="bar-track"><div class="bar-fill" style="--v:100%;background:#c1cad4"></div></div><strong>3.1MB</strong></div>
+        <div class="bar-row"><span>自由注入 N=64/P=1</span><div class="bar-track"><div class="bar-fill" style="--v:50%;background:#c1cad4"></div></div><strong>1.5MB</strong></div>
+        <div class="bar-row"><span>R/G · 任意 (N,P)</span><div class="bar-track"><div class="bar-fill" style="--v:3%"></div></div><strong>98KB</strong></div>
+      </div>
+      <p class="caption" style="margin-top:1.6vh">自由注入缓存 ∝ BDP×(N−1)/P 随规模爆炸；R/G 用接收端信用把在途量钳在 O(BDP)，恒定 ≈98&nbsp;KB。</p>
+    </div>
+    <div class="span-5 content-stack" data-anim>
+      <div class="stat-big">11× → 1×</div>
+      <div class="card-title">冷流拥塞扩散被消除</div>
+      <p class="lead">目的侧 credit 配速 + VoQ 隔离，把被反压顶到 ≈380&nbsp;µs 的冷 rank 拉回自身 ≈33&nbsp;µs 下界。</p>
+      <div class="red-rule" style="width:10vw"></div>
+      <p class="body-copy">缓存需求从 O(N/P·BDP) 降到 O(BDP)，是大规模 incast 下 R/G 的真正价值。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 18 · 结论 ============ -->
+<section class="slide dark" data-layout="H10" data-animate="closing">
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span>HUAWEI</span>
+  </div>
+
+  <div style="height:100%;display:grid;align-content:center;gap:2.6vh;max-width:70vw">
+    <div class="kicker" data-anim style="color:rgba(255,255,255,.82)">TAKEAWAY</div>
+    <h2 class="h-hero" data-anim>p99 的病根是调度<br/>不是物理</h2>
+    <p class="lead" data-anim style="color:rgba(255,255,255,.9)">incast 是不可优化的硬墙（靠加平面）；拥塞与屏障是 non-work-conserving 的产物（靠授权节奏）。Request/Grant 用协议实现 TDM 级确定性，免全局时钟、适应任意流量矩阵，收益随规模单调放大。</p>
+    <div class="grid-3" data-anim style="margin-top:1.5vh">
+      <div class="card flat" style="background:rgba(255,255,255,.10);color:#fff"><div class="card-title" style="color:#fff">近下界</div><p style="line-height:1.6;color:rgba(255,255,255,.82)">CCT/König ≈ 1.04–1.09</p></div>
+      <div class="card flat" style="background:rgba(255,255,255,.10);color:#fff"><div class="card-title" style="color:#fff">低抖动</div><p style="line-height:1.6;color:rgba(255,255,255,.82)">σ 级硬上界，收敛 5–7×</p></div>
+      <div class="card flat" style="background:rgba(255,255,255,.10);color:#fff"><div class="card-title" style="color:#fff">省缓存</div><p style="line-height:1.6;color:rgba(255,255,255,.82)">O(BDP) 恒定 ≈98KB</p></div>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<div id="nav"></div>
+<div id="overview"></div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+(() => {
+  const deck = document.getElementById('deck');
+  const nav = document.getElementById('nav');
+  const overview = document.getElementById('overview');
+  const slides = [...document.querySelectorAll('.slide')];
+  const lowPowerKey = 'guizang-huawei-low-power';
+  let current = 0;
+  let wheelLock = false;
+
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.__lowPowerMode = localStorage.getItem(lowPowerKey) === '1' || prefersReduced;
+  document.body.classList.toggle('low-power', window.__lowPowerMode);
+
+  function buildPageNumbers(){
+    const total = String(slides.length).padStart(2, '0');
+    slides.forEach((slide, i) => {
+      slide.querySelector('.page-no')?.remove();
+      const pageNo = document.createElement('div');
+      pageNo.className = 'page-no';
+      pageNo.textContent = `${String(i + 1).padStart(2, '0')} / ${total}`;
+      slide.appendChild(pageNo);
+    });
+  }
+
+  function buildNav(){
+    nav.innerHTML = '';
+    slides.forEach((_, i) => {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.setAttribute('aria-label', `Go to slide ${i + 1}`);
+      dot.addEventListener('click', () => go(i));
+      nav.appendChild(dot);
+    });
+  }
+
+  function buildOverview(){
+    overview.innerHTML = '';
+    slides.forEach((slide, i) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'thumb';
+      const clone = slide.cloneNode(true);
+      clone.classList.add('active');
+      thumb.appendChild(clone);
+      thumb.addEventListener('click', () => {
+        document.body.classList.remove('overview');
+        go(i);
+      });
+      overview.appendChild(thumb);
+    });
+  }
+
+  function updateTheme(){
+    document.body.classList.toggle('dark-bg', slides[current]?.classList.contains('dark'));
+  }
+
+  function go(i){
+    if (!slides.length) return;
+    current = Math.max(0, Math.min(i, slides.length - 1));
+    deck.style.transform = `translateX(${-current * 100}vw)`;
+    slides.forEach((slide, idx) => slide.classList.toggle('active', idx === current));
+    [...nav.children].forEach((dot, idx) => dot.classList.toggle('active', idx === current));
+    updateTheme();
+  }
+
+  function toggleLowPower(){
+    window.__lowPowerMode = !window.__lowPowerMode;
+    localStorage.setItem(lowPowerKey, window.__lowPowerMode ? '1' : '0');
+    document.body.classList.toggle('low-power', window.__lowPowerMode);
+  }
+
+  addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      document.body.classList.toggle('overview');
+      return;
+    }
+    if (event.key === 'b' || event.key === 'B') {
+      event.preventDefault();
+      toggleLowPower();
+      return;
+    }
+    if (document.body.classList.contains('overview')) return;
+    if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
+      event.preventDefault();
+      go(current + 1);
+    }
+    if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+      event.preventDefault();
+      go(current - 1);
+    }
+  });
+
+  addEventListener('wheel', (event) => {
+    if (document.body.classList.contains('overview') || wheelLock || Math.abs(event.deltaY) < 24) return;
+    wheelLock = true;
+    go(current + (event.deltaY > 0 ? 1 : -1));
+    setTimeout(() => { wheelLock = false; }, 620);
+  }, { passive: true });
+
+  let touchStartX = null;
+  addEventListener('touchstart', (event) => { touchStartX = event.touches[0]?.clientX ?? null; }, { passive: true });
+  addEventListener('touchend', (event) => {
+    if (touchStartX == null) return;
+    const dx = (event.changedTouches[0]?.clientX ?? touchStartX) - touchStartX;
+    if (Math.abs(dx) > 46) go(current + (dx < 0 ? 1 : -1));
+    touchStartX = null;
+  }, { passive: true });
+
+  buildPageNumbers();
+  buildNav();
+  buildOverview();
+  go(0);
+  if (window.lucide) window.lucide.createIcons();
+})();
+</script>
+</body>
+</html>

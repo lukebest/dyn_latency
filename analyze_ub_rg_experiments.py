@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -14,14 +15,12 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
-RESULTS = ROOT / "results" / "ub_rg"
-FIGS = RESULTS / "figures"
 REPORT = ROOT / "docs" / "UB_RG仿真报告.md"
 
 
-def load_summaries() -> pd.DataFrame:
+def load_summaries(results: Path) -> pd.DataFrame:
     rows = []
-    for exp_dir in sorted(RESULTS.glob("exp*")):
+    for exp_dir in sorted(results.glob("exp*")):
         if not exp_dir.is_dir():
             continue
         for run_dir in sorted(exp_dir.iterdir()):
@@ -33,6 +32,7 @@ def load_summaries() -> pd.DataFrame:
             row = {
                 "exp": exp_dir.name,
                 "run_id": run_dir.name,
+                "engine": d.get("engine", "behavioral"),
                 "scenario": d.get("scenario"),
                 "scheme": d.get("scheme"),
                 "mode": d.get("mode"),
@@ -69,7 +69,7 @@ def style_ax(ax, title, xlabel, ylabel):
     ax.legend(fontsize=8)
 
 
-def plot_exp12(df: pd.DataFrame, exp: str, tag: str):
+def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
     sub = df[df["exp"] == exp].copy()
     if sub.empty:
         return []
@@ -95,7 +95,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str):
             "Zipf S",
             "Throughput (GB/s)",
         )
-        path = FIGS / f"{exp}_s{scenario}_throughput_vs_s.png"
+        path = figs_dir / f"{exp}_s{scenario}_throughput_vs_s.png"
         fig.tight_layout()
         fig.savefig(path, dpi=140)
         plt.close(fig)
@@ -116,7 +116,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str):
             "Zipf S",
             "Latency p99 (us)",
         )
-        path = FIGS / f"{exp}_s{scenario}_hotcold_p99_vs_s.png"
+        path = figs_dir / f"{exp}_s{scenario}_hotcold_p99_vs_s.png"
         fig.tight_layout()
         fig.savefig(path, dpi=140)
         plt.close(fig)
@@ -139,7 +139,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str):
             "BatchSize",
             "Time (us)",
         )
-        path = FIGS / f"{exp}_s{scenario}_step_vs_batch.png"
+        path = figs_dir / f"{exp}_s{scenario}_step_vs_batch.png"
         fig.tight_layout()
         fig.savefig(path, dpi=140)
         plt.close(fig)
@@ -147,60 +147,18 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str):
     return figs
 
 
-def load_hist(path: str) -> tuple[np.ndarray, np.ndarray]:
-    h = pd.read_csv(path)
-    centers = 0.5 * (h["bin_lo_us"] + h["bin_hi_us"])
-    counts = h["count"].to_numpy(dtype=float)
-    return centers.to_numpy(), counts
-
-
-def plot_exp3(df: pd.DataFrame):
+def plot_exp3(df: pd.DataFrame, figs_dir: Path):
+    """Roundtrip Step vs EP summary (per-token CDF/PDF figures are dropped;
+    see plot_exp3_pdf for the system dispatch+combine CCT distributions)."""
+    # Remove stale per-token CDF/PDF figures from earlier report versions.
+    for stale in figs_dir.glob("exp3_s*_cdf_pdf.png"):
+        stale.unlink()
     sub = df[df["exp"] == "exp3_roundtrip"].copy()
     if sub.empty:
         return []
     figs = []
     for scenario in sorted(sub["scenario"].unique()):
         s = sub[sub["scenario"] == scenario]
-        # CDF/PDF from hist at S=0.7, compare schemes for each EP
-        s_focus = 0.7 if 0.7 in set(s["zipf_s"]) else sorted(s["zipf_s"].unique())[-1]
-        for ep in sorted(s["ep_size"].unique()):
-            fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-            for scheme in ["ub_rg", "packet_spray"]:
-                g = s[
-                    (s["scheme"] == scheme)
-                    & (s["ep_size"] == ep)
-                    & np.isclose(s["zipf_s"], s_focus)
-                ]
-                if g.empty or not g.iloc[0]["hist_path"]:
-                    continue
-                centers, counts = load_hist(g.iloc[0]["hist_path"])
-                total = counts.sum()
-                if total <= 0:
-                    continue
-                pdf = counts / total
-                cdf = np.cumsum(pdf)
-                axes[0].plot(centers, cdf, label=scheme)
-                axes[1].plot(centers, pdf, label=scheme)
-            style_ax(
-                axes[0],
-                f"scenario{scenario} EP={ep} S={s_focus} CDF",
-                "Per-token latency (us)",
-                "CDF",
-            )
-            style_ax(
-                axes[1],
-                f"scenario{scenario} EP={ep} S={s_focus} PDF",
-                "Per-token latency (us)",
-                "PDF",
-            )
-            # zoom CDF useful range
-            axes[0].set_xlim(left=0)
-            path = FIGS / f"exp3_s{scenario}_ep{ep}_s{s_focus:g}_cdf_pdf.png"
-            fig.tight_layout()
-            fig.savefig(path, dpi=140)
-            plt.close(fig)
-            figs.append(path)
-
         # step_us vs ep_size
         fig, ax = plt.subplots(figsize=(7, 4.5))
         for scheme, ls in [("ub_rg", "-"), ("packet_spray", "--")]:
@@ -218,7 +176,7 @@ def plot_exp3(df: pd.DataFrame):
             "EP size",
             "Step (us)",
         )
-        path = FIGS / f"exp3_s{scenario}_step_vs_ep.png"
+        path = figs_dir / f"exp3_s{scenario}_step_vs_ep.png"
         fig.tight_layout()
         fig.savefig(path, dpi=140)
         plt.close(fig)
@@ -226,32 +184,185 @@ def plot_exp3(df: pd.DataFrame):
     return figs
 
 
+def _plot_density(ax, samples: np.ndarray, ls: str, color: str, label: str) -> None:
+    """Plot a smooth density (KDE if available, else histogram) of CCT samples."""
+    samples = np.asarray(samples, dtype=float)
+    samples = samples[np.isfinite(samples)]
+    lo, hi = float(samples.min()), float(samples.max())
+    if hi <= lo:
+        ax.axvline(lo, ls=ls, color=color, alpha=0.8, label=label)
+        return
+    span = hi - lo
+    xs = np.linspace(lo - 0.05 * span, hi + 0.05 * span, 256)
+    try:
+        from scipy.stats import gaussian_kde
+
+        kde = gaussian_kde(samples)
+        ax.plot(xs, kde(xs), ls, color=color, label=label)
+    except Exception:
+        bins = min(20, max(5, samples.size // 2))
+        counts, edges = np.histogram(samples, bins=bins, density=True)
+        centers = 0.5 * (edges[:-1] + edges[1:])
+        ax.plot(centers, counts, ls, color=color, marker=".", label=label)
+
+
+def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
+    """PDF (no CDF) of the system dispatch+combine CCT for exp3_pdf runs.
+
+    One figure per (batch, zipf_s); x-axis is the completion time of a full
+    attention->dispatch->GEMV->combine iteration (roundtrip cct_us). Each seed
+    contributes one CCT sample. Curves of interest: EP=128 and EP=1024, with
+    ub_rg vs packet_spray distinguished by line style.
+    """
+    sub = df[df["exp"] == "exp3_pdf"].copy()
+    if sub.empty:
+        return []
+    sub = sub[sub["cct_us"].notna() & (sub["cct_us"] > 0)]
+    # batch>=512 sweeps are dropped from the matrix; keep the PDF consistent.
+    sub = sub[sub["batch"] < 512]
+    if sub.empty:
+        return []
+    ep_color = {128: "C0", 1024: "C3"}
+    scheme_ls = {"ub_rg": "-", "packet_spray": "--"}
+    figs = []
+    for batch in sorted(sub["batch"].unique()):
+        for zs in sorted(sub["zipf_s"].unique()):
+            cell = sub[(sub["batch"] == batch) & np.isclose(sub["zipf_s"], zs)]
+            if cell.empty:
+                continue
+            fig, ax = plt.subplots(figsize=(7.5, 4.5))
+            any_curve = False
+            for ep in (128, 1024):
+                for scheme in ("ub_rg", "packet_spray"):
+                    g = cell[(cell["ep_size"] == ep) & (cell["scheme"] == scheme)]
+                    samples = g["cct_us"].to_numpy(dtype=float)
+                    samples = samples[np.isfinite(samples)]
+                    if samples.size < 2:
+                        continue
+                    label = f"EP={ep} {scheme} (n={samples.size})"
+                    _plot_density(ax, samples, scheme_ls[scheme], ep_color[ep], label)
+                    any_curve = True
+            if not any_curve:
+                plt.close(fig)
+                continue
+            style_ax(
+                ax,
+                f"Exp3 System CCT PDF (batch={int(batch)}, S={zs:g})",
+                "System dispatch+combine CCT (µs)  "
+                "[attention→dispatch→GEMV→combine one iteration]",
+                "Density",
+            )
+            path = figs_dir / f"exp3_pdf_b{int(batch)}_s{zs:g}.png"
+            fig.tight_layout()
+            fig.savefig(path, dpi=140)
+            plt.close(fig)
+            figs.append(path)
+    return figs
+
+
+
+def _write_html_report(md: str, html_path: Path, figs_dir: Path) -> None:
+    """Minimal MD→HTML for the generated report (headings, lists, images, code fences)."""
+    import html as html_lib
+    import re
+
+    parts = [
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+        "<title>UB_RG仿真报告</title>",
+        "<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:2rem auto;",
+        "line-height:1.55;padding:0 1rem;color:#222}",
+        "img{max-width:100%;height:auto;border:1px solid #ddd;margin:0.5rem 0}",
+        "pre{background:#f6f8fa;padding:0.75rem;overflow:auto;border-radius:6px}",
+        "code{font-family:ui-monospace,monospace}</style></head><body>\n",
+    ]
+    in_code = False
+    for line in md.splitlines():
+        if line.strip().startswith("```"):
+            if not in_code:
+                parts.append("<pre><code>")
+                in_code = True
+            else:
+                parts.append("</code></pre>\n")
+                in_code = False
+            continue
+        if in_code:
+            parts.append(html_lib.escape(line) + "\n")
+            continue
+        if line.startswith("# "):
+            parts.append(f"<h1>{html_lib.escape(line[2:])}</h1>\n")
+        elif line.startswith("## "):
+            parts.append(f"<h2>{html_lib.escape(line[3:])}</h2>\n")
+        elif line.startswith("### "):
+            parts.append(f"<h3>{html_lib.escape(line[4:])}</h3>\n")
+        elif line.startswith("!["):
+            m = re.match(r"!\[(.*?)\]\((.*?)\)", line)
+            if m:
+                parts.append(
+                    f"<p><img alt='{html_lib.escape(m.group(1))}' "
+                    f"src='{html_lib.escape(m.group(2))}'></p>\n"
+                )
+            else:
+                parts.append(f"<p>{html_lib.escape(line)}</p>\n")
+        elif line.startswith("- "):
+            parts.append(f"<li>{html_lib.escape(line[2:])}</li>\n")
+        elif line.strip() == "":
+            parts.append("<br/>\n")
+        else:
+            parts.append(f"<p>{html_lib.escape(line)}</p>\n")
+    parts.append("</body></html>\n")
+    html_path.write_text("".join(parts), encoding="utf-8")
+    print(f"Wrote {html_path}")
+
 def md_img(path: Path) -> str:
     rel = path.relative_to(ROOT).as_posix()
     return f"![{path.name}](../{rel})"
 
 
-def write_report(df: pd.DataFrame, fig_paths: list[Path]):
-    FIGS.mkdir(parents=True, exist_ok=True)
+def write_report(
+    df: pd.DataFrame,
+    fig_paths: list[Path],
+    results: Path,
+    figs_dir: Path,
+    peer_df: pd.DataFrame | None = None,
+):
+    figs_dir.mkdir(parents=True, exist_ok=True)
+    engine = str(df["engine"].iloc[0]) if "engine" in df.columns and len(df) else "unknown"
+    rel_results = results.relative_to(ROOT).as_posix()
     lines = []
     lines.append("# UB_RG 网络仿真报告\n")
     lines.append("## 1. 实验概述\n")
-    lines.append(
-        "本报告对应 [UB_RG实验设计.md](./UB_RG实验设计.md) §4.2.1–§4.2.3，"
-        "在 `ns-3-ub` 中用自包含行为级仿真器 "
-        "`scratch/ub_rg-dispatch-experiment.cc` 对比 **UB_RG（request/grant）** "
-        "与 **Packet Spray（自由注入）**。\n"
-    )
-    lines.append("### 1.1 模型假设与简化\n")
-    lines.append(
-        "- 端口 400Gbps（有效 50GB/s），grain = 7KB，τ_g ≈ 143.36 ns\n"
-        "- 链路建模为串行化服务器 + FIFO；交换机直通 150 ns/跳，传播 50 ns/跳\n"
-        "- UB_RG：目的侧按 1 grain/τ_g 授权节奏 + 源端口 FCFS；REQ/GNT RTT "
-        "场景1=0.6µs、场景2/3=1.1µs；SYNC 屏障 0.4/1.2µs\n"
-        "- Packet Spray：自由注入 + 源/上行散射；软件屏障 2/4µs\n"
-        "- **不**实现逐报文 REQ/GNT/SYNC 协议与可靠性路径（验证架构性排队/抖动差异）\n"
-        "- 专家与 NPU 1:1；TopK=8；token 不切分\n"
-    )
+    if engine == "packet":
+        lines.append(
+            "本报告对应 [UB_RG实验设计.md](./UB_RG实验设计.md) §4.2.1–§4.2.3，"
+            "在 `ns-3-ub` **Unified Bus 协议栈**上用逐包仿真器 "
+            "`scratch/ub_rg-packet-experiment.cc` 对比 **UB_RG（真实 REQ/GNT/SYNC）** "
+            "与 **Packet Spray（自由注入）**。\n"
+        )
+        lines.append("### 1.1 模型假设与简化\n")
+        lines.append(
+            "- 端口 400Gbps，grain = 7KB（2×MTU），τ_g ≈ 143.36 ns\n"
+            "- 真实 REQ/GNT/SYNC 控制报文（VL1）；末跳交换机拦截 REQ；"
+            "目的侧 1 grain/τ_g + credit window + RR；源侧 FCFS grant 队列\n"
+            "- SYNC：各调度器 LOCAL → 聚合 NPU(member0) → GLOBAL 广播（与文档 §4.9 聚合点差异见正文）\n"
+            "- 省略：可靠性重传、预补偿、多世代窗口、PHASE 管理面\n"
+            "- Packet Spray：`UsePacketSpray` + 自由注入；软件屏障在分析阶段叠加\n"
+            "- 专家与 NPU 1:1；TopK=8\n"
+        )
+    else:
+        lines.append(
+            "本报告对应 [UB_RG实验设计.md](./UB_RG实验设计.md) §4.2.1–§4.2.3，"
+            "在 `ns-3-ub` 中用自包含行为级仿真器 "
+            "`scratch/ub_rg-dispatch-experiment.cc` 对比 **UB_RG（request/grant）** "
+            "与 **Packet Spray（自由注入）**。\n"
+        )
+        lines.append("### 1.1 模型假设与简化\n")
+        lines.append(
+            "- 端口 400Gbps（有效 50GB/s），grain = 7KB，τ_g ≈ 143.36 ns\n"
+            "- 链路建模为串行化服务器 + FIFO；交换机直通 150 ns/跳，传播 50 ns/跳\n"
+            "- UB_RG：目的侧按 1 grain/τ_g 授权节奏 + 源端口 FCFS\n"
+            "- Packet Spray：自由注入；软件屏障在分析阶段叠加\n"
+            "- 专家与 NPU 1:1；TopK=8\n"
+        )
     lines.append("### 1.2 参数矩阵（裁剪）\n")
     lines.append(
         "| 实验 | mode | 场景 | BatchSize | Zipf S | EP |\n"
@@ -261,7 +372,14 @@ def write_report(df: pd.DataFrame, fig_paths: list[Path]):
         "| 3 Roundtrip | roundtrip | 1→{32,64,128}; 2/3→{256,1024} | 256 | 同左 | 上列 |\n"
     )
     n = len(df)
-    lines.append(f"\n成功汇总运行数：**{n}**。原始结果：`results/ub_rg/`。\n")
+    lines.append(f"\n引擎：**{engine}**；成功汇总运行数：**{n}**。原始结果：`{rel_results}/`。\n")
+    if engine == "packet":
+        lines.append(
+            "> 逐包引擎按计划风险路径裁剪：场景1 不含 BatchSize=4096；"
+            "场景2/3 仅保留 BatchSize≤256。完整 216 组矩阵由行为级引擎覆盖；"
+            "逐包用于机制校验与场景1 规模对标。实验3 系统 CCT PDF 若本引擎样本未齐，"
+            "报告自动回退到行为级多 seed 结果。\n"
+        )
 
     def table_for(exp: str, scenario: int, batch: int) -> str:
         s = df[(df["exp"] == exp) & (df["scenario"] == scenario) & (df["batch"] == batch)]
@@ -276,126 +394,200 @@ def write_report(df: pd.DataFrame, fig_paths: list[Path]):
         return "```\n" + piv.round(2).to_string() + "\n```\n"
 
     lines.append("## 2. 实验1：倾斜专家流量下的 Dispatch\n")
-    lines.append(
-        "观测吞吐、热点/非热点专家时延、CCT/BSP step。"
-        "预期：UB_RG 完成时间贴近 König 下界 + 一次 RTT；"
-        "Packet Spray 在均匀与倾斜下均有排队放大，屏障更重。\n"
-    )
     for sc in sorted(df[df["exp"] == "exp1_dispatch"]["scenario"].unique()):
         lines.append(f"### 2.{sc} 场景{sc}\n")
-        lines.append(f"**batch=256 对比表**\n\n")
+        lines.append("**batch=256 对比表**\n\n")
         lines.append(table_for("exp1_dispatch", int(sc), 256))
-        for p in FIGS.glob(f"exp1_dispatch_s{int(sc)}_*.png"):
+        for p in sorted(figs_dir.glob(f"exp1_dispatch_s{int(sc)}_*.png")):
             lines.append(md_img(p) + "\n")
 
     lines.append("## 3. 实验2：倾斜专家流量下的 Combine\n")
-    lines.append("与实验1同矩阵，流量为 dispatch 需求矩阵的反向边。\n")
     for sc in sorted(df[df["exp"] == "exp2_combine"]["scenario"].unique()):
         lines.append(f"### 3.{sc} 场景{sc}\n")
-        lines.append(f"**batch=256 对比表**\n\n")
+        lines.append("**batch=256 对比表**\n\n")
         lines.append(table_for("exp2_combine", int(sc), 256))
-        for p in FIGS.glob(f"exp2_combine_s{int(sc)}_*.png"):
+        for p in sorted(figs_dir.glob(f"exp2_combine_s{int(sc)}_*.png")):
             lines.append(md_img(p) + "\n")
 
-    lines.append("## 4. 实验3：不同 EP 大小的 Dispatch–Combine 时延 CDF/PDF\n")
+    lines.append("## 4. 实验3：系统级 Dispatch+Combine 完成时间 (CCT) PDF\n")
     lines.append(
-        "BatchSize 固定 256；绘制 per-token 时延的 CDF/PDF，以及 roundtrip step 随 EP 的变化。\n"
+        "横轴为**系统级一次迭代完成时间**（attention→dispatch→GEMV→combine 一个 roundtrip 步的 CCT，"
+        "口径 = kickoff→最后一个 combine token 完成，取自 summary.json 的 `cct_us`），"
+        "**不再是逐 token 时延**。对每个 (BatchSize, Zipf S) 组合，"
+        "在多个随机种子下各跑一次 roundtrip，每次运行贡献一个系统 CCT 样本，"
+        "以此得到系统 CCT 的概率密度分布（PDF，无 CDF）。\n"
     )
-    for sc in sorted(df[df["exp"] == "exp3_roundtrip"]["scenario"].unique()):
-        lines.append(f"### 4.{sc} 场景{sc}\n")
-        s = df[(df["exp"] == "exp3_roundtrip") & (df["scenario"] == sc)]
-        brief = s.pivot_table(
-            index=["ep_size", "zipf_s"],
+    lines.append(
+        "对比曲线：**EP=128**（场景1，case s1_n128）与 **EP=1024**（场景2，case s2_n1024）；"
+        "颜色区分 EP，线型区分方案（实线 ub_rg，虚线 packet_spray）。\n"
+    )
+    pdf_df = df[df["exp"] == "exp3_pdf"].copy()
+    pdf_df = pdf_df[pdf_df["cct_us"].notna() & (pdf_df["cct_us"] > 0)]
+    pdf_df = pdf_df[pdf_df["batch"] < 512]
+    pdf_figs_dir = figs_dir
+    pdf_note = ""
+    # If this engine has no exp3_pdf yet, fall back to the peer engine's samples/figures.
+    if pdf_df.empty and peer_df is not None and not peer_df.empty:
+        peer_pdf = peer_df[peer_df["exp"] == "exp3_pdf"].copy()
+        peer_pdf = peer_pdf[peer_pdf["cct_us"].notna() & (peer_pdf["cct_us"] > 0)]
+        peer_pdf = peer_pdf[peer_pdf["batch"] < 512]
+        if not peer_pdf.empty:
+            pdf_df = peer_pdf
+            peer_engine = str(peer_pdf["engine"].iloc[0]) if "engine" in peer_pdf.columns else "peer"
+            peer_root = ROOT / "results" / ("ub_rg_packet" if peer_engine == "packet" else "ub_rg")
+            if (peer_root / "figures").exists():
+                pdf_figs_dir = peer_root / "figures"
+            pdf_note = f"（当前引擎尚无 exp3_pdf；下图暂用 **{peer_engine}** 引擎样本）\n"
+    if not pdf_df.empty:
+        if pdf_note:
+            lines.append(pdf_note)
+        stats = pdf_df.pivot_table(
+            index=["ep_size", "batch", "zipf_s"],
             columns="scheme",
-            values="step_us",
-            aggfunc="mean",
+            values="cct_us",
+            aggfunc=["mean", "std", "count"],
         )
-        lines.append("```\n" + brief.round(2).to_string() + "\n```\n")
-        for p in FIGS.glob(f"exp3_s{int(sc)}_*.png"):
+        lines.append("**系统 CCT 样本统计（µs，mean/std/count）**\n\n")
+        lines.append("```\n" + stats.round(2).to_string() + "\n```\n")
+        for p in sorted(pdf_figs_dir.glob("exp3_pdf_b*_s*.png")):
+            lines.append(md_img(p) + "\n")
+    else:
+        lines.append("_（exp3_pdf 系统 CCT 样本尚未生成，运行 `run_ub_rg_experiments.py --exp3-pdf`）_\n")
+    lines.append("### 4.x Roundtrip Step vs EP（汇总）\n")
+    for sc in sorted(df[df["exp"] == "exp3_roundtrip"]["scenario"].unique()):
+        for p in sorted(figs_dir.glob(f"exp3_s{int(sc)}_step_vs_ep.png")):
             lines.append(md_img(p) + "\n")
 
-    lines.append("## 5. 与理论预期对照（ub_request_grant §8）\n")
-    # compute some aggregate deltas
+    lines.append("## 5. 方案对比摘要\n")
     e1 = df[df["exp"] == "exp1_dispatch"]
     if not e1.empty:
-        lines.append("以实验1全部点为样本：\n")
         for sc in sorted(e1["scenario"].unique()):
             s = e1[e1["scenario"] == sc]
             rg = s[s["scheme"] == "ub_rg"]["step_us"].mean()
             sp = s[s["scheme"] == "packet_spray"]["step_us"].mean()
-            rg_p99 = s[s["scheme"] == "ub_rg"]["lat_p99"].mean()
-            sp_p99 = s[s["scheme"] == "packet_spray"]["lat_p99"].mean()
-            # CCT / König ratio
-            rg_ratio = (s[s["scheme"] == "ub_rg"]["cct_us"] / s[s["scheme"] == "ub_rg"]["konig_us"]).mean()
-            sp_ratio = (
-                s[s["scheme"] == "packet_spray"]["cct_us"] / s[s["scheme"] == "packet_spray"]["konig_us"]
-            ).mean()
-            lines.append(
-                f"- **场景{int(sc)}**：平均 step UB_RG={rg:.1f}µs vs Spray={sp:.1f}µs"
-                f"（相对优势 {(sp/rg-1)*100:.1f}%）；"
-                f"平均 p99 {rg_p99:.1f} vs {sp_p99:.1f}µs；"
-                f"CCT/König 比 RG={rg_ratio:.2f}、Spray={sp_ratio:.2f}\n"
-            )
-    lines.append(
-        "\n对照结论：\n"
-        "1. **固定项**：UB_RG 每步支付 RTT，但内建 SYNC 屏障显著轻于软件屏障；"
-        "完整 BSP step 口径下 UB_RG 更优（与 §8.4 一致）。"
-        "场景1 batch=256、S=0 时 step 45.3 vs 81.8µs，优势主要来自屏障与去排队。\n"
-        "2. **乘性项**：Packet Spray 的 CCT/König 均值约 1.24–1.32；"
-        "UB_RG 约 1.04–1.09（贴近下界 + RTT/hop）。\n"
-        "3. **热点隔离**：高 Zipf S 下，冷专家 p99 在 UB_RG 中明显更低"
-        "（场景1 batch=256、S=0.9：cold p99 由 Spray 侧整体时延分布拖高，"
-        "RG 的 lat_p99 148 vs Spray 341µs）。\n"
-        "4. **规模效应**：在本行为级模型中，场景2/3 的主瓶颈同为目的下行口，"
-        "高倾斜时两侧都逼近物理下界，相对差距缩小（场景1 平均 step 优势 15%，"
-        "场景2/3 约 3.5%）；场景2与场景3在当前简化中数值接近"
-        "（平面隔离的中段差异未细粒度建模）。"
-        "完整协议栈落地后，两层 ECMP 失衡会使 Spray 的 κ 进一步恶化（§8.8）。\n"
-    )
+            if rg and sp and rg > 0:
+                lines.append(
+                    f"- **场景{int(sc)}** 平均 step：UB_RG={rg:.1f}µs vs Spray={sp:.1f}µs"
+                    f"（Spray/RG={(sp/rg):.2f}×）\n"
+                )
+            # CCT / König ratio when bound is available
+            s2 = s[s["konig_us"].notna() & (s["konig_us"] > 0)].copy()
+            if not s2.empty:
+                s2["ratio"] = s2["cct_us"] / s2["konig_us"]
+                for scheme in ("ub_rg", "packet_spray"):
+                    g = s2[s2["scheme"] == scheme]["ratio"]
+                    if not g.empty:
+                        lines.append(
+                            f"- **场景{int(sc)}** {scheme} CCT/König："
+                            f"mean={g.mean():.3f}，median={g.median():.3f}\n"
+                        )
 
-    lines.append("## 6. 结论\n")
+    if peer_df is not None and not peer_df.empty:
+        lines.append("## 6. 双引擎对比（逐包 vs 行为级）\n")
+        lines.append(
+            "在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。\n"
+        )
+        keys = ["exp", "scenario", "scheme", "mode", "batch", "zipf_s", "ep_size"]
+        a = df[keys + ["step_us", "lat_p99"]].rename(
+            columns={"step_us": "step_packet", "lat_p99": "p99_packet"}
+        )
+        b = peer_df[keys + ["step_us", "lat_p99"]].rename(
+            columns={"step_us": "step_behav", "lat_p99": "p99_behav"}
+        )
+        m = a.merge(b, on=keys, how="inner")
+        if m.empty:
+            lines.append("_无对齐样本（另一引擎结果尚未齐备）。_\n")
+        else:
+            m["step_ratio"] = m["step_packet"] / m["step_behav"].replace(0, np.nan)
+            lines.append(
+                f"对齐样本 **{len(m)}** 组；step 比值（packet/behavioral）"
+                f"均值={m['step_ratio'].mean():.3f}，"
+                f"中位数={m['step_ratio'].median():.3f}。\n"
+            )
+            sample = m.head(20)
+            lines.append("```\n" + sample.round(3).to_string(index=False) + "\n```\n")
+            lines.append(
+                "差异主要来自：逐包栈的静态时延（传播/转发/分配）、真实控制面报文、"
+                "以及 TP/Jetty 注入路径；行为级模型把这些折叠为常量 RTT/屏障。\n"
+            )
+
+    lines.append("## 7. 结论\n")
     lines.append(
-        "- 在 EP Dispatch/Combine 批量已知、次序自由的前提下，"
-        "**授权节奏控制**可将分组交换的完成时间压到 König 下界附近，"
-        "并把抖动收敛为有界 σ 级。\n"
-        "- 相对 Packet Spray，UB_RG 在 **BSP step 时间、p99 时延、热点隔离** 上全面占优；"
-        "首 token / 纯 CCT 口径下 Spray 可能因免 RTT 在小批量幸运情形略快，"
-        "但不是 BSP 有效指标。\n"
-        "- 本仿真为行为级模型；后续可在 UB 协议栈中落地真实 REQ/GNT/SYNC 报文以校验控制面开销。\n"
+        "- UB_RG 通过目的侧授权节奏控制将完成时间压到出口瓶颈附近，并隔离热点排队。\n"
+        "- Packet Spray 在倾斜流量下 p99/CCT 放大更明显，软件屏障也更重。\n"
+        "- 逐包引擎用于校验控制面与数据面交互；行为级引擎用于快速扫矩阵。\n"
     )
-    lines.append("## 7. 复现方法\n")
+    lines.append("## 8. 复现方法\n")
     lines.append(
         "```bash\n"
-        "cd ns-3-ub\n"
-        "python3.12 ./ns3 configure --enable-modules=core --disable-examples "
-        "--disable-tests --disable-mpi --disable-mtp --disable-werror -d optimized -G Ninja\n"
-        "python3.12 ./ns3 build -j$(nproc) ub_rg-dispatch-experiment\n"
+        "cd ns-3-ub && ./ns3 configure --enable-modules=unified-bus --enable-mtp "
+        "--disable-python -d optimized\n"
+        "./ns3 build ub_rg-packet-experiment\n"
         "cd ..\n"
-        "python3 run_ub_rg_experiments.py --workers 14\n"
-        "python3 analyze_ub_rg_experiments.py\n"
+        "python3 gen_ub_rg_topo.py --scenario 1\n"
+        "python3 run_ub_rg_experiments.py --engine packet --workers 4\n"
+        "python3 run_ub_rg_experiments.py --engine packet --exp3-pdf --seeds 8 "
+        "--batches 16,64,256,1024 --workers 4\n"
+        "python3 analyze_ub_rg_experiments.py --engine packet\n"
         "```\n"
     )
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text("".join(lines), encoding="utf-8")
     print(f"Wrote report {REPORT}")
-    csv_path = RESULTS / "all_summaries.csv"
+    _write_html_report("".join(lines), REPORT.with_suffix(".html"), figs_dir)
+    csv_path = results / "all_summaries.csv"
     df.to_csv(csv_path, index=False)
     print(f"Wrote {csv_path} ({len(df)} rows), {len(fig_paths)} figures")
 
 
-def main():
-    FIGS.mkdir(parents=True, exist_ok=True)
-    df = load_summaries()
+def _analyze_one(results: Path) -> int:
+    figs_dir = results / "figures"
+    figs_dir.mkdir(parents=True, exist_ok=True)
+    df = load_summaries(results)
     if df.empty:
-        print("No summaries found under", RESULTS)
+        print("No summaries found under", results)
         return 1
+
+    peer = None
+    other = ROOT / "results" / ("ub_rg" if results.name == "ub_rg_packet" else "ub_rg_packet")
+    if other.exists():
+        peer = load_summaries(other)
+
     figs = []
-    figs += plot_exp12(df, "exp1_dispatch", "Exp1 Dispatch")
-    figs += plot_exp12(df, "exp2_combine", "Exp2 Combine")
-    figs += plot_exp3(df)
-    write_report(df, figs)
+    figs += plot_exp12(df, "exp1_dispatch", "Exp1 Dispatch", figs_dir)
+    figs += plot_exp12(df, "exp2_combine", "Exp2 Combine", figs_dir)
+    figs += plot_exp3(df, figs_dir)
+    figs += plot_exp3_pdf(df, figs_dir)
+    write_report(df, figs, results, figs_dir, peer)
     return 0
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--engine", choices=["behavioral", "packet", "both"], default="packet")
+    ap.add_argument("--results", type=str, default="", help="Override results directory")
+    args = ap.parse_args()
+
+    targets: list[Path] = []
+    if args.results:
+        targets = [Path(args.results)]
+    elif args.engine == "both":
+        # Behavioral first; packet last so docs/UB_RG仿真报告.* reflects packet.
+        targets = [ROOT / "results" / "ub_rg", ROOT / "results" / "ub_rg_packet"]
+    elif args.engine == "behavioral":
+        targets = [ROOT / "results" / "ub_rg"]
+    else:
+        targets = [ROOT / "results" / "ub_rg_packet"]
+
+    rc = 0
+    for results in targets:
+        if not results.exists():
+            print("Skip missing", results)
+            continue
+        r = _analyze_one(results)
+        rc = rc or r
+    return rc
 
 
 if __name__ == "__main__":
