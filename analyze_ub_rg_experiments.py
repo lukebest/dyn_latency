@@ -202,14 +202,14 @@ def _plot_density(ax, samples: np.ndarray, ls: str, color: str, label: str) -> N
     try:
         from scipy.stats import gaussian_kde
 
-        # scott factor under-smooths tiny n; widen a bit for readable PDF tails.
-        bw = max(0.5, samples.size ** (-1.0 / 5.0))
+        # Wider bandwidth → visually open PDF curves (still integrates to 1).
+        bw = max(0.85, 1.4 * samples.size ** (-1.0 / 5.0))
         kde = gaussian_kde(samples, bw_method=bw)
-        pad = max(3.0 * float(np.std(samples)), 0.25 * span, 1.0)
-        xs = np.linspace(lo - pad, hi + pad, 512)
+        pad = max(4.5 * float(np.std(samples)), 0.6 * span, 2.0)
+        xs = np.linspace(max(0.0, lo - pad), hi + pad, 640)
         ys = kde(xs)
-        # trim near-zero tails so axes stay readable across EP128/EP1024
-        thr = 0.02 * float(ys.max())
+        # Keep more of the tails so curves look open, not truncated spikes.
+        thr = 0.005 * float(ys.max())
         mask = ys >= thr
         if mask.any():
             i0, i1 = int(np.argmax(mask)), int(len(mask) - 1 - np.argmax(mask[::-1]))

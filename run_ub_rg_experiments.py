@@ -23,8 +23,8 @@ SEED = 1
 # Exp3 PDF sweep: EP128 -> scenario 1 (s1_n128); EP1024 -> scenario 2 (s2_n1024).
 EXP3_PDF_EP_SCENARIO = {128: 1, 1024: 2}
 EXP3_PDF_DEFAULT_BATCHES = [16, 64, 256]
-# 8 seeds makes KDE curves look like short spikes; 32 gives usable PDF tails.
-EXP3_PDF_DEFAULT_SEEDS = 32
+# More seeds widen empirical CCT spread for PDF tails (32→96).
+EXP3_PDF_DEFAULT_SEEDS = 96
 
 
 @dataclass(frozen=True)

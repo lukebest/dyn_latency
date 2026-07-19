@@ -1,13 +1,12 @@
 <!DOCTYPE html><html><head><meta charset='utf-8'><title>UB_RG仿真报告</title><style>body{font-family:system-ui,sans-serif;max-width:980px;margin:2rem auto;line-height:1.55;padding:0 1rem;color:#222}img{max-width:100%;height:auto;border:1px solid #ddd;margin:0.5rem 0}pre{background:#f6f8fa;padding:0.75rem;overflow:auto;border-radius:6px}code{font-family:ui-monospace,monospace}</style></head><body>
 <h1>UB_RG 网络仿真报告</h1>
 <h2>1. 实验概述</h2>
-<p>本报告对应 [UB_RG实验设计.md](./UB_RG实验设计.md) §4.2.1–§4.2.3，在 `ns-3-ub` **Unified Bus 协议栈**上用逐包仿真器 `scratch/ub_rg-packet-experiment.cc` 对比 **UB_RG（真实 REQ/GNT/SYNC）** 与 **Packet Spray（自由注入）**。</p>
+<p>本报告对应 [UB_RG实验设计.md](./UB_RG实验设计.md) §4.2.1–§4.2.3，在 `ns-3-ub` 中用自包含行为级仿真器 `scratch/ub_rg-dispatch-experiment.cc` 对比 **UB_RG（request/grant）** 与 **Packet Spray（自由注入）**。</p>
 <h3>1.1 模型假设与简化</h3>
-<li>端口 400Gbps，grain = 7KB（2×MTU），τ_g ≈ 143.36 ns</li>
-<li>真实 REQ/GNT/SYNC 控制报文（VL1）；末跳交换机拦截 REQ；目的侧 1 grain/τ_g + credit window + RR；源侧 FCFS grant 队列</li>
-<li>SYNC：各调度器 LOCAL → 聚合 NPU(member0) → GLOBAL 广播（与文档 §4.9 聚合点差异见正文）</li>
-<li>省略：可靠性重传、预补偿、多世代窗口、PHASE 管理面</li>
-<li>Packet Spray：`UsePacketSpray` + 自由注入；软件屏障在分析阶段叠加</li>
+<li>端口 400Gbps（有效 50GB/s），grain = 7KB，τ_g ≈ 143.36 ns</li>
+<li>链路建模为串行化服务器 + FIFO；交换机直通 150 ns/跳，传播 50 ns/跳</li>
+<li>UB_RG：目的侧按 1 grain/τ_g 授权节奏 + 源端口 FCFS</li>
+<li>Packet Spray：自由注入；软件屏障在分析阶段叠加</li>
 <li>专家与 NPU 1:1；TopK=8</li>
 <h3>1.2 参数矩阵（裁剪）</h3>
 <p>| 实验 | mode | 场景 | BatchSize | Zipf S | EP |</p>
@@ -16,8 +15,7 @@
 <p>| 2 Combine | combine | 同实验1 | 同左 | 同左 | full |</p>
 <p>| 3 Roundtrip | roundtrip | 1→{32,64,128}; 2/3→{256,1024} | 256 | 同左 | 上列 |</p>
 <br/>
-<p>引擎：**packet**；成功汇总运行数：**55**。原始结果：`results/ub_rg_packet/`。</p>
-<p>&gt; 逐包引擎按计划风险路径裁剪：场景1 不含 BatchSize=4096；场景2/3 仅保留 BatchSize≤256。完整 216 组矩阵由行为级引擎覆盖；逐包用于机制校验与场景1 规模对标。实验3 系统 CCT PDF 若本引擎样本未齐，报告自动回退到行为级多 seed 结果。</p>
+<p>引擎：**behavioral**；成功汇总运行数：**4952**。原始结果：`results/ub_rg/`。</p>
 <h2>2. 实验1：倾斜专家流量下的 Dispatch</h2>
 <h3>2.1 场景1</h3>
 <p>**batch=256 对比表**</p>
@@ -25,115 +23,117 @@
 <pre><code>             cct_us              hot_p99              lat_p99              step_us         throughput_GBs          
 scheme packet_spray   ub_rg packet_spray   ub_rg packet_spray   ub_rg packet_spray   ub_rg   packet_spray     ub_rg
 zipf_s                                                                                                             
-0.0          384.35  168.48       374.84   57.08       346.22   49.40       386.35  168.88        4888.90  11153.08
-0.3          974.94  282.13       900.34  122.39       334.74   56.33       976.94  282.53        1927.35   6660.32
-0.7         2792.42  645.31       695.67  230.70       488.42  158.27      2794.42  645.71         672.91   2911.84
-0.9         3864.59  883.38       690.45  264.34       758.11  310.90      3866.59  883.78         486.22   2127.11
+0.0           79.81   44.91        73.94   40.87        66.77   34.42        81.81   45.31       23542.60  41842.33
+0.3          150.35  114.35       133.86  100.51        94.72   37.86       152.35  114.75       12498.00  16431.72
+0.7          367.39  328.10       335.86  303.22       244.39   88.50       369.39  328.50        5114.52   5726.98
+0.9          494.27  447.24       454.99  423.81       341.02  148.42       496.27  447.64        3801.67   4201.46
 </code></pre>
-<p><img alt='exp1_dispatch_s1_hotcold_p99_vs_s.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s1_hotcold_p99_vs_s.png'></p>
-<p><img alt='exp1_dispatch_s1_step_vs_batch.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s1_step_vs_batch.png'></p>
-<p><img alt='exp1_dispatch_s1_throughput_vs_s.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s1_throughput_vs_s.png'></p>
+<p><img alt='exp1_dispatch_s1_hotcold_p99_vs_s.png' src='../results/ub_rg/figures/exp1_dispatch_s1_hotcold_p99_vs_s.png'></p>
+<p><img alt='exp1_dispatch_s1_step_vs_batch.png' src='../results/ub_rg/figures/exp1_dispatch_s1_step_vs_batch.png'></p>
+<p><img alt='exp1_dispatch_s1_throughput_vs_s.png' src='../results/ub_rg/figures/exp1_dispatch_s1_throughput_vs_s.png'></p>
 <h3>2.2 场景2</h3>
-<p>**batch=16（256 尚未齐，暂用已有最大 batch） 对比表**</p>
+<p>**batch=256 对比表**</p>
 <br/>
-<pre><code>             cct_us               hot_p99             lat_p99             step_us          throughput_GBs          
-scheme packet_spray    ub_rg packet_spray  ub_rg packet_spray  ub_rg packet_spray    ub_rg   packet_spray     ub_rg
-zipf_s                                                                                                             
-0.0           29.15    32.29        26.06  14.76        26.11  14.74        33.15    33.49       32235.10  29098.24
-0.3          122.28   120.67        92.71  18.41        63.26  16.93       126.28   121.87        7683.19   7785.77
-0.7          730.34   719.00       214.59  26.14       627.35  29.18       734.34   720.20        1286.42   1306.70
-0.9         1383.21  1366.21       151.49  23.24      1306.64  54.94      1387.21  1367.41         679.24    687.68
+<pre><code>             cct_us               hot_p99               lat_p99               step_us          throughput_GBs           
+scheme packet_spray    ub_rg packet_spray    ub_rg packet_spray    ub_rg packet_spray    ub_rg   packet_spray      ub_rg
+zipf_s                                                                                                                  
+0.0           83.31    59.82        76.29    48.41        77.29    49.59        87.31    61.02      180434.64  251276.84
+0.3          246.17   211.99       127.47    84.11       122.59    84.20       250.17   213.19       61065.30   70909.66
+0.7         1442.79  1404.89       863.76   835.30       873.66   835.16      1446.79  1406.09       10418.93   10700.03
+0.9         2693.04  2654.56      2049.06  2021.99      2073.01  2021.85      2697.04  2655.76        5581.94    5662.85
 </code></pre>
-<p><img alt='exp1_dispatch_s2_hotcold_p99_vs_s.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s2_hotcold_p99_vs_s.png'></p>
-<p><img alt='exp1_dispatch_s2_step_vs_batch.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s2_step_vs_batch.png'></p>
-<p><img alt='exp1_dispatch_s2_throughput_vs_s.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s2_throughput_vs_s.png'></p>
+<p><img alt='exp1_dispatch_s2_hotcold_p99_vs_s.png' src='../results/ub_rg/figures/exp1_dispatch_s2_hotcold_p99_vs_s.png'></p>
+<p><img alt='exp1_dispatch_s2_step_vs_batch.png' src='../results/ub_rg/figures/exp1_dispatch_s2_step_vs_batch.png'></p>
+<p><img alt='exp1_dispatch_s2_throughput_vs_s.png' src='../results/ub_rg/figures/exp1_dispatch_s2_throughput_vs_s.png'></p>
 <h3>2.3 场景3</h3>
-<p>**batch=16（256 尚未齐，暂用已有最大 batch） 对比表**</p>
+<p>**batch=256 对比表**</p>
 <br/>
-<pre><code>             cct_us               hot_p99             lat_p99             step_us          throughput_GBs          
-scheme packet_spray    ub_rg packet_spray  ub_rg packet_spray  ub_rg packet_spray    ub_rg   packet_spray     ub_rg
-zipf_s                                                                                                             
-0.0          185.14    54.18       167.11  35.12       177.81  36.66       189.14    55.38        5074.75  17342.07
-0.3          358.53   522.51       340.44  45.92       337.43  46.20       362.53   523.71        2620.47   1798.09
-0.7         1021.30  1039.74       788.18  57.86       924.26  60.21      1025.30  1040.94         919.93    903.61
-0.9         1705.66      NaN       863.66    NaN      1612.65    NaN      1709.66      NaN         550.83       NaN
+<pre><code>             cct_us               hot_p99               lat_p99               step_us          throughput_GBs           
+scheme packet_spray    ub_rg packet_spray    ub_rg packet_spray    ub_rg packet_spray    ub_rg   packet_spray      ub_rg
+zipf_s                                                                                                                  
+0.0           83.31    59.82        76.29    48.41        77.29    49.59        87.31    61.02      180434.64  251276.84
+0.3          246.17   211.99       127.47    84.11       122.59    84.20       250.17   213.19       61065.30   70909.66
+0.7         1442.79  1404.89       863.76   835.30       873.66   835.16      1446.79  1406.09       10418.93   10700.03
+0.9         2693.04  2654.56      2049.06  2021.99      2073.01  2021.85      2697.04  2655.76        5581.94    5662.85
 </code></pre>
-<p><img alt='exp1_dispatch_s3_hotcold_p99_vs_s.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s3_hotcold_p99_vs_s.png'></p>
-<p><img alt='exp1_dispatch_s3_step_vs_batch.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s3_step_vs_batch.png'></p>
-<p><img alt='exp1_dispatch_s3_throughput_vs_s.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s3_throughput_vs_s.png'></p>
+<p><img alt='exp1_dispatch_s3_hotcold_p99_vs_s.png' src='../results/ub_rg/figures/exp1_dispatch_s3_hotcold_p99_vs_s.png'></p>
+<p><img alt='exp1_dispatch_s3_step_vs_batch.png' src='../results/ub_rg/figures/exp1_dispatch_s3_step_vs_batch.png'></p>
+<p><img alt='exp1_dispatch_s3_throughput_vs_s.png' src='../results/ub_rg/figures/exp1_dispatch_s3_throughput_vs_s.png'></p>
 <h2>3. 实验2：倾斜专家流量下的 Combine</h2>
 <h3>3.1 场景1</h3>
 <p>**batch=256 对比表**</p>
 <br/>
-<pre><code>             cct_us      hot_p99      lat_p99      step_us throughput_GBs
-scheme packet_spray packet_spray packet_spray packet_spray   packet_spray
-zipf_s                                                                   
-0.0          388.27       379.54       349.39       390.27        4839.49
+<pre><code>             cct_us              hot_p99              lat_p99              step_us         throughput_GBs          
+scheme packet_spray   ub_rg packet_spray   ub_rg packet_spray   ub_rg packet_spray   ub_rg   packet_spray     ub_rg
+zipf_s                                                                                                             
+0.0           75.80   44.78        40.25   40.25        62.47   33.86        77.80   45.18       24789.32  41964.48
+0.3          144.47  114.36       110.49  100.54       128.70   37.43       146.47  114.76       13006.48  16431.03
+0.7          353.35  328.21       320.80  303.17       332.42   88.35       355.35  328.61        5317.88   5725.10
+0.9          477.78  447.32       446.24  423.79       454.70  148.50       479.78  447.72        3932.86   4200.71
 </code></pre>
-<p><img alt='exp2_combine_s1_hotcold_p99_vs_s.png' src='../results/ub_rg_packet/figures/exp2_combine_s1_hotcold_p99_vs_s.png'></p>
-<p><img alt='exp2_combine_s1_step_vs_batch.png' src='../results/ub_rg_packet/figures/exp2_combine_s1_step_vs_batch.png'></p>
-<p><img alt='exp2_combine_s1_throughput_vs_s.png' src='../results/ub_rg_packet/figures/exp2_combine_s1_throughput_vs_s.png'></p>
+<p><img alt='exp2_combine_s1_hotcold_p99_vs_s.png' src='../results/ub_rg/figures/exp2_combine_s1_hotcold_p99_vs_s.png'></p>
+<p><img alt='exp2_combine_s1_step_vs_batch.png' src='../results/ub_rg/figures/exp2_combine_s1_step_vs_batch.png'></p>
+<p><img alt='exp2_combine_s1_throughput_vs_s.png' src='../results/ub_rg/figures/exp2_combine_s1_throughput_vs_s.png'></p>
 <h3>3.2 场景2</h3>
-<p>**batch=16（256 尚未齐，暂用已有最大 batch） 对比表**</p>
+<p>**batch=256 对比表**</p>
 <br/>
-<pre><code>             cct_us               hot_p99             lat_p99              step_us          throughput_GBs          
-scheme packet_spray    ub_rg packet_spray  ub_rg packet_spray   ub_rg packet_spray    ub_rg   packet_spray     ub_rg
-zipf_s                                                                                                              
-0.0           31.13    27.56        27.63  14.52        27.56   14.45        35.13    28.76       30180.66  34090.13
-0.3          124.13   501.48        99.79  24.50        68.59   18.56       128.13   502.68        7569.12   1873.52
-0.7          761.07  2503.92       240.55  64.84       562.33  123.16       765.07  2505.12        1234.48    375.22
-0.9         1441.35  4502.06       176.82  56.97      1273.83  217.96      1445.35  4503.26         651.83    208.69
+<pre><code>             cct_us               hot_p99               lat_p99               step_us          throughput_GBs           
+scheme packet_spray    ub_rg packet_spray    ub_rg packet_spray    ub_rg packet_spray    ub_rg   packet_spray      ub_rg
+zipf_s                                                                                                                  
+0.0           83.03    49.41        42.31    39.38        71.99    40.66        87.03    50.61      181057.76  304235.51
+0.3          248.46   211.89       209.47    84.24       234.56    84.48       252.46   213.09       60501.55   70943.71
+0.7         1420.72  1404.75      1383.87   836.86      1405.66   833.36      1424.72  1405.95       10580.84   10701.13
+0.9         2667.23  2654.39      2635.12  2021.64      2650.89  2018.45      2671.23  2655.59        5635.95    5663.21
 </code></pre>
-<p><img alt='exp2_combine_s2_hotcold_p99_vs_s.png' src='../results/ub_rg_packet/figures/exp2_combine_s2_hotcold_p99_vs_s.png'></p>
-<p><img alt='exp2_combine_s2_step_vs_batch.png' src='../results/ub_rg_packet/figures/exp2_combine_s2_step_vs_batch.png'></p>
-<p><img alt='exp2_combine_s2_throughput_vs_s.png' src='../results/ub_rg_packet/figures/exp2_combine_s2_throughput_vs_s.png'></p>
+<p><img alt='exp2_combine_s2_hotcold_p99_vs_s.png' src='../results/ub_rg/figures/exp2_combine_s2_hotcold_p99_vs_s.png'></p>
+<p><img alt='exp2_combine_s2_step_vs_batch.png' src='../results/ub_rg/figures/exp2_combine_s2_step_vs_batch.png'></p>
+<p><img alt='exp2_combine_s2_throughput_vs_s.png' src='../results/ub_rg/figures/exp2_combine_s2_throughput_vs_s.png'></p>
 <h3>3.3 场景3</h3>
-<p>**batch=16（256 尚未齐，暂用已有最大 batch） 对比表**</p>
+<p>**batch=256 对比表**</p>
 <br/>
-<pre><code>             cct_us               hot_p99              lat_p99              step_us          throughput_GBs          
-scheme packet_spray    ub_rg packet_spray   ub_rg packet_spray   ub_rg packet_spray    ub_rg   packet_spray     ub_rg
-zipf_s                                                                                                               
-0.0          184.04    54.32       179.83   36.98       177.50   36.78       188.04    55.52        5105.00  17294.83
-0.3          357.02   519.94       333.64   71.52       309.58   66.74       361.02   521.14        2631.54   1806.99
-0.7         1252.02  2599.59       740.10  136.20      1051.64  131.89      1256.02  2600.79         750.41    361.41
-0.9         2024.35      NaN       729.08     NaN      1826.11     NaN      2028.35      NaN         464.11       NaN
+<pre><code>             cct_us               hot_p99               lat_p99               step_us          throughput_GBs           
+scheme packet_spray    ub_rg packet_spray    ub_rg packet_spray    ub_rg packet_spray    ub_rg   packet_spray      ub_rg
+zipf_s                                                                                                                  
+0.0           83.03    49.41        42.31    39.38        71.99    40.66        87.03    50.61      181057.76  304235.51
+0.3          248.46   211.89       209.47    84.24       234.56    84.48       252.46   213.09       60501.55   70943.71
+0.7         1420.72  1404.75      1383.87   836.86      1405.66   833.36      1424.72  1405.95       10580.84   10701.13
+0.9         2667.23  2654.39      2635.12  2021.64      2650.89  2018.45      2671.23  2655.59        5635.95    5663.21
 </code></pre>
-<p><img alt='exp2_combine_s3_hotcold_p99_vs_s.png' src='../results/ub_rg_packet/figures/exp2_combine_s3_hotcold_p99_vs_s.png'></p>
-<p><img alt='exp2_combine_s3_step_vs_batch.png' src='../results/ub_rg_packet/figures/exp2_combine_s3_step_vs_batch.png'></p>
-<p><img alt='exp2_combine_s3_throughput_vs_s.png' src='../results/ub_rg_packet/figures/exp2_combine_s3_throughput_vs_s.png'></p>
+<p><img alt='exp2_combine_s3_hotcold_p99_vs_s.png' src='../results/ub_rg/figures/exp2_combine_s3_hotcold_p99_vs_s.png'></p>
+<p><img alt='exp2_combine_s3_step_vs_batch.png' src='../results/ub_rg/figures/exp2_combine_s3_step_vs_batch.png'></p>
+<p><img alt='exp2_combine_s3_throughput_vs_s.png' src='../results/ub_rg/figures/exp2_combine_s3_throughput_vs_s.png'></p>
 <h2>4. 实验3：系统级 Dispatch+Combine 完成时间 (CCT) PDF</h2>
 <p>横轴为**系统级一次迭代完成时间**（attention→dispatch→GEMV→combine 一个 roundtrip 步的 CCT，口径 = kickoff→最后一个 combine token 完成，取自 summary.json 的 `cct_us`），**不再是逐 token 时延**。对每个 (BatchSize, Zipf S) 组合，在多个随机种子下各跑一次 roundtrip，每次运行贡献一个系统 CCT 样本，以此得到系统 CCT 的概率密度分布（PDF，无 CDF）。</p>
 <p>对比曲线：**EP=128**（场景1，case s1_n128）与 **EP=1024**（场景2，case s2_n1024）；颜色区分 EP，线型区分方案（实线 ub_rg，虚线 packet_spray）。</p>
-<p>（当前引擎尚无 exp3_pdf；下图暂用 **behavioral** 引擎样本）</p>
 <p>**系统 CCT 样本统计（µs，mean/std/count）**</p>
 <br/>
 <pre><code>                             mean                   std               count      
 scheme               packet_spray    ub_rg packet_spray  ub_rg packet_spray ub_rg
 ep_size batch zipf_s                                                             
-128     16    0.0           12.91    11.53         0.42   0.41           32    32
-              0.3           20.48    18.18         0.85   0.92           32    32
-              0.7           46.95    44.68         1.23   1.32           32    32
-              0.9           62.73    59.92         1.07   1.04           32    32
-        64    0.0           42.14    29.58         0.71   0.59           32    32
-              0.3           74.92    60.97         1.63   2.12           32    32
-              0.7          180.11   165.81         2.72   2.83           32    32
-              0.9          242.42   227.40         2.34   2.97           32    32
-        256   0.0          154.37    91.53         0.96   1.21           32    32
-              0.3          289.84   226.42         3.64   4.77           32    32
-              0.7          708.74   644.51         6.79   6.24           32    32
-              0.9          957.73   890.10         5.31   3.92           32    32
-1024    16    0.0           19.77    14.33         0.42   0.39           32    32
-              0.3           34.90    33.25         1.30   1.66           32    32
-              0.7          183.43   183.69         2.57   3.32           32    32
-              0.9          341.74   341.14         3.18   4.45           32    32
-        64    0.0           47.29    36.14         0.72   0.45           32    32
-              0.3          127.09   113.53         2.95   2.79            8    15
-              0.7          719.72   712.39         7.89   7.56            8     8
-              0.9         1350.76  1335.96         8.20   8.14            8     8
-        256   0.0          165.03   108.59         0.99   1.50            8     8
-              0.3          492.07   427.76         3.23   4.81            8     8
-              0.7         2848.82  2792.80        13.06  14.70            8     8
-              0.9         5355.52  5301.84        10.82  13.12            8     8
+128     16    0.0           12.87    11.47         0.38   0.39           96    96
+              0.3           20.41    18.10         0.85   0.95           96    96
+              0.7           47.01    44.85         1.36   1.33           96    96
+              0.9           62.99    60.02         1.09   1.19           96    96
+        64    0.0           42.15    29.60         0.75   0.71           96    96
+              0.3           74.84    60.54         1.76   2.50           96    96
+              0.7          180.19   166.08         2.53   2.99           96    96
+              0.9          242.73   227.62         2.46   2.36           96    96
+        256   0.0          154.41    91.88         1.12   1.23           96    96
+              0.3          289.24   225.03         3.40   5.00           96    96
+              0.7          707.54   644.01         5.67   5.69           96    96
+              0.9          957.00   890.64         4.62   4.63           96    96
+1024    16    0.0           19.65    14.38         0.41   0.33           96    96
+              0.3           34.71    33.33         1.20   1.96           96    96
+              0.7          183.88   184.59         2.98   3.66           96    96
+              0.9          342.45   341.64         3.93   4.38           96    96
+        64    0.0           47.31    36.16         0.60   0.50           96    96
+              0.3          127.51   113.61         2.31   3.31           96    96
+              0.7          717.40   708.88         5.91   7.38           96    96
+              0.9         1347.70  1337.20         6.41   8.42           96    96
+        256   0.0          165.01   107.78         1.00   1.10           96    96
+              0.3          492.49   426.30         4.82   7.13           96    96
+              0.7         2842.45  2787.33         9.99  12.47           96    96
+              0.9         5355.87  5299.03        11.16  14.67           96    96
 </code></pre>
 <p><img alt='exp3_pdf_b16_s0.3.png' src='../results/ub_rg/figures/exp3_pdf_b16_s0.3.png'></p>
 <p><img alt='exp3_pdf_b16_s0.7.png' src='../results/ub_rg/figures/exp3_pdf_b16_s0.7.png'></p>
@@ -148,38 +148,43 @@ ep_size batch zipf_s
 <p><img alt='exp3_pdf_b64_s0.9.png' src='../results/ub_rg/figures/exp3_pdf_b64_s0.9.png'></p>
 <p><img alt='exp3_pdf_b64_s0.png' src='../results/ub_rg/figures/exp3_pdf_b64_s0.png'></p>
 <h3>4.x Roundtrip Step vs EP（汇总）</h3>
+<p><img alt='exp3_s1_step_vs_ep.png' src='../results/ub_rg/figures/exp3_s1_step_vs_ep.png'></p>
+<p><img alt='exp3_s2_step_vs_ep.png' src='../results/ub_rg/figures/exp3_s2_step_vs_ep.png'></p>
+<p><img alt='exp3_s3_step_vs_ep.png' src='../results/ub_rg/figures/exp3_s3_step_vs_ep.png'></p>
 <h2>5. 方案对比摘要</h2>
-<li>**场景1** 平均 step：UB_RG=263.4µs vs Spray=1066.9µs（Spray/RG=4.05×）</li>
-<li>**场景2** 平均 step：UB_RG=560.7µs vs Spray=570.2µs（Spray/RG=1.02×）</li>
-<li>**场景2** ub_rg CCT/König：mean=1.126，median=1.066</li>
-<li>**场景2** packet_spray CCT/König：mean=1.104，median=1.080</li>
-<li>**场景3** 平均 step：UB_RG=540.0µs vs Spray=821.7µs（Spray/RG=1.52×）</li>
-<li>**场景3** ub_rg CCT/König：mean=2.833，median=2.249</li>
-<li>**场景3** packet_spray CCT/König：mean=3.427，median=2.365</li>
+<li>**场景1** 平均 step：UB_RG=1197.4µs vs Spray=1380.5µs（Spray/RG=1.15×）</li>
+<li>**场景1** ub_rg CCT/König：mean=1.041，median=1.003</li>
+<li>**场景1** packet_spray CCT/König：mean=1.315，median=1.179</li>
+<li>**场景2** 平均 step：UB_RG=1812.9µs vs Spray=1877.0µs（Spray/RG=1.04×）</li>
+<li>**场景2** ub_rg CCT/König：mean=1.089，median=1.011</li>
+<li>**场景2** packet_spray CCT/König：mean=1.244，median=1.098</li>
+<li>**场景3** 平均 step：UB_RG=1812.9µs vs Spray=1877.0µs（Spray/RG=1.04×）</li>
+<li>**场景3** ub_rg CCT/König：mean=1.089，median=1.011</li>
+<li>**场景3** packet_spray CCT/König：mean=1.244，median=1.098</li>
 <h2>6. 双引擎对比（逐包 vs 行为级）</h2>
 <p>在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。</p>
-<p>对齐样本 **55** 组；step 比值（packet/behavioral）均值=8.532，中位数=6.491。</p>
+<p>对齐样本 **61** 组；step 比值（packet/behavioral）均值=0.224，中位数=0.148。</p>
 <pre><code>          exp  scenario       scheme     mode  batch  zipf_s  ep_size  step_packet  p99_packet  step_behav  p99_behav  step_ratio
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       63.017      49.660      11.855      7.131       5.316
-exp1_dispatch         1 packet_spray dispatch     16     0.7      128      176.041     150.431      24.901     19.030       7.070
-exp1_dispatch         1 packet_spray dispatch     16     0.9      128      240.991     212.459      32.786     26.342       7.350
-exp1_dispatch         1 packet_spray dispatch     16     0.0      128       30.879      26.766       8.414      5.268       3.670
-exp1_dispatch         1 packet_spray dispatch    256     0.3      128      976.937     334.742     152.348     94.724       6.413
-exp1_dispatch         1 packet_spray dispatch    256     0.7      128     2794.421     488.416     369.395    244.392       7.565
-exp1_dispatch         1 packet_spray dispatch    256     0.9      128     3866.590     758.112     496.269    341.017       7.791
-exp1_dispatch         1 packet_spray dispatch    256     0.0      128      386.350     346.216      81.815     66.769       4.722
-exp1_dispatch         1        ub_rg dispatch     16     0.3      128       17.595       8.028       9.911      6.390       1.775
-exp1_dispatch         1        ub_rg dispatch     16     0.7      128       42.030      23.999      23.243     18.001       1.808
-exp1_dispatch         1        ub_rg dispatch     16     0.9      128       56.441      32.968      30.985     25.517       1.822
-exp1_dispatch         1        ub_rg dispatch     16     0.0      128       10.514       6.028       6.320      4.875       1.664
-exp1_dispatch         1        ub_rg dispatch    256     0.3      128      282.526      56.330     114.755     37.860       2.462
-exp1_dispatch         1        ub_rg dispatch    256     0.7      128      645.712     158.268     328.505     88.499       1.966
-exp1_dispatch         1        ub_rg dispatch    256     0.9      128      883.780     310.895     447.637    148.422       1.974
-exp1_dispatch         1        ub_rg dispatch    256     0.0      128      168.878      49.405      45.308     34.417       3.727
-exp1_dispatch         2 packet_spray dispatch     16     0.3     1024      126.283      63.259      22.370      9.625       5.645
-exp1_dispatch         2 packet_spray dispatch     16     0.7     1024      734.342     627.347      98.638     66.252       7.445
-exp1_dispatch         2 packet_spray dispatch     16     0.9     1024     1387.209    1306.638     177.629    144.240       7.810
-exp1_dispatch         2 packet_spray dispatch     16     0.0     1024       33.146      26.107      11.618      6.328       2.853
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       11.855       7.131      63.017     49.660       0.188
+exp1_dispatch         1 packet_spray dispatch     16     0.7      128       24.901      19.030     176.041    150.431       0.141
+exp1_dispatch         1 packet_spray dispatch     16     0.9      128       32.786      26.342     240.991    212.459       0.136
+exp1_dispatch         1 packet_spray dispatch     16     0.0      128        8.414       5.268      30.879     26.766       0.272
+exp1_dispatch         1 packet_spray dispatch    256     0.3      128      152.348      94.724     976.937    334.742       0.156
+exp1_dispatch         1 packet_spray dispatch    256     0.7      128      369.395     244.392    2794.421    488.416       0.132
+exp1_dispatch         1 packet_spray dispatch    256     0.9      128      496.269     341.017    3866.590    758.112       0.128
+exp1_dispatch         1 packet_spray dispatch    256     0.0      128       81.815      66.769     386.350    346.216       0.212
+exp1_dispatch         1        ub_rg dispatch     16     0.3      128        9.911       6.390      17.595      8.028       0.563
+exp1_dispatch         1        ub_rg dispatch     16     0.7      128       23.243      18.001      42.030     23.999       0.553
+exp1_dispatch         1        ub_rg dispatch     16     0.9      128       30.985      25.517      56.441     32.968       0.549
+exp1_dispatch         1        ub_rg dispatch     16     0.0      128        6.320       4.875      10.514      6.028       0.601
+exp1_dispatch         1        ub_rg dispatch    256     0.3      128      114.755      37.860     282.526     56.330       0.406
+exp1_dispatch         1        ub_rg dispatch    256     0.7      128      328.505      88.499     645.712    158.268       0.509
+exp1_dispatch         1        ub_rg dispatch    256     0.9      128      447.637     148.422     883.780    310.895       0.507
+exp1_dispatch         1        ub_rg dispatch    256     0.0      128       45.308      34.417     168.878     49.405       0.268
+exp1_dispatch         2 packet_spray dispatch     16     0.3     1024       22.370       9.625     126.283     63.259       0.177
+exp1_dispatch         2 packet_spray dispatch     16     0.7     1024       98.638      66.252     734.342    627.347       0.134
+exp1_dispatch         2 packet_spray dispatch     16     0.9     1024      177.629     144.240    1387.209   1306.638       0.128
+exp1_dispatch         2 packet_spray dispatch     16     0.0     1024       11.618       6.328      33.146     26.107       0.351
 </code></pre>
 <p>差异主要来自：逐包栈的静态时延（传播/转发/分配）、真实控制面报文、以及 TP/Jetty 注入路径；行为级模型把这些折叠为常量 RTT/屏障。</p>
 <h2>7. 结论</h2>
