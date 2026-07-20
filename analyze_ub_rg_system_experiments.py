@@ -1352,17 +1352,55 @@ def _relative_link(origin: Path, target: Path) -> str:
     return Path(os.path.relpath(target, origin.parent)).as_posix()
 
 
-def markdown_to_html(markdown: str, title: str) -> str:
-    """Small dependency-free converter sufficient for the generated report."""
+def _embed_markdown_image(
+    alt: str, src: str, report_md: Path | None
+) -> str:
+    """Prefer inlining local SVG so the HTML report is self-contained."""
+
+    candidate: Path | None = None
+    src_path = Path(src)
+    if src_path.is_absolute() and src_path.exists():
+        candidate = src_path
+    elif report_md is not None:
+        resolved = (report_md.parent / src_path).resolve()
+        if resolved.exists():
+            candidate = resolved
+    if candidate is not None and candidate.suffix.lower() == ".svg":
+        svg = candidate.read_text(encoding="utf-8")
+        return (
+            "<figure class='fig'>"
+            f"<div class='svg-wrap'>{svg}</div>"
+            f"<figcaption>{html.escape(alt)} "
+            f"(<code>{html.escape(candidate.name)}</code>)</figcaption>"
+            "</figure>"
+        )
+    return (
+        f"<p><img alt='{html.escape(alt, quote=True)}' "
+        f"src='{html.escape(src, quote=True)}'></p>"
+    )
+
+
+def markdown_to_html(
+    markdown: str, title: str, report_md: Path | None = None
+) -> str:
+    """Small dependency-free converter sufficient for the generated report.
+
+    When ``report_md`` is provided, local ``.svg`` image links are inlined so the
+    HTML file can be opened without sibling figure files.
+    """
 
     output = [
         "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>",
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
         f"<title>{html.escape(title)}</title>",
         "<style>body{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;"
         "padding:0 1rem;line-height:1.6;color:#202124}table{border-collapse:collapse;"
         "width:100%;font-size:.9rem}th,td{border:1px solid #ccc;padding:.35rem .5rem;"
-        "text-align:left}th{background:#f4f6f8}img{max-width:100%;height:auto;"
-        "border:1px solid #ddd}code,pre{font-family:ui-monospace,monospace}"
+        "text-align:left}th{background:#f4f6f8}img,.svg-wrap{max-width:100%;"
+        "border:1px solid #ddd;background:#fff}.svg-wrap{overflow:auto;padding:.5rem}"
+        ".svg-wrap svg{max-width:100%;height:auto;display:block}"
+        "figure.fig{margin:1.25rem 0}figcaption{color:#555;font-size:.9rem;"
+        "margin-top:.4rem}code,pre{font-family:ui-monospace,monospace}"
         "pre{background:#f6f8fa;padding:1rem;overflow:auto}blockquote{border-left:4px solid "
         "#999;padding-left:1rem;color:#555}</style></head><body>",
     ]
@@ -1425,8 +1463,7 @@ def markdown_to_html(markdown: str, title: str) -> str:
         image = re.fullmatch(r"!\[(.*?)\]\((.*?)\)", line.strip())
         if image:
             output.append(
-                f"<p><img alt='{html.escape(image.group(1), quote=True)}' "
-                f"src='{html.escape(image.group(2), quote=True)}'></p>"
+                _embed_markdown_image(image.group(1), image.group(2), report_md)
             )
         elif line.startswith("#"):
             level = min(len(line) - len(line.lstrip("#")), 6)
@@ -1491,7 +1528,10 @@ def analyze(
     report_md.write_text(markdown, encoding="utf-8")
     report_html = report_md.with_suffix(".html")
     report_html.write_text(
-        markdown_to_html(markdown, "UB_RG 系统实验 0719 报告"), encoding="utf-8"
+        markdown_to_html(
+            markdown, "UB_RG 系统实验 0719 报告", report_md=report_md
+        ),
+        encoding="utf-8",
     )
     return AnalysisOutputs(
         report_md,

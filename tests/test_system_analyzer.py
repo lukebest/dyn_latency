@@ -174,6 +174,8 @@ class SystemAnalyzerTests(unittest.TestCase):
             html = outputs.report_html.read_text(encoding="utf-8")
             self.assertIn("<!doctype html>", html)
             self.assertIn("sys3_tc_throughput.svg", html)
+            self.assertIn("<svg", html)
+            self.assertIn("class='fig'", html)
 
             with outputs.csv_path.open(encoding="utf-8", newline="") as stream:
                 rows = list(csv.DictReader(stream))
