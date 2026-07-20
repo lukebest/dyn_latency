@@ -144,7 +144,7 @@ def build_exp3_pdf_jobs(
     return jobs
 
 
-def find_binary(engine: str) -> Path:
+def find_binary(engine: str) -> Path | None:
     build = NS3 / "build" / "scratch"
     names = (
         (
@@ -161,9 +161,9 @@ def find_binary(engine: str) -> Path:
     )
     for name in names:
         p = build / name
-        if p.exists():
+        if p.is_file():
             return p
-    return Path("")
+    return None
 
 
 def case_path_for(job: Job) -> str:
