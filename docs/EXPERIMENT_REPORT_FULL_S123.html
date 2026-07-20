@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>UB_RG Full Dispatch 实验报告 — 场景1/2/3</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6f8; --ink: #15202b; --muted: #5b6b7c; --line: #d5dde6;
+    --card: #fff; --rg: #0b5fff; --pop: #0a7a5a; --uns: #c45c26;
+    --s1: #0b5fff; --s2: #7a3e9d; --s3: #0a7a5a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--ink);
+    font-family: "IBM Plex Sans", "Noto Sans SC", system-ui, sans-serif;
+    background:
+      radial-gradient(900px 400px at 8% -8%, #dce8ff 0%, transparent 55%),
+      radial-gradient(700px 360px at 100% 0%, #d9f0e8 0%, transparent 50%),
+      var(--bg);
+    line-height: 1.55;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 40px 24px 80px; }
+  .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  h1 {
+    font-family: "IBM Plex Serif", Georgia, serif; font-weight: 600;
+    font-size: clamp(1.8rem, 3.4vw, 2.5rem); margin: 8px 0 12px; letter-spacing: -.02em;
+  }
+  .lede { color: var(--muted); max-width: 72ch; }
+  .meta {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px; margin: 22px 0 8px;
+  }
+  .meta div { background: var(--card); border: 1px solid var(--line); padding: 12px 14px; }
+  .meta dt { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .meta dd { margin: 4px 0 0; font-weight: 600; }
+  nav.toc {
+    background: var(--card); border: 1px solid var(--line); padding: 14px 18px; margin: 20px 0;
+    display: flex; flex-wrap: wrap; gap: 8px 14px;
+  }
+  nav.toc a { color: var(--rg); text-decoration: none; font-size: 14px; }
+  nav.toc a:hover { text-decoration: underline; }
+  .cmp-same { color: #0a7a5a; }
+  .cmp-diff { color: #a33; }
+  section { margin: 40px 0; }
+  h2 {
+    font-family: "IBM Plex Serif", Georgia, serif; font-size: 1.35rem;
+    margin: 0 0 12px; padding-top: 8px; border-top: 1px solid var(--line);
+  }
+  h3 { font-size: 1.05rem; margin: 22px 0 10px; }
+  h4 { font-size: .95rem; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  p, li { max-width: 78ch; }
+  .muted { color: var(--muted); font-size: 14px; }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 14px;
+    background: var(--card); border: 1px solid var(--line); margin: 10px 0 18px;
+  }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { background: #eef2f6; font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .charts { display: grid; gap: 18px; }
+  @media (min-width: 900px) { .charts.two { grid-template-columns: 1fr 1fr; } }
+  .chart-card { background: var(--card); border: 1px solid var(--line); padding: 14px; margin: 10px 0; }
+  .chart-card h3 { margin: 0 0 8px; }
+  canvas { max-height: 320px; }
+  .callout {
+    background: #eef4ff; border-left: 3px solid var(--rg);
+    padding: 12px 14px; margin: 14px 0; font-size: 14px;
+  }
+  footer { color: var(--muted); font-size: 13px; margin-top: 48px; }
+  a { color: var(--rg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">UB_RG实验设计.md · §1–§6 · Exp1 Full</p>
+  <h1>倾斜专家流量 Dispatch · Full 场景1/2/3</h1>
+  <p class="lede">
+    对齐设计提纲：组网 → 网络方案 → 时延动机 → §4.2.1 Full 扫参 → 跨场景对比 → 结论。
+    Scale=full；对比 <code>ub_rg</code> / <code>ub_rg_pop</code> / <code>ub_unscheduled</code>。
+    场景3 中 pop 使用 <code>routingMode=non_conflict</code>。
+  </p>
+  <div class="meta">
+    <div><dt>Scale</dt><dd>full</dd></div>
+    <div><dt>TopK / Grain</dt><dd>8 / 7168 B</dd></div>
+    <div><dt>场景1</dt><dd>54/54 OK · B∈{16,64,256}</dd></div>
+    <div><dt>场景2</dt><dd>30/30 OK · B∈{16,256}</dd></div>
+    <div><dt>场景3</dt><dd>30/30 OK · pop=NC</dd></div>
+  </div>
+  <nav class="toc">
+    <a href="#s1-topo">组网</a>
+    <a href="#s2-scheme">方案</a>
+    <a href="#scheme-cmp">方案异同</a>
+    <a href="#s4-exp">实验</a>
+    <a href="#s1">场景1</a>
+    <a href="#s2">场景2</a>
+    <a href="#s3">场景3</a>
+    <a href="#cross">跨场景</a>
+    <a href="#concl">结论</a>
+    <a href="EXPERIMENT_REPORT_FULL_S123.md">Markdown</a>
+  </nav>
+
+  <section id="s1-topo">
+    <h2>1 组网方案</h2>
+    <table>
+      <thead><tr><th>场景</th><th>拓扑</th><th class="num">NPU</th><th>交换</th><th>备注</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>单层 Clos</td><td class="num">128</td><td>8 × SW128</td><td>每 NPU 8×400G</td></tr>
+        <tr><td>2</td><td>两层 Clos</td><td class="num">1024</td><td>128 Leaf + 64 Spine</td><td>16 组 × 64 NPU</td></tr>
+        <tr><td>3</td><td>MpClos · 8 平面</td><td class="num">1024</td><td>128 Leaf + 64 Spine</td><td>独立平面；pop=non_conflict</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="s2-scheme">
+    <h2>2 网络方案</h2>
+    <table>
+      <thead><tr><th>方案</th><th>Scheme</th><th>语义</th></tr></thead>
+      <tbody>
+        <tr><td>§2.1</td><td>ub_unscheduled</td><td>自由注入 / Packet Spray 基线</td></tr>
+        <tr><td>§2.2</td><td>ub_rg</td><td>标准 Request-Grant（端侧 option B）</td></tr>
+        <tr><td>§2.3</td><td>ub_rg_pop</td><td>端侧 Status/Credit 预支（BDP prefill）</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">主 KPI：CCT（µs，latP100Ns ≡ CCT）；辅 KPI：分位数与 ECDF。方案机制详见下一节。</p>
+  </section>
+
+  <section id="scheme-cmp">
+    <h2>2.1 方案异同：ub_request_grant · ub_rg · ub_rg_pop</h2>
+    <p>
+      本实验对照的两个调度 scheme 均源自设计文档
+      <code>ub_request_grant.md</code> 的思想，但<strong>仓库内没有独立的
+      <code>ub_request_grant</code> ns-3 模块</strong>——该名称指交换机内分布式
+      Request/Grant 的完整协议设计；仿真按
+      <code>异构超节点：方案UB_RG.md</code> 做端侧落地（option B）。
+      详细差异对照见
+      <code>desgin-doc/supernode/ub_rg_vs_request_grant_diff.md</code>
+      （以源码为准）。
+    </p>
+
+    <h3>角色关系</h3>
+    <table>
+      <thead><tr><th>对象</th><th>形态</th><th>角色</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>ub_request_grant.md</code></td>
+          <td>设计文档</td>
+          <td>交换机侧调度主协议：批量 REQ/GNT、每 <code>τ_g</code> 每出口 ≤1 授权、
+              路径钉扎、cursor/SYNC、可靠性与延迟预补偿</td>
+        </tr>
+        <tr>
+          <td><code>ub_rg</code></td>
+          <td>仿真 scheme</td>
+          <td>主协议的<strong>端侧简化落地</strong>（option B）：
+              目的 NPU ESC 发 GNT；交换机透明转发</td>
+        </tr>
+        <tr>
+          <td><code>ub_rg_pop</code></td>
+          <td>仿真 scheme</td>
+          <td>方案 2.1 POP（Status→Credit）；
+              <strong>不在</strong> <code>ub_request_grant.md</code> 主协议内，
+              复用同一拓扑 / grain / 钉扎公式</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>对齐的核心（文档 ↔ ub_rg）：</strong>
+      grain 量化、<code>τ_g</code>、每平面 ≤1 授权节奏、在途窗口 C、
+      Clos/MpClos 路径钉扎、DATA 跟授权路径走。
+      <strong>最大架构偏差：</strong>调度位置从交换机下沉到端侧 NPU；
+      不实现 cursor/SYNC、ACK/NACK、延迟预补偿。
+    </div>
+
+    <h3>三方机制对照</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>维度</th>
+          <th><code>ub_request_grant.md</code></th>
+          <th><code>ub_rg</code></th>
+          <th><code>ub_rg_pop</code>（当前源码）</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>调度位置</td>
+          <td>SW / Leaf <code>D_j</code></td>
+          <td>目的 NPU ESC</td>
+          <td>目的 NPU PopEsc</td>
+        </tr>
+        <tr>
+          <td>控制通道</td>
+          <td>批量 REQ / GNT + ACK/SYNC…</td>
+          <td>简化 REQ / GNT</td>
+          <td>QueueStatus / CreditAlloc</td>
+        </tr>
+        <tr>
+          <td>注入准入</td>
+          <td>先请求后授权，无预支</td>
+          <td>同左：GNT 到即发、无库存</td>
+          <td><strong>BDP 预支</strong> <code>CrdtBal</code>；可先 Spend</td>
+        </tr>
+        <tr>
+          <td>冷启动</td>
+          <td>付 REQ↔GNT RTT</td>
+          <td>同左</td>
+          <td><code>CrdtBal0 = CrdtLmt =</code> NPU 总 BDP（planes × portBDP）；
+              ESC <strong>不</strong>再 prepaid-fill，仅 DATA 落地后回补</td>
+        </tr>
+        <tr>
+          <td>ESC 节拍</td>
+          <td>每 <code>τ_g</code> 每出口 ≤1 grain</td>
+          <td>每 <code>τ_g</code> 每 plane ≤1 GNT</td>
+          <td>每 <code>τ_g</code> 每 tick ≤<code>numPlanes</code> 笔 Credit</td>
+        </tr>
+        <tr>
+          <td>窗口</td>
+          <td>出口在途 C</td>
+          <td><code>inFlight &lt; C</code>（grain）</td>
+          <td><code>CrdtLmt</code>（字节，= BDP×planes）</td>
+        </tr>
+        <tr>
+          <td>DATA 路径</td>
+          <td>GNT 钉扎 → DATA 抄写</td>
+          <td>GNT → DATA 抄写</td>
+          <td>有 Credit 则跟随 pins；bootstrap 无 credit 时 spray</td>
+        </tr>
+        <tr>
+          <td>信用归还点</td>
+          <td>出口转发归账</td>
+          <td>DATA 到目的 NPU</td>
+          <td>DATA 到目的 NPU</td>
+        </tr>
+        <tr>
+          <td>匹配算法</td>
+          <td>pending 矩阵 / iSLIP 类</td>
+          <td>目的 ESC 全局 RR</td>
+          <td>PopEsc RR 轮转源</td>
+        </tr>
+        <tr>
+          <td>BSP cursor / SYNC</td>
+          <td>完整</td>
+          <td colspan="2">未实现（两 scheme 共用）</td>
+        </tr>
+        <tr>
+          <td>控制面上行钉扎</td>
+          <td>推荐目的分桶等</td>
+          <td colspan="2"><code>src % numPlanes</code>（REQ 与 Status 共用）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>ub_rg vs ub_rg_pop（实验可读差异）</h3>
+    <table>
+      <thead><tr><th>维度</th><th><code>ub_rg</code></th><th><code>ub_rg_pop</code></th></tr></thead>
+      <tbody>
+        <tr>
+          <td>引擎</td>
+          <td><code>UbRgRequestEngine</code> + <code>UbRgGrantScheduler</code></td>
+          <td><code>UbRgPopIsc</code> + <code>UbRgPopEsc</code></td>
+        </tr>
+        <tr>
+          <td>需求信号</td>
+          <td>REQ 携带剩余 grainDemand</td>
+          <td>Status Eligible / NotEligible（边沿）</td>
+        </tr>
+        <tr>
+          <td>授权形态</td>
+          <td>即时消费的 GNT（无余额库存）</td>
+          <td>Credit 累加 <code>CrdtBal</code>，Spend 扣减</td>
+        </tr>
+        <tr>
+          <td>首包延迟</td>
+          <td>必付一次 REQ↔GNT RTT</td>
+          <td>预填 BDP 后可立即发；均匀小负载时常略快</td>
+        </tr>
+        <tr>
+          <td>热点行为</td>
+          <td>按需授权，节奏严格跟 <code>τ_g</code></td>
+          <td>预填窗口可在同步启动时放大多源并发；
+              高偏斜 / 双层 Clos 上 CCT 偶发差于 RG（见本报告场景2）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>相对原始设计文档的共同简化</h3>
+    <ul>
+      <li>调度仅 option B（端侧）；未实现 option A（ESC@Leaf）。</li>
+      <li>无 CTRL 4B 寻址头、无可靠性重传、无延迟预补偿 <code>L_hat</code>。</li>
+      <li>默认仿真 <code>G=4096</code>；本实验覆盖 <code>tokenBytes=G=7168</code>（对齐文档算例）。</li>
+      <li>场景3 MpClos 与 <code>routingMode=non_conflict</code> 为仿真扩展，主文以全局 Clos 为主。</li>
+    </ul>
+    <p class="muted">
+      实现路径：<code>ns-3-ub/src/unified-bus/model/supernode/ub_rg/</code> ·
+      CLI：<code>--scheme=ub_rg|ub_rg_pop|ub_unscheduled</code>
+    </p>
+  </section>
+
+  <section id="s4-exp">
+    <h2>3 / 4 实验动机与配置</h2>
+    <p>对齐设计 §3–§4.2.1：观测下行头阻、热点阻塞与 CCT；Full 保证 TopK≪N，Zipf S 有效。</p>
+    <table>
+      <thead><tr><th>场景</th><th>BatchSize</th><th>Zipf S</th><th class="num">点数</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>16, 64, 256</td><td>0, 0.1, 0.3, 0.5, 0.7, 0.9</td><td class="num">54</td></tr>
+        <tr><td>2</td><td>16, 256</td><td>0 … 1.0 / 0.25</td><td class="num">30</td></tr>
+        <tr><td>3</td><td>16, 256</td><td>0 … 1.0 / 0.25</td><td class="num">30</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="s1">
+    <h2>4.2 场景1 · 单层 Clos（N=128）</h2>
+    <div class="charts two">
+      <div class="chart-card"><h3>Batch=16</h3><canvas id="s1c16"></canvas></div>
+      <div class="chart-card"><h3>Batch=64</h3><canvas id="s1c64"></canvas></div>
+      <div class="chart-card"><h3>Batch=256</h3><canvas id="s1c256"></canvas></div>
+    </div>
+    <p class="callout">全矩阵 pop/rg 均值 1.032（最大 1.248）；uns/rg 均值 2.186（最大 2.690）。RG≈POP；uns 约 1.2～2.7×。</p>
+    <h3>Batch=16</h3><table><thead><tr><th class='num'>Zipf S</th><th class='num'>ub_rg</th><th class='num'>ub_rg_pop</th><th class='num'>ub_unscheduled</th><th class='num'>pop/rg</th><th class='num'>uns/rg</th></tr></thead><tbody><tr><td class='num'>0.0</td><td class='num'>6.245</td><td class='num'>5.626</td><td class='num'>12.963</td><td class='num'>0.901</td><td class='num'>2.076</td></tr><tr><td class='num'>0.1</td><td class='num'>5.995</td><td class='num'>5.334</td><td class='num'>15.138</td><td class='num'>0.890</td><td class='num'>2.525</td></tr><tr><td class='num'>0.3</td><td class='num'>8.173</td><td class='num'>8.109</td><td class='num'>18.763</td><td class='num'>0.992</td><td class='num'>2.296</td></tr><tr><td class='num'>0.5</td><td class='num'>13.750</td><td class='num'>14.401</td><td class='num'>24.563</td><td class='num'>1.047</td><td class='num'>1.786</td></tr><tr><td class='num'>0.7</td><td class='num'>20.537</td><td class='num'>22.120</td><td class='num'>48.343</td><td class='num'>1.077</td><td class='num'>2.354</td></tr><tr><td class='num'>0.9</td><td class='num'>28.600</td><td class='num'>29.739</td><td class='num'>70.673</td><td class='num'>1.040</td><td class='num'>2.471</td></tr></tbody></table>
+    <h3>Batch=64</h3><table><thead><tr><th class='num'>Zipf S</th><th class='num'>ub_rg</th><th class='num'>ub_rg_pop</th><th class='num'>ub_unscheduled</th><th class='num'>pop/rg</th><th class='num'>uns/rg</th></tr></thead><tbody><tr><td class='num'>0.0</td><td class='num'>16.827</td><td class='num'>19.717</td><td class='num'>39.506</td><td class='num'>1.172</td><td class='num'>2.348</td></tr><tr><td class='num'>0.1</td><td class='num'>17.448</td><td class='num'>18.613</td><td class='num'>37.476</td><td class='num'>1.067</td><td class='num'>2.148</td></tr><tr><td class='num'>0.3</td><td class='num'>29.763</td><td class='num'>29.996</td><td class='num'>75.024</td><td class='num'>1.008</td><td class='num'>2.521</td></tr><tr><td class='num'>0.5</td><td class='num'>50.466</td><td class='num'>50.453</td><td class='num'>116.643</td><td class='num'>1.000</td><td class='num'>2.311</td></tr><tr><td class='num'>0.7</td><td class='num'>81.027</td><td class='num'>80.639</td><td class='num'>210.023</td><td class='num'>0.995</td><td class='num'>2.592</td></tr><tr><td class='num'>0.9</td><td class='num'>112.622</td><td class='num'>112.543</td><td class='num'>234.384</td><td class='num'>0.999</td><td class='num'>2.081</td></tr></tbody></table>
+    <h3>Batch=256</h3><table><thead><tr><th class='num'>Zipf S</th><th class='num'>ub_rg</th><th class='num'>ub_rg_pop</th><th class='num'>ub_unscheduled</th><th class='num'>pop/rg</th><th class='num'>uns/rg</th></tr></thead><tbody><tr><td class='num'>0.0</td><td class='num'>47.682</td><td class='num'>59.510</td><td class='num'>128.255</td><td class='num'>1.248</td><td class='num'>2.690</td></tr><tr><td class='num'>0.1</td><td class='num'>61.628</td><td class='num'>62.496</td><td class='num'>157.576</td><td class='num'>1.014</td><td class='num'>2.557</td></tr><tr><td class='num'>0.3</td><td class='num'>115.445</td><td class='num'>123.736</td><td class='num'>263.996</td><td class='num'>1.072</td><td class='num'>2.287</td></tr><tr><td class='num'>0.5</td><td class='num'>201.454</td><td class='num'>209.027</td><td class='num'>340.265</td><td class='num'>1.038</td><td class='num'>1.689</td></tr><tr><td class='num'>0.7</td><td class='num'>322.475</td><td class='num'>324.771</td><td class='num'>450.320</td><td class='num'>1.007</td><td class='num'>1.396</td></tr><tr><td class='num'>0.9</td><td class='num'>448.348</td><td class='num'>450.060</td><td class='num'>547.882</td><td class='num'>1.004</td><td class='num'>1.222</td></tr></tbody></table>
+    <h3>CCT 矩阵</h3>
+    <h4>ub_rg</h4><table><thead><tr><th>B \ S</th><th class='num'>0.0</th><th class='num'>0.1</th><th class='num'>0.3</th><th class='num'>0.5</th><th class='num'>0.7</th><th class='num'>0.9</th></tr></thead><tbody><tr><th class='num'>16</th><td class='num'>6.245</td><td class='num'>5.995</td><td class='num'>8.173</td><td class='num'>13.750</td><td class='num'>20.537</td><td class='num'>28.600</td></tr><tr><th class='num'>64</th><td class='num'>16.827</td><td class='num'>17.448</td><td class='num'>29.763</td><td class='num'>50.466</td><td class='num'>81.027</td><td class='num'>112.622</td></tr><tr><th class='num'>256</th><td class='num'>47.682</td><td class='num'>61.628</td><td class='num'>115.445</td><td class='num'>201.454</td><td class='num'>322.475</td><td class='num'>448.348</td></tr></tbody></table>
+    <h4>ub_rg_pop</h4><table><thead><tr><th>B \ S</th><th class='num'>0.0</th><th class='num'>0.1</th><th class='num'>0.3</th><th class='num'>0.5</th><th class='num'>0.7</th><th class='num'>0.9</th></tr></thead><tbody><tr><th class='num'>16</th><td class='num'>5.626</td><td class='num'>5.334</td><td class='num'>8.109</td><td class='num'>14.401</td><td class='num'>22.120</td><td class='num'>29.739</td></tr><tr><th class='num'>64</th><td class='num'>19.717</td><td class='num'>18.613</td><td class='num'>29.996</td><td class='num'>50.453</td><td class='num'>80.639</td><td class='num'>112.543</td></tr><tr><th class='num'>256</th><td class='num'>59.510</td><td class='num'>62.496</td><td class='num'>123.736</td><td class='num'>209.027</td><td class='num'>324.771</td><td class='num'>450.060</td></tr></tbody></table>
+    <h4>ub_unscheduled</h4><table><thead><tr><th>B \ S</th><th class='num'>0.0</th><th class='num'>0.1</th><th class='num'>0.3</th><th class='num'>0.5</th><th class='num'>0.7</th><th class='num'>0.9</th></tr></thead><tbody><tr><th class='num'>16</th><td class='num'>12.963</td><td class='num'>15.138</td><td class='num'>18.763</td><td class='num'>24.563</td><td class='num'>48.343</td><td class='num'>70.673</td></tr><tr><th class='num'>64</th><td class='num'>39.506</td><td class='num'>37.476</td><td class='num'>75.024</td><td class='num'>116.643</td><td class='num'>210.023</td><td class='num'>234.384</td></tr><tr><th class='num'>256</th><td class='num'>128.255</td><td class='num'>157.576</td><td class='num'>263.996</td><td class='num'>340.265</td><td class='num'>450.320</td><td class='num'>547.882</td></tr></tbody></table>
+    <h3>ECDF 示例</h3>
+    <div class="charts two">
+      <div class='chart-card'><h4>B16 S=0.0 ECDF</h4><img src='s1_full_dispatch_B16_S0p0_ecdf.svg' alt='B16 S=0.0 ECDF' style='max-width:100%;height:auto'/></div>
+      <div class='chart-card'><h4>B16 S=0.9 ECDF</h4><img src='s1_full_dispatch_B16_S0p9_ecdf.svg' alt='B16 S=0.9 ECDF' style='max-width:100%;height:auto'/></div>
+    </div>
+    <p class="muted">详报：<a href="EXPERIMENT_REPORT_S1_FULL.html">EXPERIMENT_REPORT_S1_FULL.html</a></p>
+  </section>
+
+  <section id="s2">
+    <h2>4.3 场景2 · 两层 Clos（N=1024）</h2>
+    <div class="charts two">
+      <div class="chart-card"><h3>Batch=16</h3><canvas id="s2c16"></canvas></div>
+      <div class="chart-card"><h3>Batch=256</h3><canvas id="s2c256"></canvas></div>
+    </div>
+    <p class="callout">pop/rg 均值 1.171（最大 1.529）；uns/rg 均值 1.172（最大 1.308）。RG 整体最优；高偏斜 POP 劣化更明显。</p>
+    <h3>Batch=16</h3><table><thead><tr><th class='num'>Zipf S</th><th class='num'>ub_rg</th><th class='num'>ub_rg_pop</th><th class='num'>ub_unscheduled</th><th class='num'>pop/rg</th><th class='num'>uns/rg</th></tr></thead><tbody><tr><td class='num'>0.0</td><td class='num'>7.696</td><td class='num'>6.355</td><td class='num'>6.351</td><td class='num'>0.826</td><td class='num'>0.825</td></tr><tr><td class='num'>0.25</td><td class='num'>12.766</td><td class='num'>13.990</td><td class='num'>15.631</td><td class='num'>1.096</td><td class='num'>1.224</td></tr><tr><td class='num'>0.5</td><td class='num'>40.668</td><td class='num'>45.251</td><td class='num'>43.036</td><td class='num'>1.113</td><td class='num'>1.058</td></tr><tr><td class='num'>0.75</td><td class='num'>110.857</td><td class='num'>142.844</td><td class='num'>124.091</td><td class='num'>1.289</td><td class='num'>1.119</td></tr><tr><td class='num'>1.0</td><td class='num'>210.736</td><td class='num'>288.449</td><td class='num'>243.716</td><td class='num'>1.369</td><td class='num'>1.156</td></tr></tbody></table>
+    <h3>Batch=256</h3><table><thead><tr><th class='num'>Zipf S</th><th class='num'>ub_rg</th><th class='num'>ub_rg_pop</th><th class='num'>ub_unscheduled</th><th class='num'>pop/rg</th><th class='num'>uns/rg</th></tr></thead><tbody><tr><td class='num'>0.0</td><td class='num'>67.604</td><td class='num'>83.586</td><td class='num'>87.850</td><td class='num'>1.236</td><td class='num'>1.299</td></tr><tr><td class='num'>0.25</td><td class='num'>172.193</td><td class='num'>263.231</td><td class='num'>225.311</td><td class='num'>1.529</td><td class='num'>1.308</td></tr><tr><td class='num'>0.5</td><td class='num'>598.430</td><td class='num'>707.584</td><td class='num'>734.205</td><td class='num'>1.182</td><td class='num'>1.227</td></tr><tr><td class='num'>0.75</td><td class='num'>1693.436</td><td class='num'>1785.804</td><td class='num'>2119.243</td><td class='num'>1.055</td><td class='num'>1.251</td></tr><tr><td class='num'>1.0</td><td class='num'>3339.152</td><td class='num'>3397.611</td><td class='num'>4187.538</td><td class='num'>1.018</td><td class='num'>1.254</td></tr></tbody></table>
+    <h3>CCT 矩阵</h3>
+    <h4>ub_rg</h4><table><thead><tr><th>B \ S</th><th class='num'>0.0</th><th class='num'>0.25</th><th class='num'>0.5</th><th class='num'>0.75</th><th class='num'>1.0</th></tr></thead><tbody><tr><th class='num'>16</th><td class='num'>7.696</td><td class='num'>12.766</td><td class='num'>40.668</td><td class='num'>110.857</td><td class='num'>210.736</td></tr><tr><th class='num'>256</th><td class='num'>67.604</td><td class='num'>172.193</td><td class='num'>598.430</td><td class='num'>1693.436</td><td class='num'>3339.152</td></tr></tbody></table>
+    <h4>ub_rg_pop</h4><table><thead><tr><th>B \ S</th><th class='num'>0.0</th><th class='num'>0.25</th><th class='num'>0.5</th><th class='num'>0.75</th><th class='num'>1.0</th></tr></thead><tbody><tr><th class='num'>16</th><td class='num'>6.355</td><td class='num'>13.990</td><td class='num'>45.251</td><td class='num'>142.844</td><td class='num'>288.449</td></tr><tr><th class='num'>256</th><td class='num'>83.586</td><td class='num'>263.231</td><td class='num'>707.584</td><td class='num'>1785.804</td><td class='num'>3397.611</td></tr></tbody></table>
+    <h4>ub_unscheduled</h4><table><thead><tr><th>B \ S</th><th class='num'>0.0</th><th class='num'>0.25</th><th class='num'>0.5</th><th class='num'>0.75</th><th class='num'>1.0</th></tr></thead><tbody><tr><th class='num'>16</th><td class='num'>6.351</td><td class='num'>15.631</td><td class='num'>43.036</td><td class='num'>124.091</td><td class='num'>243.716</td></tr><tr><th class='num'>256</th><td class='num'>87.850</td><td class='num'>225.311</td><td class='num'>734.205</td><td class='num'>2119.243</td><td class='num'>4187.538</td></tr></tbody></table>
+    <div class="charts two">
+      <div class='chart-card'><h4>B16 S=0.0 ECDF</h4><img src='s2_full_dispatch_B16_S0p0_ecdf.svg' alt='B16 S=0.0 ECDF' style='max-width:100%;height:auto'/></div>
+      <div class='chart-card'><h4>B16 S=1.0 ECDF</h4><img src='s2_full_dispatch_B16_S1p0_ecdf.svg' alt='B16 S=1.0 ECDF' style='max-width:100%;height:auto'/></div>
+      <div class='chart-card'><h4>B256 S=1.0 ECDF</h4><img src='s2_full_dispatch_B256_S1p0_ecdf.svg' alt='B256 S=1.0 ECDF' style='max-width:100%;height:auto'/></div>
+    </div>
+    <p class="muted">详报：<a href="EXPERIMENT_REPORT_S2_FULL.html">EXPERIMENT_REPORT_S2_FULL.html</a></p>
+  </section>
+
+  <section id="s3">
+    <h2>4.4 场景3 · MpClos（N=1024，pop=non_conflict）</h2>
+    <div class="charts two">
+      <div class="chart-card"><h3>Batch=16</h3><canvas id="s3c16"></canvas></div>
+      <div class="chart-card"><h3>Batch=256</h3><canvas id="s3c256"></canvas></div>
+    </div>
+    <p class="callout">pop/rg 均值 1.055（最大 1.452）；uns/rg 均值 2.999（最大 6.117）。POP≈RG；uns 在中偏斜 B16 可差至 6×。</p>
+    <h3>Batch=16</h3><table><thead><tr><th class='num'>Zipf S</th><th class='num'>ub_rg</th><th class='num'>ub_rg_pop</th><th class='num'>ub_unscheduled</th><th class='num'>pop/rg</th><th class='num'>uns/rg</th></tr></thead><tbody><tr><td class='num'>0.0</td><td class='num'>6.564</td><td class='num'>6.645</td><td class='num'>19.256</td><td class='num'>1.012</td><td class='num'>2.934</td></tr><tr><td class='num'>0.25</td><td class='num'>13.142</td><td class='num'>11.692</td><td class='num'>80.388</td><td class='num'>0.890</td><td class='num'>6.117</td></tr><tr><td class='num'>0.5</td><td class='num'>40.132</td><td class='num'>41.096</td><td class='num'>221.763</td><td class='num'>1.024</td><td class='num'>5.526</td></tr><tr><td class='num'>0.75</td><td class='num'>107.663</td><td class='num'>112.781</td><td class='num'>295.423</td><td class='num'>1.048</td><td class='num'>2.744</td></tr><tr><td class='num'>1.0</td><td class='num'>209.745</td><td class='num'>222.658</td><td class='num'>479.718</td><td class='num'>1.062</td><td class='num'>2.287</td></tr></tbody></table>
+    <h3>Batch=256</h3><table><thead><tr><th class='num'>Zipf S</th><th class='num'>ub_rg</th><th class='num'>ub_rg_pop</th><th class='num'>ub_unscheduled</th><th class='num'>pop/rg</th><th class='num'>uns/rg</th></tr></thead><tbody><tr><td class='num'>0.0</td><td class='num'>62.525</td><td class='num'>90.799</td><td class='num'>254.835</td><td class='num'>1.452</td><td class='num'>4.076</td></tr><tr><td class='num'>0.25</td><td class='num'>170.669</td><td class='num'>173.438</td><td class='num'>347.193</td><td class='num'>1.016</td><td class='num'>2.034</td></tr><tr><td class='num'>0.5</td><td class='num'>587.962</td><td class='num'>607.843</td><td class='num'>892.686</td><td class='num'>1.034</td><td class='num'>1.518</td></tr><tr><td class='num'>0.75</td><td class='num'>1689.554</td><td class='num'>1706.106</td><td class='num'>2366.965</td><td class='num'>1.010</td><td class='num'>1.401</td></tr><tr><td class='num'>1.0</td><td class='num'>3326.437</td><td class='num'>3336.414</td><td class='num'>4498.240</td><td class='num'>1.003</td><td class='num'>1.352</td></tr></tbody></table>
+    <h3>CCT 矩阵</h3>
+    <h4>ub_rg</h4><table><thead><tr><th>B \ S</th><th class='num'>0.0</th><th class='num'>0.25</th><th class='num'>0.5</th><th class='num'>0.75</th><th class='num'>1.0</th></tr></thead><tbody><tr><th class='num'>16</th><td class='num'>6.564</td><td class='num'>13.142</td><td class='num'>40.132</td><td class='num'>107.663</td><td class='num'>209.745</td></tr><tr><th class='num'>256</th><td class='num'>62.525</td><td class='num'>170.669</td><td class='num'>587.962</td><td class='num'>1689.554</td><td class='num'>3326.437</td></tr></tbody></table>
+    <h4>ub_rg_pop (NC)</h4><table><thead><tr><th>B \ S</th><th class='num'>0.0</th><th class='num'>0.25</th><th class='num'>0.5</th><th class='num'>0.75</th><th class='num'>1.0</th></tr></thead><tbody><tr><th class='num'>16</th><td class='num'>6.645</td><td class='num'>11.692</td><td class='num'>41.096</td><td class='num'>112.781</td><td class='num'>222.658</td></tr><tr><th class='num'>256</th><td class='num'>90.799</td><td class='num'>173.438</td><td class='num'>607.843</td><td class='num'>1706.106</td><td class='num'>3336.414</td></tr></tbody></table>
+    <h4>ub_unscheduled</h4><table><thead><tr><th>B \ S</th><th class='num'>0.0</th><th class='num'>0.25</th><th class='num'>0.5</th><th class='num'>0.75</th><th class='num'>1.0</th></tr></thead><tbody><tr><th class='num'>16</th><td class='num'>19.256</td><td class='num'>80.388</td><td class='num'>221.763</td><td class='num'>295.423</td><td class='num'>479.718</td></tr><tr><th class='num'>256</th><td class='num'>254.835</td><td class='num'>347.193</td><td class='num'>892.686</td><td class='num'>2366.965</td><td class='num'>4498.240</td></tr></tbody></table>
+    <div class="charts two">
+      <div class='chart-card'><h4>B16 S=0.5 ECDF</h4><img src='s3_full_dispatch_B16_S0p5_ecdf.svg' alt='B16 S=0.5 ECDF' style='max-width:100%;height:auto'/></div>
+      <div class='chart-card'><h4>B16 S=1.0 ECDF</h4><img src='s3_full_dispatch_B16_S1p0_ecdf.svg' alt='B16 S=1.0 ECDF' style='max-width:100%;height:auto'/></div>
+      <div class='chart-card'><h4>B256 S=1.0 ECDF</h4><img src='s3_full_dispatch_B256_S1p0_ecdf.svg' alt='B256 S=1.0 ECDF' style='max-width:100%;height:auto'/></div>
+    </div>
+    <p class="muted">详报：<a href="EXPERIMENT_REPORT_S3_FULL.html">EXPERIMENT_REPORT_S3_FULL.html</a></p>
+  </section>
+
+  <section id="cross">
+    <h2>4.5 跨场景对比（ub_rg CCT）</h2>
+    <p class="muted">S1 高偏斜取 S=0.9，S2/S3 取 S=1.0。</p>
+    <div class="charts two">
+      <div class="chart-card"><h3>Batch=16 · ub_rg</h3><canvas id="cross16"></canvas></div>
+      <div class="chart-card"><h3>Batch=256 · ub_rg</h3><canvas id="cross256"></canvas></div>
+    </div>
+    <h3>Batch=16</h3>
+    <table><thead><tr><th>Zipf</th><th class='num'>S1 ub_rg</th><th class='num'>S2 ub_rg</th><th class='num'>S3 ub_rg</th><th class='num'>S1 uns/rg</th><th class='num'>S2 uns/rg</th><th class='num'>S3 uns/rg</th></tr></thead><tbody><tr><td>~0</td><td class='num'>6.245</td><td class='num'>7.696</td><td class='num'>6.564</td><td class='num'>2.076</td><td class='num'>0.825</td><td class='num'>2.934</td></tr><tr><td>~0.5</td><td class='num'>13.750</td><td class='num'>40.668</td><td class='num'>40.132</td><td class='num'>1.786</td><td class='num'>1.058</td><td class='num'>5.526</td></tr><tr><td>~1</td><td class='num'>28.600</td><td class='num'>210.736</td><td class='num'>209.745</td><td class='num'>2.471</td><td class='num'>1.156</td><td class='num'>2.287</td></tr></tbody></table>
+    <h3>Batch=256</h3>
+    <table><thead><tr><th>Zipf</th><th class='num'>S1 ub_rg</th><th class='num'>S2 ub_rg</th><th class='num'>S3 ub_rg</th><th class='num'>S1 uns/rg</th><th class='num'>S2 uns/rg</th><th class='num'>S3 uns/rg</th></tr></thead><tbody><tr><td>~0</td><td class='num'>47.682</td><td class='num'>67.604</td><td class='num'>62.525</td><td class='num'>2.690</td><td class='num'>1.299</td><td class='num'>4.076</td></tr><tr><td>~0.5</td><td class='num'>201.454</td><td class='num'>598.430</td><td class='num'>587.962</td><td class='num'>1.689</td><td class='num'>1.227</td><td class='num'>1.518</td></tr><tr><td>~1</td><td class='num'>448.348</td><td class='num'>3339.152</td><td class='num'>3326.437</td><td class='num'>1.222</td><td class='num'>1.254</td><td class='num'>1.352</td></tr></tbody></table>
+    <ul>
+      <li>S1→S2/S3：同偏斜 CCT 随规模与跳数上升；S2 与 S3 的 ub_rg 量级接近。</li>
+      <li>uns 相对收益：S1、S3 上 RG 优势大；S2 差距最小。</li>
+      <li>pop vs rg：S1/S3 接近；S2 高偏斜 POP 明显更差。</li>
+    </ul>
+  </section>
+
+  <section id="concl">
+    <h2>6 结论（对照设计 §6）</h2>
+    <table>
+      <thead><tr><th>#</th><th>设计预期</th><th>Full 数据结论</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>倾斜损害完成时间</td><td>成立：三场景 CCT 随 S 上升，ECDF 右尾拉长</td></tr>
+        <tr><td>2</td><td>端到端调度改进头阻</td><td>成立：ub_rg 在 S1/S3 显著优于 uns；S2 多数仍优但幅度更小</td></tr>
+        <tr><td>3</td><td>单层 Clos 问题易收敛</td><td>成立：S1 上 RG≈POP，uns 稳定慢约 2×</td></tr>
+        <tr><td>4</td><td>双层 Clos 更复杂</td><td>部分印证：S2 上 POP 高偏斜落后；S3+NC 下 pop≈rg，uns 最差</td></tr>
+      </tbody>
+    </table>
+    <p class="callout">
+      <strong>一句话：</strong>Full Dispatch 下 <code>ub_rg</code> 是三场景最稳 CCT 方案；
+      POP 在单层与 MpClos+无冲突路由上可与 RG 对齐，在两层 Clos 高偏斜处仍有代价；
+      自由注入在 MpClos 中偏斜小 Batch 上可差至 RG 的 6×。
+    </p>
+  </section>
+
+  <footer>
+    CSV: sweep_results_full_s{1,2,3}.csv ·
+    Markdown: <a href="EXPERIMENT_REPORT_FULL_S123.md">EXPERIMENT_REPORT_FULL_S123.md</a> ·
+    生成自 scratch/ub_rg_dispatch_full_s123_report.py
+  </footer>
+</div>
+<script>
+const DATA = {"s1": {"zipfS": [0.0, 0.1, 0.3, 0.5, 0.7, 0.9], "batches": {"16": {"ub_rg": [6.245, 5.995, 8.173, 13.75, 20.537, 28.6], "ub_rg_pop": [5.626, 5.334, 8.109, 14.401, 22.12, 29.739], "ub_unscheduled": [12.963, 15.138, 18.763, 24.563, 48.343, 70.673]}, "64": {"ub_rg": [16.827, 17.448, 29.763, 50.466, 81.027, 112.622], "ub_rg_pop": [19.717, 18.613, 29.996, 50.453, 80.639, 112.543], "ub_unscheduled": [39.506, 37.476, 75.024, 116.643, 210.023, 234.384]}, "256": {"ub_rg": [47.682, 61.628, 115.445, 201.454, 322.475, 448.348], "ub_rg_pop": [59.51, 62.496, 123.736, 209.027, 324.771, 450.06], "ub_unscheduled": [128.255, 157.576, 263.996, 340.265, 450.32, 547.882]}}}, "s2": {"zipfS": [0.0, 0.25, 0.5, 0.75, 1.0], "batches": {"16": {"ub_rg": [7.696, 12.766, 40.668, 110.857, 210.736], "ub_rg_pop": [6.355, 13.99, 45.251, 142.844, 288.449], "ub_unscheduled": [6.351, 15.631, 43.036, 124.091, 243.716]}, "256": {"ub_rg": [67.604, 172.193, 598.43, 1693.436, 3339.152], "ub_rg_pop": [83.586, 263.231, 707.584, 1785.804, 3397.611], "ub_unscheduled": [87.85, 225.311, 734.205, 2119.243, 4187.538]}}}, "s3": {"zipfS": [0.0, 0.25, 0.5, 0.75, 1.0], "batches": {"16": {"ub_rg": [6.564, 13.142, 40.132, 107.663, 209.745], "ub_rg_pop": [6.645, 11.692, 41.096, 112.781, 222.658], "ub_unscheduled": [19.256, 80.388, 221.763, 295.423, 479.718]}, "256": {"ub_rg": [62.525, 170.669, 587.962, 1689.554, 3326.437], "ub_rg_pop": [90.799, 173.438, 607.843, 1706.106, 3336.414], "ub_unscheduled": [254.835, 347.193, 892.686, 2366.965, 4498.24]}}}, "cross": {"labels": ["~0", "~0.5", "~1"], "b16": {"s1": [6.245, 13.75, 28.6], "s2": [7.696, 40.668, 210.736], "s3": [6.564, 40.132, 209.745]}, "b256": {"s1": [47.682, 201.454, 448.348], "s2": [67.604, 598.43, 3339.152], "s3": [62.525, 587.962, 3326.437]}}};
+const colors = { ub_rg: '#0b5fff', ub_rg_pop: '#0a7a5a', ub_unscheduled: '#c45c26' };
+const scColors = { s1: '#0b5fff', s2: '#7a3e9d', s3: '#0a7a5a' };
+
+function lineChart(id, zipfS, series) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  new Chart(el, {
+    type: 'line',
+    data: {
+      labels: zipfS,
+      datasets: ['ub_rg','ub_rg_pop','ub_unscheduled'].map(k => ({
+        label: k,
+        data: series[k],
+        borderColor: colors[k],
+        backgroundColor: colors[k],
+        tension: 0.2,
+        pointRadius: 3,
+      }))
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        x: { title: { display: true, text: 'Zipf S' } },
+        y: { title: { display: true, text: 'CCT (μs)' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function crossChart(id, key) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const block = DATA.cross[key];
+  new Chart(el, {
+    type: 'bar',
+    data: {
+      labels: DATA.cross.labels,
+      datasets: [
+        { label: 'S1', data: block.s1, backgroundColor: scColors.s1 },
+        { label: 'S2', data: block.s2, backgroundColor: scColors.s2 },
+        { label: 'S3', data: block.s3, backgroundColor: scColors.s3 },
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        x: { title: { display: true, text: 'Zipf (approx)' } },
+        y: { title: { display: true, text: 'ub_rg CCT (μs)' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+lineChart('s1c16', DATA.s1.zipfS, DATA.s1.batches['16']);
+lineChart('s1c64', DATA.s1.zipfS, DATA.s1.batches['64']);
+lineChart('s1c256', DATA.s1.zipfS, DATA.s1.batches['256']);
+lineChart('s2c16', DATA.s2.zipfS, DATA.s2.batches['16']);
+lineChart('s2c256', DATA.s2.zipfS, DATA.s2.batches['256']);
+lineChart('s3c16', DATA.s3.zipfS, DATA.s3.batches['16']);
+lineChart('s3c256', DATA.s3.zipfS, DATA.s3.batches['256']);
+crossChart('cross16', 'b16');
+crossChart('cross256', 'b256');
+</script>
+</body>
+</html>

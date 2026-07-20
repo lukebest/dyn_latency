@@ -563,7 +563,19 @@ def _run_network_key(
             pass
 
     key.out_dir.mkdir(parents=True, exist_ok=True)
-    timeout = timeout_s or (14_400 if key.scenario >= 2 else 3_600)
+    # Scenario-1 skewed b256 can take 15–40 wall minutes; Clos (s2/s3) much longer.
+    # The 0719 report's failures were almost all "timeout after 120s".
+    if timeout_s:
+        timeout = timeout_s
+    elif key.scenario >= 2:
+        timeout = 14_400
+    elif key.scheme == "ub_rg":
+        # ub_rg (especially AFD / high Zipf) often exceeds the spray wall clock.
+        timeout = 14_400 if key.zipf_s >= 0.5 else 7_200
+    elif key.batch >= 256 and key.zipf_s >= 0.5:
+        timeout = 7_200
+    else:
+        timeout = 3_600
     started = time.monotonic()
     try:
         process = subprocess.run(

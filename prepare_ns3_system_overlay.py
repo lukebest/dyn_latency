@@ -488,7 +488,7 @@ def patch_scheduler(text: str) -> str:
     text = replace_once(
         text,
         "    const Time stale = MicroSeconds(500); // > control RTT; still unbound deadlock if DATA never returns",
-        "    const Time stale = MicroSeconds(10); // > packet-probe control RTT",
+        "    const Time stale = MicroSeconds(500); // > packet-probe control RTT; do not use 10µs",
         "stale grant timeout",
     )
     text = replace_once(

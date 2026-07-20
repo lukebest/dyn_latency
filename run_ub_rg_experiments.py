@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 NS3 = ROOT / "ns-3-ub"
 ZIPF_S = [0.0, 0.3, 0.7, 0.9]
-SCHEMES = ["ub_rg", "packet_spray"]
+SCHEMES = ["ub_rg", "ub_rg_pop", "packet_spray"]
 TOPK = 8
 SEED = 1
 
