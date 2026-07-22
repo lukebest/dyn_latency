@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -413,10 +413,36 @@ def build_sys3_jobs() -> list[SystemJob]:
     return jobs
 
 
+def apply_cut_c(jobs: Sequence[SystemJob]) -> list[SystemJob]:
+    """Cut C: keep all of scenario-1; Clos (s2/s3) main only with mb_batch≤128.
+
+    Drops s2/s3 controls (AFD 31:1 / 1:1, m=1/4, placement extras). Caps sys1
+    Clos main from B=256 to B=128 so per-invocation batch stays ≤128.
+    """
+
+    out: list[SystemJob] = []
+    for job in jobs:
+        if job.scenario == 1:
+            out.append(job)
+            continue
+        if job.tier != "main":
+            continue
+        if job.mb_batch > 128:
+            if job.exp == "sys1" and job.microbatches == 1 and job.batch > 128:
+                job = replace(job, batch=128)
+            else:
+                continue
+        if job.mb_batch > 128:
+            continue
+        out.append(job)
+    return out
+
+
 def build_plan(
     tier: str = "all",
     exp: str | None = None,
     scenario: int | None = None,
+    cut: str = "none",
 ) -> list[SystemJob]:
     """Build the exact main/control matrix, then apply optional filters."""
 
@@ -426,6 +452,8 @@ def build_plan(
         raise ValueError("exp must be sys1, sys2, or sys3")
     if scenario not in (None, 1, 2, 3):
         raise ValueError("scenario must be 1, 2, or 3")
+    if cut not in ("none", "c"):
+        raise ValueError("cut must be none or c")
 
     builders = {
         "sys1": build_sys1_jobs,
@@ -438,6 +466,8 @@ def build_plan(
         jobs = [job for job in jobs if job.tier == tier]
     if scenario is not None:
         jobs = [job for job in jobs if job.scenario == scenario]
+    if cut == "c":
+        jobs = apply_cut_c(jobs)
     return jobs
 
 
@@ -749,6 +779,12 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tier", choices=("main", "controls", "all"), default="all")
     parser.add_argument("--exp", choices=("sys1", "sys2", "sys3"), default=None)
     parser.add_argument("--scenario", type=int, choices=SCENARIOS, default=None)
+    parser.add_argument(
+        "--cut",
+        choices=("none", "c"),
+        default="none",
+        help="c: S1 full + S2/S3 main only with network batch≤128",
+    )
     parser.add_argument("--workers", type=int, default=0, help="0 selects a safe default")
     parser.add_argument("--limit", type=int, default=0, help="limit system jobs after filtering")
     parser.add_argument("--force", action="store_true", help="rerun packet and system outputs")
@@ -792,7 +828,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.timeout_s < 0:
         raise SystemExit("--timeout-s must be non-negative")
 
-    jobs = build_plan(args.tier, args.exp, args.scenario)
+    jobs = build_plan(args.tier, args.exp, args.scenario, cut=args.cut)
     if args.limit:
         jobs = jobs[: args.limit]
     keys = network_plan(jobs)
@@ -883,9 +919,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "tier": args.tier,
             "exp": args.exp,
             "scenario": args.scenario,
+            "cut": args.cut,
             "limit": args.limit,
             "force": args.force,
             "timeout_s": args.timeout_s,
+            "workers": workers,
         },
         "binary": str(binary),
         "planned": len(keys),

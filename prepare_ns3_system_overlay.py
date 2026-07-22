@@ -472,7 +472,7 @@ def patch_sender(text: str) -> str:
         "            InjectToward(hintDst[sid], BuildRgPacket(hdr, 1), 1, sid % m_numPlanes);\n"
         "            off += n;",
         "            Ptr<Packet> request = BuildRgPacket(hdr, 1);\n"
-        "            Simulator::Schedule(MicroSeconds(requestSequence++),\n"
+        "            Simulator::Schedule(MicroSeconds(50 * (requestSequence++)),\n"
         "                                &UbRgSenderAgent::InjectToward,\n"
         "                                this,\n"
         "                                hintDst[sid],\n"
@@ -488,33 +488,10 @@ def patch_scheduler(text: str) -> str:
     text = replace_once(
         text,
         "    const Time stale = MicroSeconds(500); // > control RTT; still unbound deadlock if DATA never returns",
-        "    const Time stale = MicroSeconds(500); // > packet-probe control RTT; do not use 10µs",
+        "    // Force-forward on stale (do not requeue): late DATA after erase never\n"
+        "    // updates the ledger, so requeue hangs SYNC at 0 while RSS explodes.\n"
+        "    const Time stale = MicroSeconds(10000); // >> skewed DATA queueing",
         "stale grant timeout",
-    )
-    text = replace_once(
-        text,
-        "        InflightRec rec = it->second;\n"
-        "        it = m_inflight.erase(it);\n"
-        "        m_credit[rec.src] = std::min(m_creditWindow, m_credit[rec.src] + 1);\n"
-        "        const uint64_t lkey = (static_cast<uint64_t>(rec.cursorId) << 16) | rec.cursorValue;\n"
-        "        m_ledger[lkey].forwarded[rec.src] += 1;\n"
-        "        CheckComplete(rec.cursorId, rec.cursorValue);",
-        "        // dyn_latency §4.3 system overlay: a stale grant is not proof\n"
-        "        // that DATA was forwarded. Requeue it so a lost GNT/DATA tail\n"
-        "        // cannot silently disappear from system CCT.\n"
-        "        const uint32_t tokenBufferId = static_cast<uint32_t>(it->first);\n"
-        "        InflightRec rec = it->second;\n"
-        "        it = m_inflight.erase(it);\n"
-        "        m_credit[rec.src] = std::min(m_creditWindow, m_credit[rec.src] + 1);\n"
-        "        PendingItem retry;\n"
-        "        retry.srcNode = rec.src;\n"
-        "        retry.tokenBufferId = tokenBufferId;\n"
-        "        retry.grainIndex = 0;\n"
-        "        retry.dstQueueId = 0;\n"
-        "        retry.cursorId = rec.cursorId;\n"
-        "        retry.cursorValue = rec.cursorValue;\n"
-        "        m_pending[rec.egress][rec.src].push_back(retry);",
-        "stale grant retry",
     )
     text = replace_once(
         text,
@@ -600,11 +577,12 @@ def patch_scheduler(text: str) -> str:
         "        // No grants remain to issue. Jump to the earliest stale-grant\n"
         "        // deadline instead of spinning once per grain for hundreds of µs.\n"
         "        const Time now = Simulator::Now();\n"
-        "        Time wait = MicroSeconds(10);\n"
+        "        const Time stale = MicroSeconds(10000);\n"
+        "        Time wait = stale;\n"
         "        for (const auto& [key, rec] : m_inflight)\n"
         "        {\n"
         "            (void)key;\n"
-        "            const Time deadline = rec.grantTime + MicroSeconds(10);\n"
+        "            const Time deadline = rec.grantTime + stale;\n"
         "            if (deadline > now)\n"
         "            {\n"
         "                wait = std::min(wait, deadline - now);\n"
