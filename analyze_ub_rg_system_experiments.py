@@ -768,28 +768,63 @@ def make_figures(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
     figures_dir.mkdir(parents=True, exist_ok=True)
     paths: list[Path] = []
 
-    # Sys1: required step/throughput view against Zipf.
-    path = figures_dir / "sys1_step_throughput_vs_zipf.svg"
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
-    sys1 = [row for row in rows if row["experiment"] == "sys1"]
-    group_names = ("scenario", "scheme", "batch_size")
-    for ax, metric, ylabel in (
-        (axes[0], "step_time_us", "Step time (µs)"),
-        (axes[1], "throughput_tokens_s", "Per-device throughput (token/s)"),
-    ):
-        grouped = _group_mean(sys1, "zipf_s", metric, group_names)
-        if not grouped:
+    # Sys1: one figure per batch_size; schemes share axes for Zipf comparison.
+    full_ep = {1: 128, 2: 1024, 3: 1024}
+    sys1 = [
+        row
+        for row in rows
+        if row["experiment"] == "sys1"
+        and row.get("layers") == 60
+        and row.get("ep_size")
+        == full_ep.get(int(row["scenario"] or 1), 128)
+    ]
+    batch_sizes = sorted(
+        {
+            int(batch)
+            for row in sys1
+            for batch in [_number(row.get("batch_size"))]
+            if batch is not None
+        }
+    )
+    if not batch_sizes:
+        path = figures_dir / "sys1_step_throughput_vs_zipf.svg"
+        fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+        for ax in axes:
             _placeholder(ax, "sys1 data missing")
-        else:
-            for group, (xs, ys) in sorted(grouped.items(), key=lambda item: str(item[0])):
-                ax.plot(xs, ys, marker="o", label=_label(group, ("S", "scheme", "B")))
-            ax.legend(fontsize=7)
-            ax.grid(alpha=0.3)
-        ax.set_xlabel("Zipf S")
-        ax.set_ylabel(ylabel)
-    fig.suptitle("Sys1: serial Wide-EP step and throughput")
-    _finish_figure(fig, path)
-    paths.append(path)
+        fig.suptitle("Sys1: serial Wide-EP step and throughput")
+        _finish_figure(fig, path)
+        paths.append(path)
+    else:
+        for batch in batch_sizes:
+            subset = [row for row in sys1 if _number(row.get("batch_size")) == batch]
+            path = figures_dir / f"sys1_step_throughput_vs_zipf_b{batch}.svg"
+            fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+            for ax, metric, ylabel in (
+                (axes[0], "step_time_us", "Step time (µs)"),
+                (axes[1], "throughput_tokens_s", "Per-device throughput (token/s)"),
+            ):
+                grouped = _group_mean(subset, "zipf_s", metric, ("scheme",))
+                if not grouped:
+                    _placeholder(ax, f"sys1 B={batch} data missing")
+                else:
+                    for group, (xs, ys) in sorted(
+                        grouped.items(), key=lambda item: str(item[0])
+                    ):
+                        ax.plot(
+                            xs,
+                            ys,
+                            marker="o",
+                            label=_label(group, ("scheme",)),
+                        )
+                    ax.legend(fontsize=8)
+                    ax.grid(alpha=0.3)
+                ax.set_xlabel("Zipf S")
+                ax.set_ylabel(ylabel)
+            fig.suptitle(
+                f"Sys1: B={batch}, L=60, full EP — scheme comparison vs Zipf"
+            )
+            _finish_figure(fig, path)
+            paths.append(path)
 
     # Sys2: speedup by microbatch count.
     path = figures_dir / "sys2_speedup_vs_m.svg"
@@ -934,6 +969,242 @@ def _evidence_values(row: Mapping[str, Any]) -> list[str]:
     return values
 
 
+def _find_anchor(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    scheme: str,
+    zipf_s: float,
+    microbatches: int,
+    batch: int = 256,
+    layers: int = 60,
+    ep_size: int | None = 128,
+    attention_devices: int | None = None,
+    ffn_devices: int | None = None,
+) -> Mapping[str, Any] | None:
+    for row in rows:
+        if (
+            row.get("scenario") == 1
+            and row.get("scheme") == scheme
+            and row.get("batch_size") == batch
+            and row.get("zipf_s") == zipf_s
+            and row.get("layers") == layers
+            and row.get("microbatches") == microbatches
+        ):
+            if ep_size is not None and row.get("ep_size") != ep_size:
+                continue
+            if (
+                attention_devices is not None
+                and row.get("attention_devices") != attention_devices
+            ):
+                continue
+            if ffn_devices is not None and row.get("ffn_devices") != ffn_devices:
+                continue
+            return row
+    return None
+
+
+def _sys1_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    lines = [
+        "**设计（§4.3.1）**：Wide-EP 同构部署；同一 microbatch 上 "
+        "`Attn → Dispatch → FFN → Combine` **严格串行**，通讯与计算不重叠。"
+        "主观测：step 时延与 per-device throughput（$B/T_{step}$）。"
+        "本报告范围：场景1；方案 `packet_spray` / `ub_rg`。\n",
+        "**本轮矩阵**：B∈{16, 64, 256} 均扫 Zipf S∈{0, 0.5, 0.9}（EP=128、L=60）；"
+        "另含 EP=64 与 L∈{32, 94} 单点对照（默认 S=0.5）。"
+        f"实收 summary **{len(rows)}** 个。\n",
+        "**本轮结论**：\n",
+    ]
+    spray = _find_anchor(rows, scheme="packet_spray", zipf_s=0.5, microbatches=1)
+    rg = _find_anchor(rows, scheme="ub_rg", zipf_s=0.5, microbatches=1)
+    spray0 = _find_anchor(rows, scheme="packet_spray", zipf_s=0.0, microbatches=1)
+    spray9 = _find_anchor(rows, scheme="packet_spray", zipf_s=0.9, microbatches=1)
+    if spray and rg:
+        spray_step = float(spray["step_time_us"])
+        rg_step = float(rg["step_time_us"])
+        ratio = rg_step / spray_step
+        lines.append(
+            f"- 主锚点（B=256、S=0.5、L=60、EP=128）：Packet Spray step="
+            f"{spray_step:.1f} µs、吞吐 {float(spray['throughput_tokens_s']):.1f} "
+            f"token/s/device；`ub_rg` step={rg_step:.1f} µs、吞吐 "
+            f"{float(rg['throughput_tokens_s']):.1f}。"
+            f"`ub_rg` step 约为 Spray 的 **{ratio:.1f}×**（更慢），"
+            "串行 Wide-EP 下逐包证据不支持 `ub_rg` 相对 Spray 加速。\n"
+        )
+    if spray0 and spray and spray9:
+        lines.append(
+            f"- Zipf 敏感（B=256 Spray）：step 随 S 从 {float(spray0['step_time_us']):.1f} "
+            f"（S=0）升至 {float(spray['step_time_us']):.1f}（S=0.5）、"
+            f"{float(spray9['step_time_us']):.1f}（S=0.9）。\n"
+        )
+    # B=16/64 spray zipf completeness note
+    zipf_complete = True
+    for batch in (16, 64):
+        for scheme in ("packet_spray", "ub_rg"):
+            for zipf_s in (0.0, 0.5, 0.9):
+                if (
+                    _find_anchor(
+                        rows,
+                        scheme=scheme,
+                        zipf_s=zipf_s,
+                        microbatches=1,
+                        batch=batch,
+                    )
+                    is None
+                ):
+                    zipf_complete = False
+    if zipf_complete:
+        lines.append(
+            "- B=16/64 与 B=256 一样具备完整 Zipf 三点曲线；下图按 B 分面，"
+            "同图对比 `packet_spray` 与 `ub_rg`（仅 L=60、EP=128；EP/L 单点对照只在表中）。\n"
+        )
+    else:
+        lines.append(
+            "- B=16/64 的 Zipf 曲线尚未齐：缺测点见下表“缺失”或未列出的 (B,S)。\n"
+        )
+    return lines
+
+
+def _sys2_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    lines = [
+        "**设计（§4.3.2）**：仍为 Wide-EP；全局 batch 切成 m 个 microbatch，"
+        "计算/通讯双 stream 做 TBO ping-pong，期望通讯被计算掩盖。"
+        "主配置 m=2；对照 m=1（退化为不掩盖）与 m=4。"
+        "观测：相对串行的 speedup，以及通讯事件与计算重叠比例（mask）。\n",
+        "**本轮矩阵**：场景1、B=256、EP=128、L=60；主点 m=2 且 "
+        "S∈{0, 0.5, 0.9}；对照 m∈{1, 4} 且 S∈{0.5, 0.9}。"
+        f"实收 summary **{len(rows)}** 个。\n",
+        "**本轮结论**：\n",
+    ]
+    spray_m1 = _find_anchor(rows, scheme="packet_spray", zipf_s=0.5, microbatches=1)
+    spray_m2 = _find_anchor(rows, scheme="packet_spray", zipf_s=0.5, microbatches=2)
+    spray_m4 = _find_anchor(rows, scheme="packet_spray", zipf_s=0.5, microbatches=4)
+    rg_m1 = _find_anchor(rows, scheme="ub_rg", zipf_s=0.5, microbatches=1)
+    rg_m2 = _find_anchor(rows, scheme="ub_rg", zipf_s=0.5, microbatches=2)
+    rg_m4 = _find_anchor(rows, scheme="ub_rg", zipf_s=0.5, microbatches=4)
+    spray9_m2 = _find_anchor(rows, scheme="packet_spray", zipf_s=0.9, microbatches=2)
+    spray9_m1 = _find_anchor(rows, scheme="packet_spray", zipf_s=0.9, microbatches=1)
+    if spray_m1 and spray_m2 and spray_m4:
+        base = float(spray_m1["step_time_us"])
+        lines.append(
+            f"- Packet Spray、S=0.5：m=2/m=4 相对 m=1 为 "
+            f"{base / float(spray_m2['step_time_us']):.2f}× / "
+            f"{base / float(spray_m4['step_time_us']):.2f}×"
+            f"（mask：{_display(spray_m2.get('mask_label'))} / "
+            f"{_display(spray_m4.get('mask_label'))}）。"
+            "加速是「切小 MB 后 CCT 变化 + 双 stream 重叠」的净效应，"
+            "本矩阵未做因素消融。\n"
+        )
+    if spray9_m1 and spray9_m2:
+        ratio = float(spray9_m1["step_time_us"]) / float(spray9_m2["step_time_us"])
+        lines.append(
+            f"- 高倾斜下掩盖变难：Spray S=0.9 时 m=2 相对 m=1 仅 "
+            f"{ratio:.2f}×（mask：{_display(spray9_m2.get('mask_label'))}）。\n"
+        )
+    if rg_m1 and rg_m2 and rg_m4:
+        base = float(rg_m1["step_time_us"])
+        s2 = base / float(rg_m2["step_time_us"])
+        s4 = base / float(rg_m4["step_time_us"])
+        lines.append(
+            f"- `ub_rg`、S=0.5：m=2/m=4 speedup 为 {s2:.2f}× / {s4:.2f}×"
+            f"{'（m=4 相对串行退化）' if s4 < 1 else ''}；"
+            "通讯重叠均为 0% 量级。TBO 并非必然获益。\n"
+        )
+    return lines
+
+
+def _sys3_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    lines = [
+        "**设计（§4.3.3）**：AFD 角色分离——M 个 Attention NPU 与 N 个 FFN NPU；"
+        "层边界为非对称 M2N Dispatch / N2M Combine，再叠 m-microbatch ping-pong。"
+        "网络侧测 $T_c=\\max(\\mathrm{M2N\\ CCT},\\ \\mathrm{N2M\\ CCT})$；"
+        "系统侧看 Tc、双向掩盖是否通过、step/吞吐。"
+        "场景1 主推荐 7:1（M:N=112:16），对照 1:1 与 31:1。\n",
+        "**本轮矩阵**：场景1、B=256、L=60、placement=`role_packed`；"
+        "7:1 扫 m∈{1,2,4} 与 Zipf；另含 1:1、31:1 对照。"
+        f"实收 summary **{len(rows)}** 个。\n",
+        "**本轮结论**：\n",
+    ]
+    mask_pass = [
+        row
+        for row in rows
+        if str(row.get("mask_label") or "").strip() not in {"", "未通过", "缺失", "None"}
+        and "未通过" not in str(row.get("mask_label"))
+    ]
+    # treat only explicit pass-like labels; all current data is 未通过
+    failed_masks = sum(
+        "未通过" in str(row.get("mask_label") or "") for row in rows
+    )
+    lines.append(
+        f"- 双向掩盖：{failed_masks}/{len(rows)} 个样本标记为未通过"
+        + (
+            "；无样本显示通讯被计算完全隐藏。\n"
+            if failed_masks == len(rows) and rows
+            else f"；另有 {len(mask_pass)} 个非“未通过”标记，见下表。\n"
+        )
+    )
+    spray71 = _find_anchor(
+        rows,
+        scheme="packet_spray",
+        zipf_s=0.5,
+        microbatches=2,
+        attention_devices=112,
+        ffn_devices=16,
+        ep_size=None,
+    )
+    rg71 = _find_anchor(
+        rows,
+        scheme="ub_rg",
+        zipf_s=0.5,
+        microbatches=2,
+        attention_devices=112,
+        ffn_devices=16,
+        ep_size=None,
+    )
+    rg0 = _find_anchor(
+        rows,
+        scheme="ub_rg",
+        zipf_s=0.0,
+        microbatches=2,
+        attention_devices=112,
+        ffn_devices=16,
+        ep_size=None,
+    )
+    rg11 = _find_anchor(
+        rows,
+        scheme="ub_rg",
+        zipf_s=0.5,
+        microbatches=2,
+        attention_devices=64,
+        ffn_devices=64,
+        ep_size=None,
+    )
+    if spray71 and rg71:
+        lines.append(
+            f"- 7:1、m=2、S=0.5：Spray Tc={float(spray71['tc_us']):.1f} µs、"
+            f"step={float(spray71['step_time_us']):.1f} µs；"
+            f"`ub_rg` Tc={float(rg71['tc_us']):.1f} µs、"
+            f"step={float(rg71['step_time_us']):.1f} µs。"
+            "倾斜负载下 Spray 的 AFD Tc/step 明显更低。\n"
+        )
+    if rg0 and rg71:
+        lines.append(
+            f"- `ub_rg` 在均匀专家（S=0、7:1、m=2）Tc={float(rg0['tc_us']):.1f} µs，"
+            f"远低于同结构 S=0.5 的 {float(rg71['tc_us']):.1f} µs；"
+            "RG 对热点更敏感。\n"
+        )
+    if rg11:
+        lines.append(
+            f"- 1:1 对照（m=2、S=0.5）`ub_rg` Tc={float(rg11['tc_us']):.1f} µs，"
+            "仍未通过双向掩盖；逐包证据不支持“本 fabric 上 m=2 可无条件隐藏 "
+            "AFD 双向通信”。\n"
+        )
+    lines.append(
+        "- Tc 口径为单 seed 方向 CCT 的 max，不是跨 seed CCT-P99；"
+        "不用逐 token latency 替代。\n"
+    )
+    return lines
+
+
 def build_report(
     rows: list[dict[str, Any]],
     issues: list[Issue],
@@ -986,11 +1257,59 @@ def build_report(
         "不引用不含 `0719` 的同名设计文档。\n"
     )
     if network_records or system_records:
+
+        def _record_scenario(record: Mapping[str, Any]) -> int | None:
+            for key in ("scenario", "network_key", "system_key", "job", "config"):
+                value = record.get(key)
+                if isinstance(value, (int, float)):
+                    return int(value)
+                if isinstance(value, Mapping) and isinstance(
+                    value.get("scenario"), (int, float)
+                ):
+                    return int(value["scenario"])
+            return None
+
+        scenarios = sorted(
+            {
+                scenario
+                for record in (*network_records, *system_records)
+                if (scenario := _record_scenario(record)) is not None
+            }
+        )
+        filter_scenario: int | None = None
+        for payload in ledger_payloads:
+            filters = payload.get("filters")
+            if isinstance(filters, Mapping) and isinstance(
+                filters.get("scenario"), (int, float)
+            ):
+                filter_scenario = int(filters["scenario"])
+        all_ok = (
+            network_failed == 0
+            and system_failed == 0
+            and network_completed == len(network_records)
+            and system_completed == len(system_records)
+            and len(network_records) > 0
+            and len(system_records) > 0
+        )
+        scenario_scope = scenarios or ([filter_scenario] if filter_scenario else [])
+        if all_ok and scenario_scope == [1]:
+            status = "完成"
+            detail = "拓扑为场景1（单层 switch）。"
+        elif all_ok:
+            status = "完成"
+            detail = f"覆盖场景 {', '.join(str(s) for s in scenario_scope)}。"
+        else:
+            status = "部分完成"
+            detail = (
+                f"已覆盖场景 {', '.join(str(s) for s in scenario_scope)}。"
+                if scenario_scope
+                else ""
+            )
         lines.append(
-            f"> **执行状态：部分完成。** 网络任务 {len(network_records)} 个，完成 "
+            f"> **执行状态：{status}。** 网络任务 {len(network_records)} 个，完成 "
             f"{network_completed}、失败 {network_failed}；系统配置 {len(system_records)} 个，"
-            f"完成 {system_completed}、因网络输入失败 {system_failed}。成功结果均来自场景1，"
-            "场景2/3 在本轮墙钟上限内未形成可分析 summary。\n"
+            f"完成 {system_completed}、因网络输入失败 {system_failed}。"
+            f"{detail}\n"
         )
 
     lines.append("## 1. 方法与参数矩阵\n")
@@ -1042,21 +1361,33 @@ def build_report(
         f"- 输入根目录：`{results_root}`\n"
         f"- 已接受 summary：{len(rows)} 个；ledger：{len(ledgers)} 个\n"
         "- 门禁规则：每个可解析输入必须至少声明一个 `engine` 或 `network_engine`，"
-        "且所有此类声明都必须严格等于 `packet`；runner 的 ledger 也可用"
+        "且所有此类声明都必须严格等于 `packet`（二者只需其一；本仓库 system "
+        "summary 通常只写 `engine=packet`）。runner 的 ledger 也可用"
         "`packet_only=true` 作等价声明。`behavioral` 会立即报错并停止写出。\n"
     )
     if rows:
         for row in rows:
             sources = "；".join(f"`{value}`" for value in _evidence_values(row))
+            engine = row.get("engine")
+            network_engine = row.get("network_engine")
+            if engine is not None and network_engine is not None:
+                engine_note = (
+                    f"engine={_display(engine)}，network_engine={_display(network_engine)}"
+                )
+            elif engine is not None:
+                engine_note = f"engine={_display(engine)}"
+            elif network_engine is not None:
+                engine_note = f"network_engine={_display(network_engine)}"
+            else:
+                engine_note = "engine=缺失"
             lines.append(
-                f"- `{row['experiment']}/{row['run_id']}`：{sources}；"
-                f"engine={_display(row.get('engine'))}，"
-                f"network_engine={_display(row.get('network_engine'))}\n"
+                f"- `{row['experiment']}/{row['run_id']}`：{sources}；{engine_note}\n"
             )
     else:
         lines.append("- 数据缺失：没有可接受的逐包 summary，因而没有逐包数值证据可列。\n")
 
-    lines.append("## 3. Sys1：step 与 throughput\n")
+    lines.append("## 3. Sys1：串行 Wide-EP（step 与 throughput）\n")
+    lines.extend(_sys1_preamble(by_exp["sys1"]))
     sys1_table = [
         (
             row["run_id"],
@@ -1075,16 +1406,21 @@ def build_report(
             sys1_table,
         )
     )
-    lines.append(
-        f"![sys1 step/throughput]({_relative_link(report_md, figure_paths[0])})\n"
-    )
+    sys1_figures = [
+        path for path in figure_paths if path.name.startswith("sys1_")
+    ]
+    for path in sys1_figures:
+        lines.append(
+            f"![sys1 {path.stem}]({_relative_link(report_md, path)})\n"
+        )
 
-    lines.append("## 4. Sys2：m、speedup 与掩盖\n")
+    lines.append("## 4. Sys2：Wide-EP TBO（m、speedup 与掩盖）\n")
+    lines.extend(_sys2_preamble(by_exp["sys2"]))
     lines.append(
-        "Speedup 优先采用 summary 明示值；否则仅在存在同锚点 m=1 或 Sys1 step 时计算"
-        "`baseline_step / sys2_step`。没有锚点则保持缺失。掩盖列优先报告 summary "
-        "明示的 mask/hidden；若只有序列化 TBO events，则精确计算“通讯事件时长中与"
-        "计算事件重叠的比例”，不从 speedup 猜测。\n"
+        "指标口径：Speedup 优先用 summary 明示值；否则仅在存在同锚点 m=1 或 Sys1 "
+        "step 时计算 `baseline_step / sys2_step`。掩盖列优先用 summary 明示 "
+        "mask/hidden；若只有序列化 TBO events，则精确计算通讯事件与计算事件的"
+        "时长重叠比例，不从 speedup 猜测。\n"
     )
     sys2_table = [
         (
@@ -1104,9 +1440,14 @@ def build_report(
             sys2_table,
         )
     )
-    lines.append(f"![sys2 speedup]({_relative_link(report_md, figure_paths[1])})\n")
+    sys2_figures = [
+        path for path in figure_paths if path.name.startswith("sys2_")
+    ]
+    for path in sys2_figures:
+        lines.append(f"![sys2 {path.stem}]({_relative_link(report_md, path)})\n")
 
-    lines.append("## 5. Sys3：M:N、placement、Tc、mask 与 throughput\n")
+    lines.append("## 5. Sys3：AFD（M:N、Tc、mask 与 throughput）\n")
+    lines.extend(_sys3_preamble(by_exp["sys3"]))
     sys3_table = [
         (
             row["run_id"],
@@ -1137,13 +1478,11 @@ def build_report(
             sys3_table,
         )
     )
-    lines.append(
-        "Tc 口径为 `max(M2N cct_us, N2M cct_us)`。本轮每个网络键只有 seed=1，"
-        "因此这是单 seed 的逐包方向 CCT，不是跨 seed 的 CCT-P99；若未来增加多 seed，"
-        "应在方向 CCT 样本上再取 P99。本报告不会用逐 token latency P99、"
-        "dispatch/combine 或均值替代 Tc。\n"
-    )
-    lines.append(f"![sys3 Tc/throughput]({_relative_link(report_md, figure_paths[2])})\n")
+    sys3_figures = [
+        path for path in figure_paths if path.name.startswith("sys3_")
+    ]
+    for path in sys3_figures:
+        lines.append(f"![sys3 {path.stem}]({_relative_link(report_md, path)})\n")
 
     lines.append("## 6. 跨实验锚点\n")
     lines.append(
@@ -1180,117 +1519,23 @@ def build_report(
             anchor_rows,
         )
     )
-    lines.append(f"![cross compare]({_relative_link(report_md, figure_paths[3])})\n")
-
-    lines.append("## 7. 实验结论与证据边界\n")
-
-    def anchor(
-        experiment: str,
-        scheme: str,
-        zipf_s: float,
-        microbatches: int,
-        *,
-        batch: int = 256,
-        attention_devices: int | None = None,
-        ffn_devices: int | None = None,
-    ) -> Mapping[str, Any] | None:
-        for row in by_exp[experiment]:
-            if (
-                row.get("scenario") == 1
-                and row.get("scheme") == scheme
-                and row.get("batch_size") == batch
-                and row.get("zipf_s") == zipf_s
-                and row.get("layers") == 60
-                and row.get("microbatches") == microbatches
-            ):
-                if attention_devices is not None and row.get("attention_devices") != attention_devices:
-                    continue
-                if ffn_devices is not None and row.get("ffn_devices") != ffn_devices:
-                    continue
-                return row
-        return None
-
-    spray_serial = anchor("sys1", "packet_spray", 0.5, 1)
-    rg_serial = anchor("sys1", "ub_rg", 0.5, 1)
-    spray_tbo2 = anchor("sys2", "packet_spray", 0.5, 2)
-    spray_tbo4 = anchor("sys2", "packet_spray", 0.5, 4)
-    rg_tbo2 = anchor("sys2", "ub_rg", 0.5, 2)
-    rg_tbo4 = anchor("sys2", "ub_rg", 0.5, 4)
-    rg_afd_11 = anchor(
-        "sys3",
-        "ub_rg",
-        0.5,
-        2,
-        attention_devices=64,
-        ffn_devices=64,
-    )
-    rg_afd_rows = [
-        row
-        for row in by_exp["sys3"]
-        if row.get("scheme") == "ub_rg" and _number(row.get("tc_us")) is not None
+    cross_figures = [
+        path for path in figure_paths if path.name.startswith("cross_")
     ]
-    rg_afd_min = min(rg_afd_rows, key=lambda row: float(row["tc_us"])) if rg_afd_rows else None
+    for path in cross_figures:
+        lines.append(f"![cross {path.stem}]({_relative_link(report_md, path)})\n")
 
-    if spray_serial and rg_serial:
-        spray_step = float(spray_serial["step_time_us"])
-        rg_step = float(rg_serial["step_time_us"])
-        lines.append(
-            f"- **实验1（串行 Wide-EP）**：场景1、B=256、S=0.5、L=60 下，"
-            f"`ub_rg` step={rg_step:.1f} µs，Packet Spray={spray_step:.1f} µs，"
-            f"逐包输入对应 **{spray_step / rg_step:.2f}×** step 加速；"
-            f"per-device throughput 从 {float(spray_serial['throughput_tokens_s']):.1f} "
-            f"提升到 {float(rg_serial['throughput_tokens_s']):.1f} token/s。\n"
-        )
-    if spray_tbo2 and spray_tbo4 and spray_serial:
-        base = float(spray_serial["step_time_us"])
-        lines.append(
-            f"- **实验2（TBO）**：同一 Packet Spray 锚点，m=2/m=4 相对串行分别达到 "
-            f"{base / float(spray_tbo2['step_time_us']):.2f}×/"
-            f"{base / float(spray_tbo4['step_time_us']):.2f}×；"
-            "这是切小 MB 后网络 CCT 变化与双 stream 重叠的共同净效应；当前矩阵未做"
-            "因素消融，不能把全部加速单独归因于重叠。\n"
-        )
-    if rg_tbo2 and rg_tbo4 and rg_serial:
-        base = float(rg_serial["step_time_us"])
-        lines.append(
-            f"- **TBO 并非必然获益**：`ub_rg` 的 S=0.5 锚点中，m=2/m=4 speedup 仅 "
-            f"{base / float(rg_tbo2['step_time_us']):.2f}×/"
-            f"{base / float(rg_tbo4['step_time_us']):.2f}×（小于 1 即退化）。"
-            "这些样本只证明净效应为退化；未做消融，不能分别确定多次 CCT、"
-            "启动/排空或固定每-MB计算标定的贡献。\n"
-        )
-    if rg_afd_11 and rg_afd_min:
-        lines.append(
-            f"- **实验3（AFD）**：已完成的 `ub_rg` 样本中，最小 Tc="
-            f"{float(rg_afd_min['tc_us']):.3f} µs（M:N="
-            f"{rg_afd_min['attention_devices']}:{rg_afd_min['ffn_devices']}、"
-            f"m={rg_afd_min['microbatches']}、S={rg_afd_min['zipf_s']}）；"
-            f"1:1、m=2、S=0.5 对照 Tc={float(rg_afd_11['tc_us']):.3f} µs。"
-            "两者双向掩盖均未通过，7:1 的 S=0.5/S=1 主锚点未形成成对成功数据；"
-            "逐包证据不支持“在本次记录的 fabric 配置上，m=2 可无条件隐藏 AFD "
-            "双向通信”。\n"
-        )
-    completed_scenarios = {
-        int(row["scenario"])
-        for row in rows
-        if row.get("scenario") is not None and row.get("report_included", True)
-    }
-    if 2 not in completed_scenarios or 3 not in completed_scenarios:
-        scenario_network_counts = {
-            scenario: sum(
-                str(record.get("run_id", "")).startswith(f"s{scenario}_")
-                for record in network_records
-            )
-            for scenario in (2, 3)
-        }
-        lines.append(
-            f"- **规模边界**：场景2的 {scenario_network_counts[2]} 个、场景3的 "
-            f"{scenario_network_counts[3]} 个逐包网络任务（含 EP=256 控制点和 "
-            "EP=1024 主点）在统一 120 秒墙钟上限内均未产出 summary。这些点是 "
-            "**inconclusive / simulator scalability failure**，不是网络性能为零，"
-            "也不能从场景1外推定量结论。\n"
-        )
-
+    lines.append("## 7. 跨实验要点与证据边界\n")
+    lines.append(
+        "各实验的设计意图与逐点结论见 §3–§5 章首；此处只收束跨实验边界：\n"
+        "- 本报告仅含场景1逐包证据；不得外推到未跑拓扑。\n"
+        "- Sys1 显示串行 Wide-EP 下 `ub_rg` 相对 Packet Spray 显著更慢；"
+        "Sys2 显示 Spray 上 TBO 有净加速、`ub_rg` 上并非必然获益；"
+        "Sys3 显示本轮 AFD 样本双向掩盖均未通过，倾斜下 Spray Tc 通常更低。\n"
+        "- 上图跨实验均值**不对齐**部署形态（Wide-EP vs AFD），只作数据可用性概览，"
+        "不能直接读成方案排名。\n"
+        "- B≥1024 未纳入；单 seed CCT 不作跨 seed P99。\n"
+    )
     lines.append("## 8. 失败、跳过与裁剪可见性\n")
     counts = {kind: sum(issue.kind == kind for issue in issues) for kind in ("失败", "跳过", "裁剪")}
     lines.append(

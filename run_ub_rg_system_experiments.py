@@ -270,9 +270,17 @@ def build_sys1_jobs() -> list[SystemJob]:
                     _wide_job("sys1", "main", scenario, scheme, zipf_s=zipf_s)
                 )
             for batch in (16, 64):
-                jobs.append(
-                    _wide_job("sys1", "controls", scenario, scheme, batch=batch)
-                )
+                for zipf_s in (0.0, 0.5, 0.9):
+                    jobs.append(
+                        _wide_job(
+                            "sys1",
+                            "controls",
+                            scenario,
+                            scheme,
+                            batch=batch,
+                            zipf_s=zipf_s,
+                        )
+                    )
             jobs.append(
                 _wide_job(
                     "sys1",
@@ -587,7 +595,8 @@ def _run_network_key(
     if key.summary_path.is_file() and not force:
         try:
             _load_packet_summary(key.summary_path)
-            record["status"] = "skipped"
+            # Reuse counts as completed evidence so ledgers/reports stay accurate.
+            record["status"] = "completed"
             return record
         except (OSError, ValueError, json.JSONDecodeError):
             pass
@@ -677,7 +686,7 @@ def synthesize_system_job(job: SystemJob, force: bool = False) -> str:
 
     if job.summary_path.is_file() and not force:
         _load_json(job.summary_path)
-        return "skipped"
+        return "completed"
 
     first_key, second_key = job.network_keys
     first = _load_packet_summary(first_key.summary_path)
