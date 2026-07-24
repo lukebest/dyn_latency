@@ -469,8 +469,9 @@ def _canonical_row(
     )
     mask_bool = _boolean(mask_raw)
     row["mask_value"] = mask_bool if mask_bool is not None else _number(mask_raw)
-    if row["mask_value"] is None and experiment == "sys2":
-        row["mask_value"] = _tbo_mask_fraction(data)
+    if experiment == "sys2":
+        if row["mask_value"] is None:
+            row["mask_value"] = _tbo_mask_fraction(data)
         row["mask_definition"] = (
             "communication event time overlapped by compute events"
             if row["mask_value"] is not None
@@ -478,9 +479,53 @@ def _canonical_row(
         )
         row["mask_label"] = (
             f"{100.0 * float(row['mask_value']):.1f}% 通讯重叠"
-            if row["mask_value"] is not None
+            if isinstance(row["mask_value"], (int, float))
             else "缺失"
         )
+    elif experiment == "sys3":
+        # §4.3.3.2: bidirectional hide iff m*Tf >= 2*(Tf+Tc).
+        # Rate = m*Tf / (2*(Tf+Tc)); 100% means the inequality holds with equality.
+        tc = _number(row.get("tc_us"))
+        tf = _number(_pick(data, ("model.tf_us", "tf_us", "result.tf_us")))
+        if tf is None:
+            ta = _number(_pick(data, ("model.ta_us", "ta_us")))
+            te = _number(_pick(data, ("model.te_us", "te_us")))
+            if ta is not None and te is not None:
+                tf = max(float(ta), float(te))
+        microbatches = _number(row.get("microbatches"))
+        bi_hidden = _boolean(
+            _pick(
+                data,
+                (
+                    "model.masking.bidirectional_hidden",
+                    "masking.bidirectional_hidden",
+                ),
+            )
+        )
+        if (
+            tc is not None
+            and tf is not None
+            and microbatches is not None
+            and float(tf) + float(tc) > 0
+        ):
+            rate = (float(microbatches) * float(tf)) / (
+                2.0 * (float(tf) + float(tc))
+            )
+            row["mask_value"] = rate
+            row["mask_definition"] = "m*Tf/(2*(Tf+Tc)); >=1 means bidirectional hide"
+            pct = 100.0 * rate
+            if bi_hidden is True or rate >= 1.0:
+                row["mask_label"] = f"{pct:.1f}%（通过）"
+            else:
+                row["mask_label"] = f"{pct:.1f}%"
+        else:
+            row["mask_label"] = (
+                "通过"
+                if mask_bool is True
+                else "未通过"
+                if mask_bool is False
+                else "缺失"
+            )
     else:
         row["mask_label"] = (
             "通过"
@@ -1090,7 +1135,7 @@ def _sys1_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     lines = [
         "**设计（§4.3.1）**：Wide-EP 同构部署；同一 microbatch 上 "
         "`Attn → Dispatch → FFN → Combine` **严格串行**，通讯与计算不重叠。"
-        "主观测：step 时延与 per-device throughput（$B/T_{step}$）。"
+        "主观测：step 时延与 per-device throughput（$B/T_{\\mathrm{step}}$）。"
         "本报告范围：场景1；方案 `packet_spray` / `ub_rg`。\n",
         "**本轮矩阵**：B∈{16, 64, 256} 均扫 Zipf S∈{0, 0.5, 0.9}（EP=128、L=60）；"
         "另含 EP=64 与 L∈{32, 94} 单点对照（默认 S=0.5）。"
@@ -1226,8 +1271,10 @@ def _sys3_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     lines = [
         "**设计（§4.3.3）**：AFD 角色分离——M 个 Attention NPU 与 N 个 FFN NPU；"
         "层边界为非对称 M2N Dispatch / N2M Combine，再叠 m-microbatch ping-pong。"
-        "网络侧测 $T_c=\\max(\\mathrm{M2N\\ CCT},\\ \\mathrm{N2M\\ CCT})$；"
-        "系统侧看 Tc、双向掩盖是否通过、step/吞吐。"
+        "网络侧测 $T_c=\\max(T_{\\mathrm{M2N}}, T_{\\mathrm{N2M}})$，"
+        "$T_f=\\max(T_a,T_e)$。"
+        "双向掩盖条件为 $m T_f \\ge 2(T_f+T_c)$；表中**双向掩盖率**="
+        "$m T_f / 2(T_f+T_c)$（≥100% 为通过）。"
         "场景1 主推荐 7:1（M:N=112:16），对照 1:1 与 31:1。\n",
         "**本轮矩阵**：场景1、B=256、L=60、placement=`role_packed`；"
         "7:1 为 m∈{1,2,4}×S∈{0,0.5,1} 全网格；1:1 与 31:1（exposed）在 m=2 上扫 "
@@ -1235,24 +1282,23 @@ def _sys3_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
         f"实收 summary **{len(rows)}** 个。\n",
         "**本轮结论**：\n",
     ]
-    mask_pass = [
-        row
+    rates = [
+        float(row["mask_value"])
         for row in rows
-        if str(row.get("mask_label") or "").strip() not in {"", "未通过", "缺失", "None"}
-        and "未通过" not in str(row.get("mask_label"))
+        if isinstance(row.get("mask_value"), (int, float))
     ]
-    # treat only explicit pass-like labels; all current data is 未通过
-    failed_masks = sum(
-        "未通过" in str(row.get("mask_label") or "") for row in rows
-    )
-    lines.append(
-        f"- 双向掩盖：{failed_masks}/{len(rows)} 个样本标记为未通过"
-        + (
-            "；无样本显示通讯被计算完全隐藏。\n"
-            if failed_masks == len(rows) and rows
-            else f"；另有 {len(mask_pass)} 个非“未通过”标记，见下表。\n"
+    passed = sum(rate >= 1.0 for rate in rates)
+    if rates:
+        lines.append(
+            f"- 双向掩盖率：{passed}/{len(rates)} 个样本 ≥100%（通过）；"
+            f"本轮最小/中位/最大为 "
+            f"{100.0 * min(rates):.2f}% / "
+            f"{100.0 * sorted(rates)[len(rates) // 2]:.2f}% / "
+            f"{100.0 * max(rates):.2f}%。"
+            "未通过时表中直接给出该比率（越小说明 $T_c$ 相对 $T_f$ 越大）。\n"
         )
-    )
+    else:
+        lines.append("- 双向掩盖率：缺失（summary 无 $T_f$/$T_c$/m）。\n")
     spray71 = _find_anchor(
         rows,
         scheme="packet_spray",
@@ -1306,8 +1352,8 @@ def _sys3_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     if rg11:
         lines.append(
             f"- 1:1 对照（m=2、S=0.5）`ub_rg` Tc={float(rg11['tc_us']):.1f} µs，"
-            "仍未通过双向掩盖；逐包证据不支持“本 fabric 上 m=2 可无条件隐藏 "
-            "AFD 双向通信”。\n"
+            f"双向掩盖率 {_display(rg11.get('mask_label'))}；"
+            "逐包证据不支持“本 fabric 上 m=2 可无条件隐藏 AFD 双向通信”。\n"
         )
     lines.append(
         "- Tc 口径为单 seed 方向 CCT 的 max，不是跨 seed CCT-P99；"
@@ -1466,38 +1512,21 @@ def build_report(
         )
     )
     lines.append(
-        "这是**实收参数矩阵**，不是对未运行配置的宣称；未出现的参数组合视为缺失或被裁剪。\n"
+        "这是**实收参数矩阵**，不是对未运行配置的宣称；未出现的参数组合视为缺失或被裁剪。"
+        "逐包证据清单与复现命令见文末附录。\n"
     )
 
-    lines.append("## 2. 逐包证据来源与 packet 门禁\n")
+    lines.append("## 2. 结论摘要\n")
     lines.append(
-        f"- 输入根目录：`{results_root}`\n"
-        f"- 已接受 summary：{len(rows)} 个；ledger：{len(ledgers)} 个\n"
-        "- 门禁规则：每个可解析输入必须至少声明一个 `engine` 或 `network_engine`，"
-        "且所有此类声明都必须严格等于 `packet`（二者只需其一；本仓库 system "
-        "summary 通常只写 `engine=packet`）。runner 的 ledger 也可用"
-        "`packet_only=true` 作等价声明。`behavioral` 会立即报错并停止写出。\n"
+        "各实验的设计意图与逐点结论见后文 Sys1–Sys3 章首；此处先收束跨实验结论：\n"
+        "- 本报告仅含场景1逐包证据；不得外推到未跑拓扑。\n"
+        "- Sys1：串行 Wide-EP 下 `ub_rg` 相对 Packet Spray 显著更慢。\n"
+        "- Sys2：Spray 上 TBO 有净加速；`ub_rg` 上并非必然获益（通信受限且 "
+        "CCT 随 batch 缩小不足线性时，增大 m 可退化）。\n"
+        "- Sys3：本轮 AFD 双向掩盖率普遍远低于 100%；倾斜负载下 Spray 的 Tc 通常更低。\n"
+        "- 跨实验均值图不对齐部署形态（Wide-EP vs AFD），只作数据可用性概览，"
+        "不能直接读成方案排名。B≥1024 未纳入；单 seed CCT 不作跨 seed P99。\n"
     )
-    if rows:
-        for row in rows:
-            sources = "；".join(f"`{value}`" for value in _evidence_values(row))
-            engine = row.get("engine")
-            network_engine = row.get("network_engine")
-            if engine is not None and network_engine is not None:
-                engine_note = (
-                    f"engine={_display(engine)}，network_engine={_display(network_engine)}"
-                )
-            elif engine is not None:
-                engine_note = f"engine={_display(engine)}"
-            elif network_engine is not None:
-                engine_note = f"network_engine={_display(network_engine)}"
-            else:
-                engine_note = "engine=缺失"
-            lines.append(
-                f"- `{row['experiment']}/{row['run_id']}`：{sources}；{engine_note}\n"
-            )
-    else:
-        lines.append("- 数据缺失：没有可接受的逐包 summary，因而没有逐包数值证据可列。\n")
 
     lines.append("## 3. Sys1：串行 Wide-EP（step 与 throughput）\n")
     lines.extend(_sys1_preamble(by_exp["sys1"]))
@@ -1559,7 +1588,7 @@ def build_report(
     for path in sys2_figures:
         lines.append(f"![sys2 {path.stem}]({_relative_link(report_md, path)})\n")
 
-    lines.append("## 5. Sys3：AFD（M:N、Tc、mask 与 throughput）\n")
+    lines.append("## 5. Sys3：AFD（M:N、Tc、双向掩盖率与 throughput）\n")
     lines.extend(_sys3_preamble(by_exp["sys3"]))
     sys3_table = [
         (
@@ -1584,7 +1613,7 @@ def build_report(
                 "placement",
                 "m",
                 "Tc (µs)",
-                "mask",
+                "双向掩盖率",
                 "step (µs)",
                 "token/s/device",
             ),
@@ -1638,18 +1667,37 @@ def build_report(
     for path in cross_figures:
         lines.append(f"![cross {path.stem}]({_relative_link(report_md, path)})\n")
 
-    lines.append("## 7. 跨实验要点与证据边界\n")
+    lines.append("## 附录 A. 逐包证据来源与 packet 门禁\n")
     lines.append(
-        "各实验的设计意图与逐点结论见 §3–§5 章首；此处只收束跨实验边界：\n"
-        "- 本报告仅含场景1逐包证据；不得外推到未跑拓扑。\n"
-        "- Sys1 显示串行 Wide-EP 下 `ub_rg` 相对 Packet Spray 显著更慢；"
-        "Sys2 显示 Spray 上 TBO 有净加速、`ub_rg` 上并非必然获益；"
-        "Sys3 显示本轮 AFD 样本双向掩盖均未通过，倾斜下 Spray Tc 通常更低。\n"
-        "- 上图跨实验均值**不对齐**部署形态（Wide-EP vs AFD），只作数据可用性概览，"
-        "不能直接读成方案排名。\n"
-        "- B≥1024 未纳入；单 seed CCT 不作跨 seed P99。\n"
+        f"- 输入根目录：`{results_root}`\n"
+        f"- 已接受 summary：{len(rows)} 个；ledger：{len(ledgers)} 个\n"
+        "- 门禁规则：每个可解析输入必须至少声明一个 `engine` 或 `network_engine`，"
+        "且所有此类声明都必须严格等于 `packet`（二者只需其一；本仓库 system "
+        "summary 通常只写 `engine=packet`）。runner 的 ledger 也可用"
+        "`packet_only=true` 作等价声明。`behavioral` 会立即报错并停止写出。\n"
     )
-    lines.append("## 8. 失败、跳过与裁剪可见性\n")
+    if rows:
+        for row in rows:
+            sources = "；".join(f"`{value}`" for value in _evidence_values(row))
+            engine = row.get("engine")
+            network_engine = row.get("network_engine")
+            if engine is not None and network_engine is not None:
+                engine_note = (
+                    f"engine={_display(engine)}，network_engine={_display(network_engine)}"
+                )
+            elif engine is not None:
+                engine_note = f"engine={_display(engine)}"
+            elif network_engine is not None:
+                engine_note = f"network_engine={_display(network_engine)}"
+            else:
+                engine_note = "engine=缺失"
+            lines.append(
+                f"- `{row['experiment']}/{row['run_id']}`：{sources}；{engine_note}\n"
+            )
+    else:
+        lines.append("- 数据缺失：没有可接受的逐包 summary，因而没有逐包数值证据可列。\n")
+
+    lines.append("## 附录 B. 失败、跳过与裁剪可见性\n")
     counts = {kind: sum(issue.kind == kind for issue in issues) for kind in ("失败", "跳过", "裁剪")}
     lines.append(
         f"ledger/解析记录：原始网络失败 **{network_failed}**，由缺失网络输入连带阻塞的"
@@ -1668,14 +1716,14 @@ def build_report(
         )
     )
 
-    lines.append("## 9. 数据边界：B>=1024 未纳入\n")
+    lines.append("## 附录 C. 数据边界：B≥1024 未纳入\n")
     lines.append(
-        "**B>=1024 未纳入本次系统报告统计与结论。** 这是运行矩阵的显式裁剪边界，"
-        "不是“性能等同于 B<1024”的假设。即使目录中出现 B>=1024 的意外 summary，"
+        "**B≥1024 未纳入本次系统报告统计与结论。** 这是运行矩阵的显式裁剪边界，"
+        "不是“性能等同于 B<1024”的假设。即使目录中出现 B≥1024 的意外 summary，"
         "分析器也会保留原始 CSV 证据，但报告解释应单独复核，不能外推当前图表结论。\n"
     )
 
-    lines.append("## 10. 复现命令\n")
+    lines.append("## 附录 D. 复现命令\n")
     lines.append(
         "```bash\n"
         "cd /workspace\n"
@@ -1738,13 +1786,40 @@ def _embed_markdown_image(
     )
 
 
+def _format_inline_markdown(text: str) -> str:
+    """Escape HTML while preserving MathJax `$...$`, bold, code, and links."""
+
+    math_slots: list[str] = []
+
+    def _hold_math(match: re.Match[str]) -> str:
+        math_slots.append(match.group(0))
+        return f"@@MATH{len(math_slots) - 1}@@"
+
+    held = re.sub(r"\$\$[^$]+\$\$|\$[^$]+\$", _hold_math, text)
+    escaped = html.escape(held)
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+    escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
+    escaped = re.sub(
+        r"\[([^\]]+)\]\(([^)]+)\)",
+        lambda match: (
+            f'<a href="{html.escape(html.unescape(match.group(2)), quote=True)}">'
+            f"{match.group(1)}</a>"
+        ),
+        escaped,
+    )
+    for index, math in enumerate(math_slots):
+        escaped = escaped.replace(f"@@MATH{index}@@", math)
+    return escaped
+
+
 def markdown_to_html(
     markdown: str, title: str, report_md: Path | None = None
 ) -> str:
     """Small dependency-free converter sufficient for the generated report.
 
     When ``report_md`` is provided, local ``.svg`` image links are inlined so the
-    HTML file can be opened without sibling figure files.
+    HTML file can be opened without sibling figure files. Inline TeX between
+    ``$...$`` is rendered by MathJax.
     """
 
     output = [
@@ -1760,7 +1835,16 @@ def markdown_to_html(
         "figure.fig{margin:1.25rem 0}figcaption{color:#555;font-size:.9rem;"
         "margin-top:.4rem}code,pre{font-family:ui-monospace,monospace}"
         "pre{background:#f6f8fa;padding:1rem;overflow:auto}blockquote{border-left:4px solid "
-        "#999;padding-left:1rem;color:#555}</style></head><body>",
+        "#999;padding-left:1rem;color:#555}mjx-container{font-size:110%}"
+        "</style>",
+        "<script>",
+        "window.MathJax={tex:{inlineMath:[['$','$'],['\\\\(','\\\\)']],"
+        "displayMath:[['$$','$$'],['\\\\[','\\\\]']]},"
+        "svg:{fontCache:'global'}};",
+        "</script>",
+        '<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">'
+        "</script>",
+        "</head><body>",
     ]
     in_code = False
     in_table = False
@@ -1801,7 +1885,9 @@ def markdown_to_html(
             if not in_table:
                 close_blocks()
                 output.append("<table><thead><tr>")
-                output.extend(f"<th>{html.escape(cell)}</th>" for cell in cells)
+                output.extend(
+                    f"<th>{_format_inline_markdown(cell)}</th>" for cell in cells
+                )
                 output.append("</tr></thead><tbody>")
                 in_table = True
                 if separator:
@@ -1812,7 +1898,9 @@ def markdown_to_html(
                 continue
             else:
                 output.append("<tr>")
-                output.extend(f"<td>{html.escape(cell)}</td>" for cell in cells)
+                output.extend(
+                    f"<td>{_format_inline_markdown(cell)}</td>" for cell in cells
+                )
                 output.append("</tr>")
             index += 1
             continue
@@ -1826,18 +1914,18 @@ def markdown_to_html(
         elif line.startswith("#"):
             level = min(len(line) - len(line.lstrip("#")), 6)
             text = line[level:].strip()
-            output.append(f"<h{level}>{html.escape(text)}</h{level}>")
+            output.append(f"<h{level}>{_format_inline_markdown(text)}</h{level}>")
         elif line.startswith("> "):
-            output.append(f"<blockquote>{html.escape(line[2:])}</blockquote>")
+            output.append(
+                f"<blockquote>{_format_inline_markdown(line[2:])}</blockquote>"
+            )
         elif line.startswith("- "):
             if not in_list:
                 output.append("<ul>")
                 in_list = True
-            output.append(f"<li>{html.escape(line[2:])}</li>")
+            output.append(f"<li>{_format_inline_markdown(line[2:])}</li>")
         elif line.strip():
-            escaped = html.escape(line)
-            escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
-            output.append(f"<p>{escaped}</p>")
+            output.append(f"<p>{_format_inline_markdown(line)}</p>")
         index += 1
     close_blocks()
     if in_code:

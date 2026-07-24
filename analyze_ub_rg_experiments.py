@@ -870,7 +870,8 @@ def executive_summary_md(df: pd.DataFrame) -> str:
                     f"POP/RG 平均为 **{pop_ratio.mean():.3f}×**，"
                     f"Spray/RG 平均为 **{spray_ratio.mean():.3f}×**。"
                     "这是当前配置包的联合差异；plane、path delay、jitter 和 barrier "
-                    "尚未统一，不能把比值单独归因于目的侧配速。\n"
+                    "尚未统一，不能把比值单独归因于目的侧配速"
+                    "（见 §7.1）。\n"
                 )
                 batches = sorted(common.index.get_level_values("batch").unique())
                 if batches:
@@ -887,6 +888,67 @@ def executive_summary_md(df: pd.DataFrame) -> str:
                         f"**{low_ratio:.3f}×**，batch={high} 时为 **{high_ratio:.3f}×**；"
                         "结果符合“多一次 one-way 启动、稳态节拍与 RG 相同”的模型预期。\n"
                     )
+    # Scenario-1 iSLIP vs ub_rg (same light barrier class).
+    e1_s1 = e1[e1["scenario"] == 1] if not e1.empty else e1
+    if not e1_s1.empty and "islip" in set(e1_s1["scheme"]):
+        piv_i = e1_s1.pivot_table(
+            index=["batch", "zipf_s", "ep_size", "start_skew_us"]
+            if "start_skew_us" in e1_s1.columns
+            else ["batch", "zipf_s", "ep_size"],
+            columns="scheme",
+            values="step_us",
+            aggfunc="mean",
+        )
+        if "islip" in piv_i.columns and "ub_rg" in piv_i.columns:
+            both = piv_i.dropna(subset=["islip", "ub_rg"])
+            if not both.empty:
+                ir = both["islip"] / both["ub_rg"].replace(0, np.nan)
+                lines.append(
+                    f"- **场景1 iSLIP**：Exp1 与 `ub_rg` 共有格中 iSLIP/RG 平均 **"
+                    f"{ir.mean():.3f}×**（中位 {ir.median():.3f}×）。"
+                )
+                batches = sorted(both.index.get_level_values("batch").unique())
+                if len(batches) >= 2:
+                    b0, b1 = int(batches[0]), int(batches[-1])
+                    r0 = ir[ir.index.get_level_values("batch") == b0].mean()
+                    r1 = ir[ir.index.get_level_values("batch") == b1].mean()
+                    lines.append(
+                        f"小 batch（{b0}）约 **{r0:.3f}×**，大 batch（{b1}）约 "
+                        f"**{r1:.3f}×**；小负载时输入排队匹配常略优于目的侧 RG 节拍，"
+                        "大负载时两者接近或偶发略差。"
+                    )
+                lines.append(
+                    "iSLIP 与 RG 同属轻量 barrier，比 Spray 更可对照调度差异，"
+                    "但仍非单一变量消融（plane 映射与注入路径不同）。\n"
+                )
+    e3 = df[df["exp"] == "exp3_roundtrip"]
+    e3_s1 = e3[e3["scenario"] == 1] if not e3.empty else e3
+    if not e3_s1.empty and "islip" in set(e3_s1["scheme"]) and "ub_rg" in set(e3_s1["scheme"]):
+        piv3 = e3_s1.pivot_table(
+            index=["ep_size", "zipf_s", "start_skew_us"]
+            if "start_skew_us" in e3_s1.columns
+            else ["ep_size", "zipf_s"],
+            columns="scheme",
+            values="step_us",
+            aggfunc="mean",
+        )
+        if "islip" in piv3.columns and "ub_rg" in piv3.columns:
+            both3 = piv3.dropna(subset=["islip", "ub_rg"])
+            if not both3.empty:
+                r3 = both3["islip"] / both3["ub_rg"].replace(0, np.nan)
+                gemv_note = ""
+                if "gemv_us" in e3_s1.columns and e3_s1["gemv_us"].notna().any():
+                    g = e3_s1[e3_s1["scheme"] == "ub_rg"]
+                    share = (g["gemv_us"] / g["e2e_us"].replace(0, np.nan)).mean()
+                    if share == share:
+                        gemv_note = (
+                            f" Exp3 端到端中 GEMV 约占 e2e 的 **{share:.0%}**，"
+                            "调度差异被计算 straggler 摊薄，故 iSLIP≈RG。"
+                        )
+                lines.append(
+                    f"- **Exp3（S1）iSLIP/RG** 平均 **{r3.mean():.3f}×**。"
+                    f"{gemv_note}\n"
+                )
     bound = df[df["konig_us"].notna() & (df["konig_us"] > 0)].copy()
     if not bound.empty:
         bound["cct_to_konig"] = bound["cct_us"] / bound["konig_us"]
@@ -902,7 +964,6 @@ def executive_summary_md(df: pd.DataFrame) -> str:
                 + "、".join(values)
                 + "；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。\n"
             )
-    engine = str(df["engine"].iloc[0]) if "engine" in df.columns and len(df) else "unknown"
     lines.append(
         "- **拓扑范围**：主矩阵为场景1（Clos+iSLIP）与场景4（Sparse CLOS 512P）。\n"
     )
@@ -1243,17 +1304,81 @@ def write_report(
                     lines.append(f"- **{eng}** 同参数格平均：" + "，".join(ratios) + "\n")
 
     lines.append("## 7. 结论\n")
+    # Data-backed iSLIP bullets (scenario 1).
+    e1_s1 = df[(df["exp"] == "exp1_dispatch") & (df["scenario"] == 1)]
+    e3_s1 = df[(df["exp"] == "exp3_roundtrip") & (df["scenario"] == 1)]
+    islip_exp1 = ""
+    islip_exp3 = ""
+    if not e1_s1.empty and {"islip", "ub_rg"} <= set(e1_s1["scheme"]):
+        idx = ["batch", "zipf_s", "ep_size"]
+        if "start_skew_us" in e1_s1.columns:
+            idx = idx + ["start_skew_us"]
+        piv = e1_s1.pivot_table(index=idx, columns="scheme", values="step_us", aggfunc="mean")
+        both = piv.dropna(subset=["islip", "ub_rg"])
+        if not both.empty:
+            ir = both["islip"] / both["ub_rg"].replace(0, np.nan)
+            batches = sorted(both.index.get_level_values("batch").unique())
+            batch_bits = []
+            for b in batches:
+                rb = ir[ir.index.get_level_values("batch") == b].mean()
+                batch_bits.append(f"batch={int(b)} 为 {rb:.3f}×")
+            batch_txt = "；".join(batch_bits)
+            islip_exp1 = (
+                f"- **场景1 iSLIP（Exp1）**：相对 `ub_rg`，共有格 step 平均 "
+                f"**{ir.mean():.3f}×**（{batch_txt}）。"
+                "小 batch 时常更快，大 batch 与 RG 接近；"
+                "CCT/König 中位通常也更贴下界。iSLIP 与 RG 同用轻量 barrier，"
+                "比 Spray 更适合对照“输入排队匹配 vs 目的侧授权”，"
+                "但仍共用不同 plane 映射，不是严格单因素实验。\n"
+            )
+    if not e3_s1.empty and {"islip", "ub_rg"} <= set(e3_s1["scheme"]):
+        idx = ["ep_size", "zipf_s"]
+        if "start_skew_us" in e3_s1.columns:
+            idx = idx + ["start_skew_us"]
+        piv = e3_s1.pivot_table(index=idx, columns="scheme", values="step_us", aggfunc="mean")
+        both = piv.dropna(subset=["islip", "ub_rg"])
+        if not both.empty:
+            ir = both["islip"] / both["ub_rg"].replace(0, np.nan)
+            islip_exp3 = (
+                f"- **场景1 iSLIP（Exp3）**：端到端 step 相对 RG 平均 **"
+                f"{ir.mean():.3f}×**；因 Zipf×batch 标定的 GEMV 占 e2e 很大比例，"
+                "网络调度差异被摊薄，iSLIP 与 RG 几乎重合。\n"
+            )
     lines.append(
         "- 当前 UB_RG 配置包的 CCT 更接近自定义 König 下界；"
-        "由于 plane、path delay、jitter 与 barrier 尚未统一，这不是目的侧准入的受控因果结论。\n"
-        "- UB_RG_POP（SHMEM-POP）与 RG 共享目的侧节奏/König 渐近；"
-        "Push→Pull 多付一次单向启动，均匀小负载时常接近 RG，高偏斜/两层上偶发更差。\n"
-        "- 当前 Packet Spray 配置包在倾斜流量下 p99/CCT 更大；"
-        "需要消除上述混杂并统一计时起点后再解释机制原因。\n"
-        "- 当前 CCT 只包含网络 dispatch/combine 与屏障口径；"
-        "Exp3 已计入按 Zipf/batch 标定的 GEMV straggler；更细 HBM/算子队列仍未建模。\n"
-        "- 逐包引擎可用于调试控制面与数据面交互；当前性能结果尚未通过完成守恒和"
-        "跨引擎门禁，不能作为行为级绝对时延校准。\n"
+        "与 Spray 的比值是**配置包联合差异**，不是“仅改目的侧准入”的受控因果结论"
+        "（原因见 §7.1）。\n"
+        "- UB_RG_POP（近似模型）与 RG 共享目的侧节奏/König 渐近；"
+        "多付一次 one-way 启动，小 batch 略慢、大负载接近 RG。\n"
+        + islip_exp1
+        + islip_exp3
+        + "- 当前 Packet Spray 配置包在倾斜流量下 p99/CCT 更大；"
+        "在统一 plane/path/jitter/barrier 之前，不宜把差距全部归因于“无目的侧配速”。\n"
+        "- Exp3 端到端含按 Zipf/batch 标定的 GEMV straggler；更细 HBM/算子队列仍未建模。\n"
+        "- 逐包引擎可用于协议调试；性能门禁通过前不能校准行为级绝对时延。\n"
+    )
+    lines.append("### 7.1 为何说“不是目的侧准入的受控因果结论”\n")
+    lines.append(
+        "受控因果结论需要：**只改变一个机制变量**，其余路径、时延、屏障、负载相同，"
+        "再比较 CCT。当前行为级里，把 scheme 从 `packet_spray` 换成 `ub_rg` "
+        "会**同时**改变多处，因此 Spray/RG 比值不能解读为“目的侧准入单独带来的收益”。\n"
+        "\n"
+        "| 混杂维度 | `packet_spray` | `ub_rg` | 为何干扰归因 |\n"
+        "|---|---|---|---|\n"
+        "| **plane 映射** | 源序 RR（`AssignSprayPlane`） | 源/目的 group 钉扎（`AssignRgPlane`） | 热点落到的出口集合不同，队列长度本身就变 |\n"
+        "| **path delay** | 经交换机下行 FIFO 排队推进 | 注入后按 hop 公式到达 + 近零队 | 数据面时延模型不同，不只是“有没有 grant” |\n"
+        "| **jitter** | 无 RG 式 σ 抖动 | 到达叠加 `U(0,1.5)·τ_g` | 人为噪声改变尾部，混入方案差 |\n"
+        "| **barrier** | 软件屏障更重（场景1 约 2.0µs） | BSP 轻屏障（场景1 约 0.4µs） | `step_us` 含屏障；即使边界 CCT 相同，step 也会因屏障差拉开 |\n"
+        "\n"
+        "因此报告写的是**配置包输出差异**，不是“目的侧 1/τ_g 准入”的净效应。"
+        "若要做受控因果，应固定同一 plane 映射、同一 hop/队列公式、同一 jitter 与 barrier，"
+        "**只开关目的侧 grant 节拍**，再比 CCT。\n"
+        "\n"
+        "相对地，场景1 的 **iSLIP vs `ub_rg`** 更接近调度对照：二者同属轻量 barrier，"
+        "且都在单层 Clos 上做每 τ_g 的出口互斥；差异主要来自"
+        "“输入排队 iSLIP 匹配”与“目的侧 RG 授权 + 平面钉扎”。"
+        "即便如此，plane 赋值仍不同（iSLIP 用 spray 式 RR plane），"
+        "故结论仍应表述为调度配置对照，而非完美单因素消融。\n"
     )
     lines.append("## 8. 复现方法\n")
     if engine == "behavioral":

@@ -32,8 +32,10 @@
 
 ## 0.2 主要实验结论
 > 结论适用于场景1/4；Exp1/2 为网络子系统；Exp3 含 Zipf×batch GEMV straggler。
-- **配置包输出差异**：Exp1 三方案共有参数格中，POP/RG 平均为 **1.010×**，Spray/RG 平均为 **1.149×**。这是当前配置包的联合差异；plane、path delay、jitter 和 barrier 尚未统一，不能把比值单独归因于目的侧配速。
+- **配置包输出差异**：Exp1 三方案共有参数格中，POP/RG 平均为 **1.010×**，Spray/RG 平均为 **1.149×**。这是当前配置包的联合差异；plane、path delay、jitter 和 barrier 尚未统一，不能把比值单独归因于目的侧配速（见 §7.1）。
 - **POP 启动开销会被负载摊薄**：batch=16 时 POP/RG=**1.017×**，batch=256 时为 **1.002×**；结果符合“多一次 one-way 启动、稳态节拍与 RG 相同”的模型预期。
+- **场景1 iSLIP**：Exp1 与 `ub_rg` 共有格中 iSLIP/RG 平均 **0.930×**（中位 0.947×）。小 batch（16）约 **0.807×**，大 batch（256）约 **1.054×**；小负载时输入排队匹配常略优于目的侧 RG 节拍，大负载时两者接近或偶发略差。iSLIP 与 RG 同属轻量 barrier，比 Spray 更可对照调度差异，但仍非单一变量消融（plane 映射与注入路径不同）。
+- **Exp3（S1）iSLIP/RG** 平均 **1.009×**。 Exp3 端到端中 GEMV 约占 e2e 的 **50%**，调度差异被计算 straggler 摊薄，故 iSLIP≈RG。
 - **瓶颈下界**：CCT/König 中位数为 ub_rg=1.126、ub_rg_pop=1.134、packet_spray=1.340、islip=1.068；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。
 - **拓扑范围**：主矩阵为场景1（Clos+iSLIP）与场景4（Sparse CLOS 512P）。
 - **Exp3**：端到端含 GEMV；`gemv_us` 随 Zipf 热点与 batch 变化。
@@ -416,11 +418,26 @@ exp1_dispatch         1        ub_rg dispatch     16     0.9      128     3507.5
 - **packet** 同参数格平均：POP/RG=5.741×，Spray/RG=0.362×
 - **behavioral** 同参数格平均：POP/RG=1.007×，Spray/RG=1.143×
 ## 7. 结论
-- 当前 UB_RG 配置包的 CCT 更接近自定义 König 下界；由于 plane、path delay、jitter 与 barrier 尚未统一，这不是目的侧准入的受控因果结论。
-- UB_RG_POP（SHMEM-POP）与 RG 共享目的侧节奏/König 渐近；Push→Pull 多付一次单向启动，均匀小负载时常接近 RG，高偏斜/两层上偶发更差。
-- 当前 Packet Spray 配置包在倾斜流量下 p99/CCT 更大；需要消除上述混杂并统一计时起点后再解释机制原因。
-- 当前 CCT 只包含网络 dispatch/combine 与屏障口径；Exp3 已计入按 Zipf/batch 标定的 GEMV straggler；更细 HBM/算子队列仍未建模。
-- 逐包引擎可用于调试控制面与数据面交互；当前性能结果尚未通过完成守恒和跨引擎门禁，不能作为行为级绝对时延校准。
+- 当前 UB_RG 配置包的 CCT 更接近自定义 König 下界；与 Spray 的比值是**配置包联合差异**，不是“仅改目的侧准入”的受控因果结论（原因见 §7.1）。
+- UB_RG_POP（近似模型）与 RG 共享目的侧节奏/König 渐近；多付一次 one-way 启动，小 batch 略慢、大负载接近 RG。
+- **场景1 iSLIP（Exp1）**：相对 `ub_rg`，共有格 step 平均 **0.930×**（batch=16 为 0.807×；batch=256 为 1.054×）。小 batch 时常更快，大 batch 与 RG 接近；CCT/König 中位通常也更贴下界。iSLIP 与 RG 同用轻量 barrier，比 Spray 更适合对照“输入排队匹配 vs 目的侧授权”，但仍共用不同 plane 映射，不是严格单因素实验。
+- **场景1 iSLIP（Exp3）**：端到端 step 相对 RG 平均 **1.009×**；因 Zipf×batch 标定的 GEMV 占 e2e 很大比例，网络调度差异被摊薄，iSLIP 与 RG 几乎重合。
+- 当前 Packet Spray 配置包在倾斜流量下 p99/CCT 更大；在统一 plane/path/jitter/barrier 之前，不宜把差距全部归因于“无目的侧配速”。
+- Exp3 端到端含按 Zipf/batch 标定的 GEMV straggler；更细 HBM/算子队列仍未建模。
+- 逐包引擎可用于协议调试；性能门禁通过前不能校准行为级绝对时延。
+### 7.1 为何说“不是目的侧准入的受控因果结论”
+受控因果结论需要：**只改变一个机制变量**，其余路径、时延、屏障、负载相同，再比较 CCT。当前行为级里，把 scheme 从 `packet_spray` 换成 `ub_rg` 会**同时**改变多处，因此 Spray/RG 比值不能解读为“目的侧准入单独带来的收益”。
+
+| 混杂维度 | `packet_spray` | `ub_rg` | 为何干扰归因 |
+|---|---|---|---|
+| **plane 映射** | 源序 RR（`AssignSprayPlane`） | 源/目的 group 钉扎（`AssignRgPlane`） | 热点落到的出口集合不同，队列长度本身就变 |
+| **path delay** | 经交换机下行 FIFO 排队推进 | 注入后按 hop 公式到达 + 近零队 | 数据面时延模型不同，不只是“有没有 grant” |
+| **jitter** | 无 RG 式 σ 抖动 | 到达叠加 `U(0,1.5)·τ_g` | 人为噪声改变尾部，混入方案差 |
+| **barrier** | 软件屏障更重（场景1 约 2.0µs） | BSP 轻屏障（场景1 约 0.4µs） | `step_us` 含屏障；即使边界 CCT 相同，step 也会因屏障差拉开 |
+
+因此报告写的是**配置包输出差异**，不是“目的侧 1/τ_g 准入”的净效应。若要做受控因果，应固定同一 plane 映射、同一 hop/队列公式、同一 jitter 与 barrier，**只开关目的侧 grant 节拍**，再比 CCT。
+
+相对地，场景1 的 **iSLIP vs `ub_rg`** 更接近调度对照：二者同属轻量 barrier，且都在单层 Clos 上做每 τ_g 的出口互斥；差异主要来自“输入排队 iSLIP 匹配”与“目的侧 RG 授权 + 平面钉扎”。即便如此，plane 赋值仍不同（iSLIP 用 spray 式 RR plane），故结论仍应表述为调度配置对照，而非完美单因素消融。
 ## 8. 复现方法
 当前报告主体由行为级引擎生成。复现默认矩阵与 Exp3 PDF：
 ```bash
