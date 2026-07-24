@@ -686,7 +686,7 @@ def code_evidence_index_md() -> str:
 | 行为级常量 / grain / 端口速率 | τ_g、50 GB/s、hop 时延 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:29-36` |
 | Zipf / TopK → grain | 负载与专家路由 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:260-351` |
 | Spray / RG / POP phase | 三方案排队与授权 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:438-738` |
-| S4 / iSLIP / 启动偏差 / GEMV | PathClass、SimulateIsLip、start-skew、ComputeGemvUs | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc` |
+| S4 / iSLIP / 启动偏差 / GEMV | PathClass、iSLIP matching、start-skew、ComputeGemvUs | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc` |
 | 行为级 CCT / König | 指标与 summary | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:520-538, 730-812, 886-921` |
 | 逐包拓扑 / S3 路由过滤 | Leaf–Spine 与 FIB | `gen_ub_rg_topo.py:47-181`（S3：`144-180`） |
 | 逐包 token / scheduler map | 工作负载与挂接 | `ns-3-ub/src/unified-bus/model/ub-rg-experiment-app.cc:117-407` |
@@ -747,7 +747,7 @@ def simulation_environment_md(engine: str) -> str:
 - **已建模的是通信微架构**：NPU 端口串行化、8 平面选路、Spray 目的出口/两层 Clos 中段队列、RG nominal 授权节拍、POP 的启动时延/PullCredit，以及 BSP 屏障常量。
 - **因果比较尚未闭环**：Spray 与 RG 同时改变 plane 映射、path delay 公式、jitter 和固定 barrier；当前比值是配置包差异，不能单独归因于目的侧准入。
 - **计算侧（Exp3）**：`gemv_us = max_e N_e·τ_tok`（均匀 Zipf、batch=256 时约 80µs/专家）；`e2e_us = dispatch_cct + gemv_us + combine_cct`。
-- **未建模**：完整 SM/HBM/cache、专家算力异构；iSLIP 为行为级 VOQ 匹配。
+- **未建模**：完整 SM/HBM/cache、专家算力异构；iSLIP 仅替换 SW 匹配算法（其余同 `ub_rg`）。
 - 主矩阵为 **场景1 + 场景4**（已去掉场景2/3）。
 
 #### CCT 的准确口径
@@ -805,7 +805,7 @@ def topology_and_scheme_md(engine: str) -> str:
 | `ub_rg` | 仿真 scheme | 主协议的落地：目的侧授权节奏 + 源侧 FCFS；行为级折叠控制面为 RTT；逐包走真实 REQ/GNT/SYNC |
 | `ub_rg_pop` | 仿真 scheme | [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md) 的假设模型：行为级为 RG + startup + PullCredit；逐包为 RG 路径 + completion 计时 overlay |
 | `packet_spray` | 仿真 scheme | 无授权准入；源上联自由注入；目的/中段 FIFO；分析阶段叠软件屏障 |
-| `islip` | 仿真 scheme | 场景1：每平面 VOQ iSLIP 匹配（每 τ_g 多轮 request/grant/accept） |
+| `islip` | 仿真 scheme | 与 `ub_rg` 相同：路径钉扎 + REQ/GNT + RTT/barrier；仅将每出口独立 RR 换成每 τ_g 的 iSLIP matching（对齐 `ub_request_grant.md` §2.7） |
 
 > **对齐的核心（设计 ↔ ub_rg）：** grain 量化、τ_g、每平面 ≤1 授权、Clos/MpClos 钉扎。
 > **POP 相对 RG：** 稳态 König 渐近相同；startup = RTT_rg + oneWay（≈1.5×）；小 batch 略慢，大负载/高偏斜时 pop≈rg。
@@ -903,24 +903,22 @@ def executive_summary_md(df: pd.DataFrame) -> str:
             both = piv_i.dropna(subset=["islip", "ub_rg"])
             if not both.empty:
                 ir = both["islip"] / both["ub_rg"].replace(0, np.nan)
-                lines.append(
-                    f"- **场景1 iSLIP**：Exp1 与 `ub_rg` 共有格中 iSLIP/RG 平均 **"
-                    f"{ir.mean():.3f}×**（中位 {ir.median():.3f}×）。"
-                )
-                batches = sorted(both.index.get_level_values("batch").unique())
-                if len(batches) >= 2:
-                    b0, b1 = int(batches[0]), int(batches[-1])
-                    r0 = ir[ir.index.get_level_values("batch") == b0].mean()
-                    r1 = ir[ir.index.get_level_values("batch") == b1].mean()
                     lines.append(
-                        f"小 batch（{b0}）约 **{r0:.3f}×**，大 batch（{b1}）约 "
-                        f"**{r1:.3f}×**；小负载时输入排队匹配常略优于目的侧 RG 节拍，"
-                        "大负载时两者接近或偶发略差。"
+                        f"- **场景1 iSLIP（匹配对照）**：与 `ub_rg` 共路径钉扎/REQ-GNT/"
+                        f"RTT/barrier，仅 SW 仲裁不同；Exp1 iSLIP/RG 平均 **"
+                        f"{ir.mean():.3f}×**（中位 {ir.median():.3f}×）。"
                     )
-                lines.append(
-                    "iSLIP 与 RG 同属轻量 barrier，比 Spray 更可对照调度差异，"
-                    "但仍非单一变量消融（plane 映射与注入路径不同）。\n"
-                )
+                    batches = sorted(both.index.get_level_values("batch").unique())
+                    if len(batches) >= 2:
+                        b0, b1 = int(batches[0]), int(batches[-1])
+                        r0 = ir[ir.index.get_level_values("batch") == b0].mean()
+                        r1 = ir[ir.index.get_level_values("batch") == b1].mean()
+                        lines.append(
+                            f"batch={b0} 为 **{r0:.3f}×**，batch={b1} 为 **{r1:.3f}×**。"
+                        )
+                    lines.append(
+                        "这是文档 §2.7「每 τ_g matching」相对当前模型「每出口独立 RR」的对照。\n"
+                    )
     e3 = df[df["exp"] == "exp3_roundtrip"]
     e3_s1 = e3[e3["scenario"] == 1] if not e3.empty else e3
     if not e3_s1.empty and "islip" in set(e3_s1["scheme"]) and "ub_rg" in set(e3_s1["scheme"]):
@@ -1035,7 +1033,7 @@ def write_report(
             "- UB_RG_POP：同目的侧节奏；startup = RTT_rg + oneWay（Push→Grant→Pull）；"
             "PullCredit 窗口保稳态流水（见 [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md)）\n"
             "- Packet Spray：自由注入；软件屏障在分析阶段叠加\n"
-            "- 场景4 按 Sparse CLOS 路径类建模；场景1 另跑 iSLIP\n"
+            "- 场景4 按 Sparse CLOS 路径类建模；场景1 另跑 iSLIP（同 ub_rg，仅 matching 不同）\n"
             "- 启动偏差：每 NPU ~U(0,skew)，skew∈{2,4,8}µs\n"
             "- Exp3：GEMV = max 专家 token 数 × τ_tok\n"
             "- 专家与 NPU 1:1；TopK=8\n"
@@ -1324,12 +1322,10 @@ def write_report(
                 batch_bits.append(f"batch={int(b)} 为 {rb:.3f}×")
             batch_txt = "；".join(batch_bits)
             islip_exp1 = (
-                f"- **场景1 iSLIP（Exp1）**：相对 `ub_rg`，共有格 step 平均 "
+                f"- **场景1 iSLIP（Exp1）**：与 `ub_rg` 同路径钉扎与 REQ/GNT，"
+                f"仅将每出口独立 RR 换成 iSLIP matching；共有格 step 平均 "
                 f"**{ir.mean():.3f}×**（{batch_txt}）。"
-                "小 batch 时常更快，大 batch 与 RG 接近；"
-                "CCT/König 中位通常也更贴下界。iSLIP 与 RG 同用轻量 barrier，"
-                "比 Spray 更适合对照“输入排队匹配 vs 目的侧授权”，"
-                "但仍共用不同 plane 映射，不是严格单因素实验。\n"
+                "差异应解读为调度匹配算法之差，而非另一套数据面。\n"
             )
     if not e3_s1.empty and {"islip", "ub_rg"} <= set(e3_s1["scheme"]):
         idx = ["ep_size", "zipf_s"]
@@ -1374,11 +1370,12 @@ def write_report(
         "若要做受控因果，应固定同一 plane 映射、同一 hop/队列公式、同一 jitter 与 barrier，"
         "**只开关目的侧 grant 节拍**，再比 CCT。\n"
         "\n"
-        "相对地，场景1 的 **iSLIP vs `ub_rg`** 更接近调度对照：二者同属轻量 barrier，"
-        "且都在单层 Clos 上做每 τ_g 的出口互斥；差异主要来自"
-        "“输入排队 iSLIP 匹配”与“目的侧 RG 授权 + 平面钉扎”。"
-        "即便如此，plane 赋值仍不同（iSLIP 用 spray 式 RR plane），"
-        "故结论仍应表述为调度配置对照，而非完美单因素消融。\n"
+        "相对地，场景1 的 **iSLIP vs `ub_rg`** 是受控的调度对照："
+        "二者共用 `AssignRgPlane` 路径钉扎、同一 RTT_rg、同一 hop/jitter/barrier 与"
+        "同一源侧 FCFS grant 注入；**唯一差别**是交换机每 τ_g 的授权挑选——"
+        "`ub_rg` 为每目的出口独立对 src 做 RR，`islip` 为平面内 bipartite matching"
+        "（request/grant/accept，对齐 `ub_request_grant.md` §2.7）。"
+        "因此 iSLIP/RG 比值可归因于匹配算法，而 Spray/RG 仍不能。\n"
     )
     lines.append("## 8. 复现方法\n")
     if engine == "behavioral":
