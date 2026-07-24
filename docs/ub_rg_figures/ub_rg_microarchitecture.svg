@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="980" viewBox="0 0 1280 980">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4a5568"/>
+    </marker>
+    <marker id="arrowSm" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#718096"/>
+    </marker>
+  </defs>
+<rect width="1280" height="980" fill="#f8fafc"/>
+<rect x="16" y="16" width="1248" height="948" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+<text x="40" y="52" font-family="sans-serif" font-size="22" font-weight="bold" fill="#1a202c">UB_RG 通信微架构：源端口 / Fabric / 目的侧建模细节</text>
+<text x="40" y="76" font-family="sans-serif" font-size="13" fill="#4a5568">浅色区 = 已建模通信微架构（队列、调度、串行化、授权）。灰色虚线区 = 未建模计算微架构（不进入 CCT）。</text>
+<rect x="40" y="100" width="160" height="250" rx="10" fill="#ffffff" stroke="#3182ce" stroke-width="1.8"/>
+<text x="120" y="126" font-family="sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#2b6cb0">Workload</text>
+<text x="52" y="152" font-family="monospace" font-size="11" fill="#2d3748">NPU x batch</text>
+<text x="52" y="170" font-family="monospace" font-size="11" fill="#2d3748">Zipf(S)-&gt;TopK=8</text>
+<text x="52" y="188" font-family="monospace" font-size="11" fill="#2d3748">grain = 7 KB</text>
+<rect x="52" y="205" width="136" height="54" rx="6" fill="#ebf8ff" stroke="#90cdf4"/>
+<text x="120" y="226" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#2b6cb0">网络负载不均</text>
+<text x="120" y="244" font-family="sans-serif" font-size="10" text-anchor="middle" fill="#4a5568">热点目的 grain 增多</text>
+<text x="120" y="280" font-family="sans-serif" font-size="10" text-anchor="middle" fill="#718096">计算不均未建模</text>
+<text x="120" y="298" font-family="sans-serif" font-size="10" text-anchor="middle" fill="#a0aec0">GEMV = 0</text>
+<text x="120" y="330" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#3182ce">注入 token 列表</text>
+<line x1="200" y1="225" x2="228" y2="225" stroke="#4a5568" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="232" y="100" width="320" height="250" rx="10" fill="#ffffff" stroke="#2f855a" stroke-width="1.8"/>
+<text x="392" y="124" font-family="sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#276749">Src NPU · 上联微架构</text>
+<text x="248" y="146" font-family="monospace" font-size="10.5" fill="#2d3748">8x400G 上联 · τ_g≈143.36 ns</text>
+<text x="248" y="168" font-family="sans-serif" font-size="11" font-weight="bold" fill="#276749">端口串行化服务器 srcPortFree[n×8]</text>
+<rect x="248" y="176" width="66" height="30" rx="4" fill="#f0fff4" stroke="#68d391"/>
+<text x="281" y="189" font-family="monospace" font-size="9" text-anchor="middle" fill="#22543d">P0</text>
+<text x="281" y="200" font-family="monospace" font-size="8" text-anchor="middle" fill="#38a169">FIFO·τ_g</text>
+<rect x="320" y="176" width="66" height="30" rx="4" fill="#f0fff4" stroke="#68d391"/>
+<text x="353" y="189" font-family="monospace" font-size="9" text-anchor="middle" fill="#22543d">P1</text>
+<text x="353" y="200" font-family="monospace" font-size="8" text-anchor="middle" fill="#38a169">FIFO·τ_g</text>
+<rect x="392" y="176" width="66" height="30" rx="4" fill="#f0fff4" stroke="#68d391"/>
+<text x="425" y="189" font-family="monospace" font-size="9" text-anchor="middle" fill="#22543d">P2</text>
+<text x="425" y="200" font-family="monospace" font-size="8" text-anchor="middle" fill="#38a169">FIFO·τ_g</text>
+<rect x="464" y="176" width="66" height="30" rx="4" fill="#f0fff4" stroke="#68d391"/>
+<text x="497" y="189" font-family="monospace" font-size="9" text-anchor="middle" fill="#22543d">P3</text>
+<text x="497" y="200" font-family="monospace" font-size="8" text-anchor="middle" fill="#38a169">FIFO·τ_g</text>
+<rect x="248" y="212" width="66" height="30" rx="4" fill="#f0fff4" stroke="#68d391"/>
+<text x="281" y="225" font-family="monospace" font-size="9" text-anchor="middle" fill="#22543d">P4</text>
+<text x="281" y="236" font-family="monospace" font-size="8" text-anchor="middle" fill="#38a169">FIFO·τ_g</text>
+<rect x="320" y="212" width="66" height="30" rx="4" fill="#f0fff4" stroke="#68d391"/>
+<text x="353" y="225" font-family="monospace" font-size="9" text-anchor="middle" fill="#22543d">P5</text>
+<text x="353" y="236" font-family="monospace" font-size="8" text-anchor="middle" fill="#38a169">FIFO·τ_g</text>
+<rect x="392" y="212" width="66" height="30" rx="4" fill="#f0fff4" stroke="#68d391"/>
+<text x="425" y="225" font-family="monospace" font-size="9" text-anchor="middle" fill="#22543d">P6</text>
+<text x="425" y="236" font-family="monospace" font-size="8" text-anchor="middle" fill="#38a169">FIFO·τ_g</text>
+<rect x="464" y="212" width="66" height="30" rx="4" fill="#f0fff4" stroke="#68d391"/>
+<text x="497" y="225" font-family="monospace" font-size="9" text-anchor="middle" fill="#22543d">P7</text>
+<text x="497" y="236" font-family="monospace" font-size="8" text-anchor="middle" fill="#38a169">FIFO·τ_g</text>
+<rect x="248" y="256" width="288" height="78" rx="6" fill="#f0fff4" stroke="#9ae6b4"/>
+<text x="392" y="274" font-family="sans-serif" font-size="11" text-anchor="middle" font-weight="bold" fill="#276749">调度 / 准入（按 scheme）</text>
+<text x="260" y="294" font-family="sans-serif" font-size="10.5" fill="#2d3748">Spray：自由注入 · plane = 源序 RR</text>
+<text x="260" y="310" font-family="sans-serif" font-size="10.5" fill="#2d3748">RG：等 GNT 后 FCFS · plane = src/dst hash</text>
+<text x="260" y="326" font-family="sans-serif" font-size="10.5" fill="#2d3748">POP：同 RG + (src,plane) PullCredit 窗口</text>
+<line x1="552" y1="225" x2="580" y2="225" stroke="#4a5568" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="584" y="100" width="360" height="250" rx="10" fill="#ffffff" stroke="#c05621" stroke-width="1.8"/>
+<text x="764" y="124" font-family="sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#9c4221">Fabric · 交换微架构</text>
+<text x="600" y="144" font-family="monospace" font-size="10.5" fill="#2d3748">每跳：prop 50 ns + pipeline 150 ns</text>
+<rect x="600" y="156" width="328" height="52" rx="6" fill="#fffaf0" stroke="#f6ad55"/>
+<text x="764" y="174" font-family="sans-serif" font-size="10.5" text-anchor="middle" font-weight="bold" fill="#9c4221">路径时延抽象</text>
+<text x="612" y="194" font-family="monospace" font-size="10" fill="#744210">S1: 2 hop · RTT_rg≈0.6µs　　S2/S3: 4 hop · RTT_rg≈1.1µs</text>
+<rect x="600" y="218" width="100" height="70" rx="5" fill="#fffaf0" stroke="#ed8936"/>
+<text x="650" y="238" font-family="sans-serif" font-size="10" text-anchor="middle" font-weight="bold" fill="#9c4221">Leaf</text>
+<text x="650" y="254" font-family="monospace" font-size="9" text-anchor="middle" fill="#744210">VOQ / FIB</text>
+<text x="650" y="270" font-family="monospace" font-size="9" text-anchor="middle" fill="#744210">plane uplink</text>
+<line x1="700" y1="253" x2="728" y2="253" stroke="#c05621" stroke-width="1.5" marker-end="url(#arrowSm)"/>
+<rect x="732" y="218" width="100" height="70" rx="5" fill="#fffaf0" stroke="#ed8936"/>
+<text x="782" y="238" font-family="sans-serif" font-size="10" text-anchor="middle" font-weight="bold" fill="#9c4221">Spine</text>
+<text x="782" y="254" font-family="monospace" font-size="9" text-anchor="middle" fill="#744210">S2: 全 64</text>
+<text x="782" y="270" font-family="monospace" font-size="9" text-anchor="middle" fill="#744210">S3: FIB 过滤</text>
+<line x1="832" y1="253" x2="860" y2="253" stroke="#c05621" stroke-width="1.5" marker-end="url(#arrowSm)"/>
+<rect x="864" y="218" width="64" height="70" rx="5" fill="#fffaf0" stroke="#ed8936"/>
+<text x="896" y="246" font-family="sans-serif" font-size="10" text-anchor="middle" font-weight="bold" fill="#9c4221">Leaf</text>
+<text x="896" y="264" font-family="sans-serif" font-size="9" text-anchor="middle" fill="#744210">下行</text>
+<rect x="600" y="298" width="328" height="40" rx="5" fill="#fff5f5" stroke="#fc8181"/>
+<text x="764" y="316" font-family="sans-serif" font-size="10.5" text-anchor="middle" fill="#9b2c2c">Spray 中段队列 spineFree[64×128] FIFO（RG 不经此队列）</text>
+<text x="764" y="332" font-family="sans-serif" font-size="10" text-anchor="middle" fill="#718096">行为级 S2≡S3；逐包读 routing_table 才区分平面隔离</text>
+<line x1="944" y1="225" x2="972" y2="225" stroke="#4a5568" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="976" y="100" width="264" height="250" rx="10" fill="#ffffff" stroke="#2b6cb0" stroke-width="1.8"/>
+<text x="1108" y="124" font-family="sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#2c5282">Dst · 目的侧微架构</text>
+<rect x="992" y="140" width="232" height="58" rx="5" fill="#ebf8ff" stroke="#63b3ed"/>
+<text x="1108" y="158" font-family="sans-serif" font-size="11" text-anchor="middle" font-weight="bold" fill="#2b6cb0">Spray 下行 FIFO</text>
+<text x="1004" y="176" font-family="monospace" font-size="10" fill="#2a4365">egressFree[8×N]</text>
+<text x="1004" y="190" font-family="monospace" font-size="10" fill="#2a4365">键 = plane×N + dst</text>
+<rect x="992" y="206" width="232" height="72" rx="5" fill="#ebf8ff" stroke="#63b3ed"/>
+<text x="1108" y="224" font-family="sans-serif" font-size="11" text-anchor="middle" font-weight="bold" fill="#2b6cb0">RG / POP 授权调度</text>
+<text x="1004" y="242" font-family="monospace" font-size="10" fill="#2a4365">per-egress pending 列表</text>
+<text x="1004" y="256" font-family="monospace" font-size="10" fill="#2a4365">source-RR · credit window</text>
+<text x="1004" y="270" font-family="monospace" font-size="10" fill="#2a4365">≤1 grain / τ_g / egress</text>
+<rect x="992" y="286" width="232" height="50" rx="5" fill="#e6fffa" stroke="#4fd1c5"/>
+<text x="1108" y="304" font-family="sans-serif" font-size="11" text-anchor="middle" font-weight="bold" fill="#234e52">完成与同步</text>
+<text x="1004" y="322" font-family="monospace" font-size="10" fill="#234e52">CCT / König · LOCAL→GLOBAL SYNC</text>
+<text x="40" y="390" font-family="sans-serif" font-size="15" font-weight="bold" fill="#1a202c">三方案：队列与调度差异（同一 Fabric 上的不同准入）</text>
+<rect x="40" y="406" width="390" height="200" rx="10" fill="#fff5f5" stroke="#e53e3e" stroke-width="1.6"/>
+<text x="235" y="430" font-family="sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#c53030">packet_spray</text>
+<text x="56" y="454" font-family="sans-serif" font-size="11" fill="#2d3748">控制面：无 REQ/GNT</text>
+<text x="56" y="472" font-family="sans-serif" font-size="11" fill="#2d3748">源口：立即注入（仅受 srcPortFree 串行）</text>
+<text x="56" y="490" font-family="sans-serif" font-size="11" fill="#2d3748">平面：源序 round-robin</text>
+<rect x="56" y="504" width="358" height="86" rx="6" fill="#ffffff" stroke="#feb2b2"/>
+<text x="235" y="522" font-family="sans-serif" font-size="11" text-anchor="middle" font-weight="bold" fill="#c53030">显式 FIFO 排队链</text>
+<text x="68" y="544" font-family="monospace" font-size="10" fill="#742a2a">srcPort -&gt; [spineFree FIFO]* -&gt; egressFree FIFO -&gt; arrive</text>
+<text x="68" y="564" font-family="sans-serif" font-size="10" fill="#4a5568">*仅 S2/S3；热点在目的下行与中段放大</text>
+<text x="68" y="580" font-family="sans-serif" font-size="10" fill="#718096">分析阶段叠加软件屏障（更重）</text>
+<rect x="445" y="406" width="390" height="200" rx="10" fill="#ebf8ff" stroke="#3182ce" stroke-width="1.6"/>
+<text x="640" y="430" font-family="sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#2b6cb0">ub_rg</text>
+<text x="461" y="454" font-family="sans-serif" font-size="11" fill="#2d3748">控制面：REQ -&gt; GNT -&gt; DATA（逐包真实报文）</text>
+<text x="461" y="472" font-family="sans-serif" font-size="11" fill="#2d3748">行为级：折叠为 RTT + nominal grant 时刻</text>
+<text x="461" y="490" font-family="sans-serif" font-size="11" fill="#2d3748">平面：src/dst hash 钉扎</text>
+<rect x="461" y="504" width="358" height="86" rx="6" fill="#ffffff" stroke="#90cdf4"/>
+<text x="640" y="522" font-family="sans-serif" font-size="11" text-anchor="middle" font-weight="bold" fill="#2b6cb0">目的侧授权节拍（非自由 FIFO）</text>
+<text x="473" y="544" font-family="monospace" font-size="10" fill="#2a4365">pending[egress] -&gt; source-RR -&gt; credit -&gt; GNT</text>
+<text x="473" y="564" font-family="sans-serif" font-size="10" fill="#4a5568">DATA 受源口 srcPortFree 推迟；近零目的排队</text>
+<text x="473" y="580" font-family="sans-serif" font-size="10" fill="#718096">BSP cursor 屏障（轻）· σ 抖动（RG）</text>
+<rect x="850" y="406" width="390" height="200" rx="10" fill="#faf5ff" stroke="#805ad5" stroke-width="1.6"/>
+<text x="1045" y="430" font-family="sans-serif" font-size="14" text-anchor="middle" font-weight="bold" fill="#553c9a">ub_rg_pop</text>
+<text x="866" y="454" font-family="sans-serif" font-size="11" fill="#2d3748">设计：Push-&gt;ESC-&gt;PullGrant-&gt;READ</text>
+<text x="866" y="472" font-family="sans-serif" font-size="11" fill="#2d3748">行为级：RG 节拍 + startup + PullCredit</text>
+<text x="866" y="490" font-family="sans-serif" font-size="11" fill="#2d3748">逐包：RG 路径 + completion overlay</text>
+<rect x="866" y="504" width="358" height="86" rx="6" fill="#ffffff" stroke="#d6bcfa"/>
+<text x="1045" y="522" font-family="sans-serif" font-size="11" text-anchor="middle" font-weight="bold" fill="#553c9a">相对 RG 多建的微架构</text>
+<text x="878" y="544" font-family="monospace" font-size="10" fill="#44337a">inFlight[(src,plane)] &lt;= C_pop（行为级）</text>
+<text x="878" y="564" font-family="sans-serif" font-size="10" fill="#4a5568">多付 one-way startup；稳态节拍对齐 RG</text>
+<text x="878" y="580" font-family="sans-serif" font-size="10" fill="#718096">逐包未发 Push/Pull 报文 · 非完整 POP</text>
+<text x="40" y="640" font-family="sans-serif" font-size="15" font-weight="bold" fill="#1a202c">双引擎落地与状态变量</text>
+<rect x="40" y="656" width="600" height="130" rx="10" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.4"/>
+<text x="56" y="680" font-family="sans-serif" font-size="13" font-weight="bold" fill="#2d3748">行为级 · ub_rg-dispatch-experiment.cc</text>
+<text x="56" y="702" font-family="monospace" font-size="11" fill="#4a5568">状态：srcPortFree[] · egressFree[] · spineFree[] · egressLoad[]</text>
+<text x="56" y="720" font-family="monospace" font-size="11" fill="#4a5568">RG：byEgress pending + grantTime + source-RR；POP：PullCredit deque</text>
+<text x="56" y="742" font-family="sans-serif" font-size="11" fill="#4a5568">grain 级 free-time，不跑完整 UB 协议栈</text>
+<text x="56" y="766" font-family="monospace" font-size="10" fill="#718096">ns-3-ub/scratch/ub_rg-dispatch-experiment.cc</text>
+<rect x="660" y="656" width="580" height="130" rx="10" fill="#f7fafc" stroke="#a0aec0" stroke-width="1.4"/>
+<text x="676" y="680" font-family="sans-serif" font-size="13" font-weight="bold" fill="#2d3748">逐包 · UbRgExperimentApp + protocol</text>
+<text x="676" y="702" font-family="monospace" font-size="11" fill="#4a5568">UbPort 串行/CBFC · UbSwitch VOQ/路由 · Jetty/TP/MTU</text>
+<text x="676" y="720" font-family="monospace" font-size="11" fill="#4a5568">UbRgScheduler：RR + credit + 10ms stale reclaim</text>
+<text x="676" y="742" font-family="sans-serif" font-size="11" fill="#4a5568">SenderAgent：REQ pacing · GNT-&gt;WQE 注入 · SYNC</text>
+<text x="676" y="766" font-family="monospace" font-size="10" fill="#718096">ub-rg-experiment-app.cc / ub-rg-scheduler.cc / ub-rg-sender-agent.cc</text>
+<rect x="40" y="806" width="1200" height="72" rx="10" fill="#edf2f7" stroke="#a0aec0" stroke-width="1.5" stroke-dasharray="7 4"/>
+<text x="56" y="832" font-family="sans-serif" font-size="13" font-weight="bold" fill="#4a5568">未建模（浅灰虚线）· 计算微架构 —— 不进入 CCT</text>
+<text x="56" y="856" font-family="sans-serif" font-size="12" fill="#718096">GEMV / Tensor Core / HBM 争用 / 专家计算队列 / 算子启动 · token 数不均不会变成计算 straggler · Exp3 = dispatch-&gt;combine 网络 roundtrip</text>
+<text x="640" y="920" font-family="sans-serif" font-size="11" text-anchor="middle" fill="#a0aec0">图中队列名与代码状态变量对齐：srcPortFree / egressFree / spineFree / pending / credit</text>
+</svg>

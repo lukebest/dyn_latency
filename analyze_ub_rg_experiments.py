@@ -16,9 +16,24 @@ import pandas as pd  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 REPORT = ROOT / "docs" / "UB_RG仿真报告.md"
-SCHEMES = ("ub_rg", "ub_rg_pop", "packet_spray")
-SCHEME_LS = {"ub_rg": "-", "ub_rg_pop": "-.", "packet_spray": "--"}
-SCHEME_COLOR = {"ub_rg": "C0", "ub_rg_pop": "C2", "packet_spray": "C1"}
+SCHEMES = ("ub_rg", "ub_rg_pop", "packet_spray", "islip")
+SCHEME_LS = {
+    "ub_rg": "-",
+    "ub_rg_pop": "-.",
+    "packet_spray": "--",
+    "islip": ":",
+}
+SCHEME_COLOR = {
+    "ub_rg": "C0",
+    "ub_rg_pop": "C2",
+    "packet_spray": "C1",
+    "islip": "C3",
+}
+
+
+def schemes_in(df: pd.DataFrame) -> list[str]:
+    present = set(df["scheme"].dropna().unique()) if "scheme" in df.columns else set()
+    return [s for s in SCHEMES if s in present]
 
 
 def load_summaries(results: Path) -> pd.DataFrame:
@@ -59,6 +74,10 @@ def load_summaries(results: Path) -> pd.DataFrame:
                 "barrier_us": d.get("barrier_us"),
                 "cct_us": d.get("cct_us"),
                 "step_us": d.get("step_us"),
+                "gemv_us": d.get("gemv_us"),
+                "e2e_us": d.get("e2e_us"),
+                "e2e_step_us": d.get("e2e_step_us"),
+                "start_skew_us": d.get("start_skew_us", 0.0),
                 "throughput_GBs": d.get("throughput_GBs"),
                 "lat_mean": d.get("latency_all", {}).get("mean_us"),
                 "lat_p50": d.get("latency_all", {}).get("p50_us"),
@@ -71,6 +90,9 @@ def load_summaries(results: Path) -> pd.DataFrame:
             }
             hist = run_dir / "hist.csv"
             row["hist_path"] = str(hist) if hist.exists() else ""
+            # Active matrix is scenarios 1 + 4; ignore legacy 2/3 result dirs.
+            if row.get("scenario") in (2, 3):
+                continue
             rows.append(row)
     return pd.DataFrame(rows)
 
@@ -91,7 +113,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
     for scenario in sorted(sub["scenario"].unique()):
         s = sub[sub["scenario"] == scenario]
         fig, ax = plt.subplots(figsize=(7, 4.5))
-        for scheme in SCHEMES:
+        for scheme in schemes_in(s):
             ls = SCHEME_LS[scheme]
             for batch in sorted(s["batch"].unique()):
                 g = s[(s["scheme"] == scheme) & (s["batch"] == batch)].sort_values("zipf_s")
@@ -120,7 +142,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
         batches = sorted(s["batch"].unique())
         batch_focus = 256 if 256 in batches else batches[len(batches) // 2]
         fig, ax = plt.subplots(figsize=(7, 4.5))
-        for scheme in SCHEMES:
+        for scheme in schemes_in(s):
             ls = SCHEME_LS[scheme]
             g = s[(s["scheme"] == scheme) & (s["batch"] == batch_focus)].sort_values("zipf_s")
             if g.empty:
@@ -155,7 +177,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
 
         s_focus = 0.7 if 0.7 in set(s["zipf_s"]) else sorted(s["zipf_s"].unique())[-1]
         fig, ax = plt.subplots(figsize=(7, 4.5))
-        for scheme in SCHEMES:
+        for scheme in schemes_in(s):
             ls = SCHEME_LS[scheme]
             g = s[(s["scheme"] == scheme) & (np.isclose(s["zipf_s"], s_focus))].sort_values(
                 "batch"
@@ -193,6 +215,103 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
     return figs
 
 
+def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
+    """Grouped bar charts comparing schemes for Exp1/Exp2."""
+    sub = df[df["exp"] == exp].copy()
+    if sub.empty:
+        return []
+    if "start_skew_us" not in sub.columns:
+        sub["start_skew_us"] = 0.0
+    sub["start_skew_us"] = sub["start_skew_us"].fillna(0.0)
+    figs = []
+    for scenario in sorted(sub["scenario"].unique()):
+        s = sub[sub["scenario"] == scenario]
+        schemes = schemes_in(s)
+        if not schemes:
+            continue
+        batches = sorted(s["batch"].unique())
+        skews = sorted(s["start_skew_us"].unique())
+        zipfs = sorted(s["zipf_s"].unique())
+        # Representative cells: each batch × each skew, bars over schemes × zipf
+        for batch in batches:
+            for skew in skews:
+                cell = s[(s["batch"] == batch) & np.isclose(s["start_skew_us"], skew)]
+                if cell.empty:
+                    continue
+                fig, ax = plt.subplots(figsize=(8.5, 4.8))
+                x = np.arange(len(zipfs))
+                width = 0.8 / max(len(schemes), 1)
+                for i, scheme in enumerate(schemes):
+                    ys = []
+                    for zs in zipfs:
+                        g = cell[(cell["scheme"] == scheme) & np.isclose(cell["zipf_s"], zs)]
+                        ys.append(float(g["step_us"].mean()) if not g.empty else np.nan)
+                    ax.bar(
+                        x + i * width - 0.4 + width / 2,
+                        ys,
+                        width=width * 0.92,
+                        label=scheme,
+                        color=SCHEME_COLOR.get(scheme, f"C{i}"),
+                    )
+                ax.set_xticks(x)
+                ax.set_xticklabels([f"{z:g}" for z in zipfs])
+                style_ax(
+                    ax,
+                    f"{tag} S{int(scenario)} bar: step_us vs Zipf "
+                    f"(batch={int(batch)}, skew={skew:g}µs)",
+                    "Zipf S",
+                    "Step (µs)",
+                )
+                path = figs_dir / (
+                    f"{exp}_s{int(scenario)}_bar_step_vs_zipf"
+                    f"_b{int(batch)}_sk{skew:g}.png"
+                )
+                fig.tight_layout()
+                fig.savefig(path, dpi=140)
+                plt.close(fig)
+                figs.append(path)
+
+        # Cross-batch bars at mid zipf / each skew
+        z_focus = 0.7 if any(np.isclose(zipfs, 0.7)) else zipfs[len(zipfs) // 2]
+        for skew in skews:
+            cell = s[np.isclose(s["start_skew_us"], skew) & np.isclose(s["zipf_s"], z_focus)]
+            if cell.empty:
+                continue
+            fig, ax = plt.subplots(figsize=(8.5, 4.8))
+            x = np.arange(len(batches))
+            width = 0.8 / max(len(schemes), 1)
+            for i, scheme in enumerate(schemes):
+                ys = []
+                for b in batches:
+                    g = cell[(cell["scheme"] == scheme) & (cell["batch"] == b)]
+                    ys.append(float(g["step_us"].mean()) if not g.empty else np.nan)
+                ax.bar(
+                    x + i * width - 0.4 + width / 2,
+                    ys,
+                    width=width * 0.92,
+                    label=scheme,
+                    color=SCHEME_COLOR.get(scheme, f"C{i}"),
+                )
+            ax.set_xticks(x)
+            ax.set_xticklabels([str(int(b)) for b in batches])
+            style_ax(
+                ax,
+                f"{tag} S{int(scenario)} bar: step_us vs Batch "
+                f"(S={z_focus:g}, skew={skew:g}µs)",
+                "BatchSize",
+                "Step (µs)",
+            )
+            path = figs_dir / (
+                f"{exp}_s{int(scenario)}_bar_step_vs_batch"
+                f"_s{z_focus:g}_sk{skew:g}.png"
+            )
+            fig.tight_layout()
+            fig.savefig(path, dpi=140)
+            plt.close(fig)
+            figs.append(path)
+    return figs
+
+
 def plot_exp3(df: pd.DataFrame, figs_dir: Path):
     """Roundtrip Step vs EP summary (per-token CDF/PDF figures are dropped;
     see plot_exp3_pdf for the system dispatch+combine CCT distributions)."""
@@ -207,7 +326,7 @@ def plot_exp3(df: pd.DataFrame, figs_dir: Path):
         s = sub[sub["scenario"] == scenario]
         # step_us vs ep_size
         fig, ax = plt.subplots(figsize=(7, 4.5))
-        for scheme in SCHEMES:
+        for scheme in schemes_in(s):
             ls = SCHEME_LS[scheme]
             for zipf_s in sorted(s["zipf_s"].unique()):
                 g = s[(s["scheme"] == scheme) & np.isclose(s["zipf_s"], zipf_s)].sort_values(
@@ -215,7 +334,11 @@ def plot_exp3(df: pd.DataFrame, figs_dir: Path):
                 )
                 if g.empty:
                     continue
-                step = g["roundtrip_step_us"].fillna(g["step_us"])
+                step = g["step_us"].copy()
+                if "e2e_step_us" in g.columns:
+                    step = g["e2e_step_us"].fillna(step)
+                if "roundtrip_step_us" in g.columns:
+                    step = step.fillna(g["roundtrip_step_us"])
                 ax.plot(
                     g["ep_size"],
                     step,
@@ -286,8 +409,8 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
         return []
 
     scheme_ls = SCHEME_LS
-    ep_color = {32: "C0", 64: "C1", 128: "C2", 256: "C4", 1024: "C3"}
-    sc_color = {1: "C0", 2: "C3", 3: "C2"}
+    ep_color = {32: "C0", 64: "C1", 128: "C2", 256: "C4", 512: "C5", 1024: "C3"}
+    sc_color = {1: "C0", 4: "C1", 2: "C3", 3: "C2"}
     figs = []
 
     # Per-scenario PDFs
@@ -302,9 +425,14 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
                 fig, ax = plt.subplots(figsize=(7.5, 4.5))
                 any_curve = False
                 for ep in eps:
-                    for scheme in SCHEMES:
+                    for scheme in schemes_in(cell):
                         g = cell[(cell["ep_size"] == ep) & (cell["scheme"] == scheme)]
-                        samples = g["cct_us"].to_numpy(dtype=float)
+                        metric = (
+                            "e2e_us"
+                            if "e2e_us" in g.columns and g["e2e_us"].notna().any()
+                            else "cct_us"
+                        )
+                        samples = g[metric].to_numpy(dtype=float)
                         samples = samples[np.isfinite(samples)]
                         if samples.size < 2:
                             continue
@@ -324,8 +452,8 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
                     ax,
                     f"Exp3 S{int(scenario)} System CCT PDF "
                     f"(batch={int(batch)}, S={zs:g})",
-                    "System dispatch+combine CCT (µs)  "
-                    "[attention→dispatch→GEMV→combine one iteration]",
+                    "End-to-end CCT (µs)  "
+                    "[dispatch→GEMV(Zipf,batch)→combine]",
                     "Density",
                 )
                 path = figs_dir / f"exp3_pdf_s{int(scenario)}_b{int(batch)}_s{zs:g}.png"
@@ -337,8 +465,7 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
     # Cross-scenario compare: representative EP of each topology
     compare = [
         (1, 128),
-        (2, 1024),
-        (3, 1024),
+        (4, 512),
     ]
     for batch in sorted(sub["batch"].unique()):
         for zs in sorted(sub["zipf_s"].unique()):
@@ -351,9 +478,14 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
                     & (sub["batch"] == batch)
                     & np.isclose(sub["zipf_s"], zs)
                 ]
-                for scheme in SCHEMES:
+                for scheme in schemes_in(cell):
                     g = cell[cell["scheme"] == scheme]
-                    samples = g["cct_us"].to_numpy(dtype=float)
+                    metric = (
+                        "e2e_us"
+                        if "e2e_us" in g.columns and g["e2e_us"].notna().any()
+                        else "cct_us"
+                    )
+                    samples = g[metric].to_numpy(dtype=float)
                     samples = samples[np.isfinite(samples)]
                     if samples.size < 2:
                         continue
@@ -372,8 +504,8 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
             style_ax(
                 ax,
                 f"Exp3 Cross-Scenario CCT PDF (batch={int(batch)}, S={zs:g})",
-                "System dispatch+combine CCT (µs)  "
-                "[attention→dispatch→GEMV→combine one iteration]",
+                "End-to-end CCT (µs)  "
+                "[dispatch→GEMV(Zipf,batch)→combine]",
                 "Density",
             )
             path = figs_dir / f"exp3_pdf_compare_b{int(batch)}_s{zs:g}.png"
@@ -419,9 +551,10 @@ def _write_html_report(md: str, html_path: Path, figs_dir: Path) -> None:
     parts = [
         "<!DOCTYPE html><html><head><meta charset='utf-8'>",
         "<title>UB_RG仿真报告</title>",
-        "<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:2rem auto;",
+        "<style>body{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;",
         "line-height:1.55;padding:0 1rem;color:#222}",
         "img{max-width:100%;height:auto;border:1px solid #ddd;margin:0.5rem 0}",
+        "img[src$='.svg']{width:100%;max-width:1100px;background:#fff;margin:0.75rem 0}",
         "pre{background:#f6f8fa;padding:0.75rem;overflow:auto;border-radius:6px}",
         "code{font-family:ui-monospace,monospace;font-size:0.92em}",
         "table{border-collapse:collapse;width:100%;margin:0.75rem 0;font-size:0.92em}",
@@ -523,6 +656,13 @@ def _write_html_report(md: str, html_path: Path, figs_dir: Path) -> None:
                 parts.append("<ul>\n")
                 in_ul = True
             parts.append(f"<li>{_md_inline(line[2:], html_lib, re)}</li>\n")
+        elif in_ul and (line.startswith("  ") or line.startswith("\t")) and line.strip():
+            # Continuation of the previous list item (wrapped markdown bullets).
+            if parts and parts[-1].endswith("</li>\n"):
+                prev = parts[-1][: -len("</li>\n")]
+                parts[-1] = f"{prev} {_md_inline(line.strip(), html_lib, re)}</li>\n"
+            else:
+                parts.append(f"<li>{_md_inline(line.strip(), html_lib, re)}</li>\n")
         elif line.strip() == "":
             flush_ul()
             parts.append("<br/>\n")
@@ -531,9 +671,91 @@ def _write_html_report(md: str, html_path: Path, figs_dir: Path) -> None:
             parts.append(f"<p>{_md_inline(line, html_lib, re)}</p>\n")
     flush_ul()
     flush_table()
-    parts.append("</body></html>\n")
     html_path.write_text("".join(parts), encoding="utf-8")
     print(f"Wrote {html_path}")
+
+
+def code_evidence_index_md() -> str:
+    """Key microarchitecture code evidence — shown near the front of reports."""
+    return """## 微架构关键代码证据索引
+
+下表把上图中的模块直接映射到仓库文件位置；阅读结果前应先能定位这些实现。
+
+| 微架构模块 | 证据 | 文件与位置 |
+|---|---|---|
+| 行为级常量 / grain / 端口速率 | τ_g、50 GB/s、hop 时延 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:29-36` |
+| Zipf / TopK → grain | 负载与专家路由 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:260-351` |
+| Spray / RG / POP phase | 三方案排队与授权 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:438-738` |
+| S4 / iSLIP / 启动偏差 / GEMV | PathClass、SimulateIsLip、start-skew、ComputeGemvUs | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc` |
+| 行为级 CCT / König | 指标与 summary | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:520-538, 730-812, 886-921` |
+| 逐包拓扑 / S3 路由过滤 | Leaf–Spine 与 FIB | `gen_ub_rg_topo.py:47-181`（S3：`144-180`） |
+| 逐包 token / scheduler map | 工作负载与挂接 | `ns-3-ub/src/unified-bus/model/ub-rg-experiment-app.cc:117-407` |
+| phase / completion / watchdog | 计时与收尾 | `ns-3-ub/src/unified-bus/model/ub-rg-experiment-app.cc:439-742` |
+| POP completion overlay | 非完整 Push/Pull | `ns-3-ub/src/unified-bus/model/ub-rg-experiment-app.cc:589-608, 878-887` |
+| REQ pacing | 50 µs 控制注入 | `ns-3-ub/src/unified-bus/model/protocol/ub-rg-sender-agent.cc:113-181` |
+| GNT → WQE / Jetty / TP | 数据注入 | `ns-3-ub/src/unified-bus/model/protocol/ub-rg-sender-agent.cc:227-376` |
+| RR / credit / stale reclaim | 目的侧调度 | `ns-3-ub/src/unified-bus/model/protocol/ub-rg-scheduler.cc:93-341` |
+| LOCAL / GLOBAL SYNC | 同步协议 | `protocol/ub-rg-scheduler.cc:374-409`；`protocol/ub-rg-sender-agent.cc:379-426` |
+| 首 MTU 入队归还 credit | credit 语义 | `ns-3-ub/src/unified-bus/model/ub-switch.cc:453-490` |
+| RG 末跳拦截 | REQ/DATA 转发 | `ns-3-ub/src/unified-bus/model/ub-switch.cc:1184-1258` |
+| schedulerId 仅 6 bit | SYNC id 折叠 | `ns-3-ub/src/unified-bus/model/protocol/ub-rg-header.cc:227-236` |
+| runner 矩阵 | 任务与跳过 | `run_ub_rg_experiments.py:18-145, 211-277, 340-403` |
+
+"""
+
+
+def microarchitecture_overview_md(fig_rel: str = "ub_rg_figures/ub_rg_microarchitecture.png") -> str:
+    """Front-matter diagram + evidence index for HTML/MD reports."""
+    return (
+        "## 0. 通信微架构总览\n\n"
+        "下图概括本仿真**已建模的通信微架构**与**未建模的计算微架构**。"
+        "随后表格给出上图各模块对应的关键代码位置。\n\n"
+        f"![UB_RG 通信微架构](./{fig_rel})\n\n"
+        + code_evidence_index_md().replace(
+            "## 微架构关键代码证据索引",
+            "## 0.1 微架构关键代码证据索引",
+            1,
+        )
+    )
+
+
+def simulation_environment_md(engine: str) -> str:
+    """Execution environment, modeled microarchitecture, and exact CCT scope."""
+    engine_model = (
+        "ns-3.44 逐包离散事件模型：Unified Bus 的 TP/Jetty、端口、交换机转发以及 "
+        "REQ/GNT/SYNC 控制报文均进入事件队列。"
+        if engine == "packet"
+        else "grain 级行为离散事件模型：不逐包执行完整协议栈，而以串行化服务器、FIFO、"
+        "固定传播/流水时延和控制 RTT 表示网络。"
+    )
+    return f"""### 1.1 仿真环境、微架构抽象与 CCT 口径
+
+| 项目 | 配置 / 抽象 |
+|---|---|
+| 执行主机 | Linux 6.17.0-40-generic（x86_64） |
+| 工具链 | Python 3.12.3；g++ 13.3.0；CMake 3.28.3；ns-3.44 optimized build |
+| 当前报告引擎 | `{engine}`；{engine_model} |
+| 并行方式 | 单次仿真保持单线程确定性；参数点由 Python `ProcessPoolExecutor` 并行 |
+| 端点模型 | 每个 NPU 对应一个网络端点/专家；每 token 的每个 TopK 路由项形成一个 7 KB grain |
+| 网络接口 | 每 NPU 8 个 400 Gbit/s 上联；有效 50 GB/s/端口；τ_g=7168/50e9≈143.36 ns |
+| 交换结构 | 50 ns/跳传播 + 150 ns/跳流水；场景1 单层 Clos；场景4 Sparse CLOS（PFM/SW-S/SW-a-b） |
+| 启动偏差 | 各 NPU 起点 ~U(0,skew)，skew∈{2,4,8} µs |
+| 负载生成 | TopK=8；Zipf S；主矩阵 seed=1；Exp3 PDF 每格 96 seeds |
+
+#### 微架构模型边界
+
+- **已建模的是通信微架构**：NPU 端口串行化、8 平面选路、Spray 目的出口/两层 Clos 中段队列、RG nominal 授权节拍、POP 的启动时延/PullCredit，以及 BSP 屏障常量。
+- **因果比较尚未闭环**：Spray 与 RG 同时改变 plane 映射、path delay 公式、jitter 和固定 barrier；当前比值是配置包差异，不能单独归因于目的侧准入。
+- **计算侧（Exp3）**：`gemv_us = max_e N_e·τ_tok`（均匀 Zipf、batch=256 时约 80µs/专家）；`e2e_us = dispatch_cct + gemv_us + combine_cct`。
+- **未建模**：完整 SM/HBM/cache、专家算力异构；iSLIP 为行为级 VOQ 匹配。
+- 主矩阵为 **场景1 + 场景4**（已去掉场景2/3）。
+
+#### CCT 的准确口径
+
+- Exp1/2：`cct_us` / `step_us` = 网络阶段（含启动偏差）+ barrier。
+- Exp3：`cct_us` = 网络往返；`gemv_us` / `e2e_us` / `step_us(=e2e+barriers)` 含 Zipf×batch GEMV。
+
+"""
 
 
 def topology_and_scheme_md(engine: str) -> str:
@@ -543,23 +765,29 @@ def topology_and_scheme_md(engine: str) -> str:
         if engine == "packet"
         else "行为级引擎（`ub_rg-dispatch-experiment`）"
     )
-    return f"""### 1.1 组网方案
+    scenario_scope_note = (
+        "主矩阵仅跑场景1与场景4；场景4 行为级按 Sparse CLOS 路径类（PFM / SW-S / SW-a-b）建模。"
+        if engine != "packet"
+        else "逐包场景4拓扑若未就绪，则逐包仅用于场景1 协议调试。"
+    )
+    return f"""### 1.2 组网方案
 
-对齐 [UB_RG实验设计.md](./UB_RG实验设计.md) 与参考报告 [EXPERIMENT_REPORT_FULL_S123.html](./EXPERIMENT_REPORT_FULL_S123.html) 的三场景拓扑；本报告由 {eng_note} 驱动。
+对齐 [UB_RG实验设计.md](./UB_RG实验设计.md) 与 [场景4_Sparse_CLOS_512P_设计说明.md](./场景4_Sparse_CLOS_512P_设计说明.md)；本报告由 {eng_note} 驱动。
+
+> {scenario_scope_note}
 
 | 场景 | 拓扑 | NPU | 交换 | 备注 |
 |---|---|---:|---|---|
-| 1 | 单层 Clos | 128 | 8 × SW128 | 每 NPU 8×400G 上联；路径 2 跳 |
-| 2 | 两层 Clos | 1024 | 128 Leaf + 64 Spine | 16 组 × 64 NPU；路径 4 跳 |
-| 3 | MpClos · 8 平面 | 1024 | 128 Leaf + 64 Spine | 与场景2同规模；按平面钉扎，平面间隔离 |
+| 1 | 单层 Clos | 128 | 8 × SW128 | 8×400G；2 跳；另含 iSLIP 调度对照 |
+| 4 | Sparse CLOS | 512 | 32 × SW128 | 8 Cluster×64 Server；15×400G（7 PFM+8 上联）；唯一路径 |
 
 组网差异要点：
 
-- **跳数 / RTT**：场景1 控制面 RTT_rg≈0.6µs；场景2/3≈1.1µs（两层更长）。
-- **瓶颈位置**：场景1 主要是目的侧平面下行；场景2/3 另有 Leaf↔Spine 中段争用（Packet Spray 更敏感）。
-- **平面**：三者均为 8 上联/平面；场景3 强调跨平面隔离，RG/POP 路径钉扎，Spray 按源序 RR 洒平面。
+- **跳数 / RTT**：场景1 RTT_rg≈0.6µs；场景4 典型 SW≈0.8µs，同机 PFM 更短。
+- **瓶颈**：场景1 目的侧平面下行；场景4 跨 Cluster SW 下行与 PFM 争用。
+- **调度**：场景1 含 `islip`；场景4 为 `ub_rg` / `ub_rg_pop` / `packet_spray`。
 
-### 1.2 网络方案与实现差异
+### 1.3 网络方案与实现差异
 
 | 方案 | Scheme | 语义 |
 |---|---|---|
@@ -575,8 +803,9 @@ def topology_and_scheme_md(engine: str) -> str:
 |---|---|---|
 | `ub_request_grant.md` / 设计 | 文档 | 交换机侧分布式 REQ/GNT：每 τ_g 每出口 ≤1、路径钉扎、cursor/SYNC |
 | `ub_rg` | 仿真 scheme | 主协议的落地：目的侧授权节奏 + 源侧 FCFS；行为级折叠控制面为 RTT；逐包走真实 REQ/GNT/SYNC |
-| `ub_rg_pop` | 仿真 scheme | [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md)：Push→Pull；**同 RG 稳态节拍**，多付一次单向启动 + PullCredit 窗口 |
+| `ub_rg_pop` | 仿真 scheme | [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md) 的假设模型：行为级为 RG + startup + PullCredit；逐包为 RG 路径 + completion 计时 overlay |
 | `packet_spray` | 仿真 scheme | 无授权准入；源上联自由注入；目的/中段 FIFO；分析阶段叠软件屏障 |
+| `islip` | 仿真 scheme | 场景1：每平面 VOQ iSLIP 匹配（每 τ_g 多轮 request/grant/accept） |
 
 > **对齐的核心（设计 ↔ ub_rg）：** grain 量化、τ_g、每平面 ≤1 授权、Clos/MpClos 钉扎。
 > **POP 相对 RG：** 稳态 König 渐近相同；startup = RTT_rg + oneWay（≈1.5×）；小 batch 略慢，大负载/高偏斜时 pop≈rg。
@@ -586,14 +815,14 @@ def topology_and_scheme_md(engine: str) -> str:
 
 | 维度 | `packet_spray` | `ub_rg` | `ub_rg_pop`（本仓库） |
 |---|---|---|---|
-| 调度 / 准入 | 无；源侧自由注入 | 目的侧 GNT 节奏（1/τ_g/egress） | 同 RG 目的侧节奏；Pull 前多一次 Push 单向 |
-| 控制通道 | 无控制面握手 | REQ → GNT → DATA（逐包真实报文；行为级折叠为 RTT） | Push meta → PullGrant → Pull remote-read（行为级：`rtt_pop`；逐包：Kickoff 延时 + 更大 credit） |
-| 注入准入 | 仅源端口串行 | GNT 到才发，无预支库存 | PullCredit 窗口 `C_pop=⌈rtt_pop/τ_g⌉+margin`，稳态可流水 |
+| 调度 / 准入 | 无；源侧自由注入 | 目的侧 GNT 节奏（1/τ_g/egress） | 同 RG；多一次 Push 单向 |
+| 控制通道 | 无控制面握手 | REQ → GNT → DATA（逐包真实报文；行为级折叠为 RTT） | 行为级用 `rtt_pop` 近似；逐包未发送 Push/Pull 报文，只在 RG completion 上叠 startup |
+| 注入准入 | 仅源端口串行 | GNT 到才发，无预支库存 | 行为级有 `C_pop=⌈rtt_pop/τ_g⌉+margin`；逐包与 RG 使用相同 credit |
 | 冷启动 | 0（立即发） | 付一次 RTT_rg | 付 RTT_rg + oneWay（Push→Grant→Pull） |
 | ESC / 节拍 | 无 | 每 τ_g 每 egress ≤1 grain | 同左（König 渐近对齐 RG） |
 | 数据路径 | 源序 RR 洒平面；两层含 spine→leaf 队列 | RG 平面钉扎；近零队列（σ 抖动） | 同 RG 钉扎 |
 | 屏障 | 软件屏障（更重） | BSP cursor 屏障（轻） | 同 `ub_rg` |
-| 实现入口 | `UsePacketSpray=true` | `Scheme::UbRg` / RG scheduler active | `Scheme::UbRgPop`；逐包复用 RG transport + POP overlay |
+| 实现入口 | `UsePacketSpray=true` | `Scheme::UbRg` / RG scheduler active | `Scheme::UbRgPop`；逐包复用 RG transport并在统计时追加 one-way |
 
 #### 实验可读差异（期望趋势）
 
@@ -604,7 +833,7 @@ def topology_and_scheme_md(engine: str) -> str:
 | 冷流隔离 | 好（按需授权） | 接近 RG | 差（热点占满下行） |
 | 两层 Clos | 中段压力可控 | 偶发略差于 RG | 中段 FIFO 放大更明显 |
 
-CLI：`--scheme=ub_rg|ub_rg_pop|packet_spray`。
+CLI：`--scheme=ub_rg|ub_rg_pop|packet_spray|islip`；`--start-skew-us=2|4|8`。
 """
 
 def md_img(path: Path) -> str:
@@ -614,6 +843,73 @@ def md_img(path: Path) -> str:
 
 def clean_table(text: str) -> str:
     return "\n".join(line.rstrip() for line in text.splitlines())
+
+
+def executive_summary_md(df: pd.DataFrame) -> str:
+    """Build an evidence-linked summary from cells shared by all three schemes."""
+    lines = ["## 0.2 主要实验结论\n"]
+    lines.append(
+        "> 结论适用于场景1/4；Exp1/2 为网络子系统；Exp3 含 Zipf×batch GEMV straggler。\n"
+    )
+    e1 = df[df["exp"] == "exp1_dispatch"]
+    required = ["ub_rg", "ub_rg_pop", "packet_spray"]
+    if not e1.empty:
+        piv = e1.pivot_table(
+            index=["scenario", "batch", "zipf_s", "ep_size"],
+            columns="scheme",
+            values="step_us",
+            aggfunc="mean",
+        )
+        if all(s in piv.columns for s in required):
+            common = piv.dropna(subset=required)
+            if not common.empty:
+                pop_ratio = common["ub_rg_pop"] / common["ub_rg"].replace(0, np.nan)
+                spray_ratio = common["packet_spray"] / common["ub_rg"].replace(0, np.nan)
+                lines.append(
+                    f"- **配置包输出差异**：Exp1 三方案共有参数格中，"
+                    f"POP/RG 平均为 **{pop_ratio.mean():.3f}×**，"
+                    f"Spray/RG 平均为 **{spray_ratio.mean():.3f}×**。"
+                    "这是当前配置包的联合差异；plane、path delay、jitter 和 barrier "
+                    "尚未统一，不能把比值单独归因于目的侧配速。\n"
+                )
+                batches = sorted(common.index.get_level_values("batch").unique())
+                if batches:
+                    low = int(batches[0])
+                    high = int(batches[-1])
+                    low_ratio = pop_ratio[
+                        pop_ratio.index.get_level_values("batch") == low
+                    ].mean()
+                    high_ratio = pop_ratio[
+                        pop_ratio.index.get_level_values("batch") == high
+                    ].mean()
+                    lines.append(
+                        f"- **POP 启动开销会被负载摊薄**：batch={low} 时 POP/RG="
+                        f"**{low_ratio:.3f}×**，batch={high} 时为 **{high_ratio:.3f}×**；"
+                        "结果符合“多一次 one-way 启动、稳态节拍与 RG 相同”的模型预期。\n"
+                    )
+    bound = df[df["konig_us"].notna() & (df["konig_us"] > 0)].copy()
+    if not bound.empty:
+        bound["cct_to_konig"] = bound["cct_us"] / bound["konig_us"]
+        med = bound.groupby("scheme")["cct_to_konig"].median()
+        values = [
+            f"{scheme}={med[scheme]:.3f}"
+            for scheme in SCHEMES
+            if scheme in med.index
+        ]
+        if values:
+            lines.append(
+                "- **瓶颈下界**：CCT/König 中位数为 "
+                + "、".join(values)
+                + "；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。\n"
+            )
+    engine = str(df["engine"].iloc[0]) if "engine" in df.columns and len(df) else "unknown"
+    lines.append(
+        "- **拓扑范围**：主矩阵为场景1（Clos+iSLIP）与场景4（Sparse CLOS 512P）。\n"
+    )
+    lines.append(
+        "- **Exp3**：端到端含 GEMV；`gemv_us` 随 Zipf 热点与 batch 变化。\n"
+    )
+    return "".join(lines)
 
 
 def write_report(
@@ -628,6 +924,15 @@ def write_report(
     rel_results = results.relative_to(ROOT).as_posix()
     lines = []
     lines.append("# UB_RG 网络仿真报告\n")
+    lines.append(
+        "> **可信性状态：实现证据存在，性能结论未验证。** 行为级结果仅作为网络机制假设；"
+        "方案间路由、path delay、jitter 与 barrier 混杂尚未消除，逐包性能矩阵也未通过"
+        "完成守恒与跨引擎校验。绝对硬件时延与完整POP硅片实现不得据此下结论；"
+        "Exp3 GEMV 为标定服务模型。详见"
+        "[UB_RG仿真可信性评估报告](./UB_RG仿真可信性评估报告.html)。\n"
+    )
+    lines.append(microarchitecture_overview_md("ub_rg_figures/ub_rg_microarchitecture.png"))
+    lines.append(executive_summary_md(df))
     lines.append("## 1. 实验概述\n")
     if engine == "packet":
         lines.append(
@@ -645,22 +950,23 @@ def write_report(
             "**UB_RG_POP（SHMEM-POP）** 与 **Packet Spray（自由注入）**。"
             "结构对齐参考报告 [EXPERIMENT_REPORT_FULL_S123.html](./EXPERIMENT_REPORT_FULL_S123.html)：组网 → 方案差异 → 扫参结果。\n"
         )
+    lines.append(simulation_environment_md(engine))
     lines.append(topology_and_scheme_md(engine))
     if engine == "packet":
-        lines.append("### 1.3 模型假设与简化\n")
+        lines.append("### 1.4 模型假设与简化\n")
         lines.append(
             "- 端口 400Gbps，grain = 7KB（2×MTU），τ_g ≈ 143.36 ns\n"
             "- 真实 REQ/GNT/SYNC 控制报文（VL1）；末跳交换机拦截 REQ；"
             "目的侧 1 grain/τ_g + credit window + RR；源侧 FCFS grant 队列\n"
-            "- UB_RG_POP：复用 RG 路径，Kickoff 叠加 Push 单向时延 + 更大 PullCredit 窗口"
-            "（见 [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md)）\n"
+            "- UB_RG_POP：复用 RG 路径和相同 credit，只在 completion 统计上追加单向 startup；"
+            "未实现独立 Push/Pull 数据通路（见 [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md)）\n"
             "- SYNC：各调度器 LOCAL → 聚合 NPU(member0) → GLOBAL 广播（与文档 §4.9 聚合点差异见正文）\n"
-            "- 省略：可靠性重传、预补偿、多世代窗口、PHASE 管理面\n"
+            "- transport retrans 已启用；省略：完整 POP 状态机、预补偿、多世代窗口、PHASE 管理面\n"
             "- Packet Spray：`UsePacketSpray` + 自由注入；软件屏障在分析阶段叠加\n"
             "- 专家与 NPU 1:1；TopK=8\n"
         )
     else:
-        lines.append("### 1.3 模型假设与简化\n")
+        lines.append("### 1.4 模型假设与简化\n")
         lines.append(
             "- 端口 400Gbps（有效 50GB/s），grain = 7KB，τ_g ≈ 143.36 ns\n"
             "- 链路建模为串行化服务器 + FIFO；交换机直通 150 ns/跳，传播 50 ns/跳\n"
@@ -668,24 +974,33 @@ def write_report(
             "- UB_RG_POP：同目的侧节奏；startup = RTT_rg + oneWay（Push→Grant→Pull）；"
             "PullCredit 窗口保稳态流水（见 [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md)）\n"
             "- Packet Spray：自由注入；软件屏障在分析阶段叠加\n"
+            "- 场景4 按 Sparse CLOS 路径类建模；场景1 另跑 iSLIP\n"
+            "- 启动偏差：每 NPU ~U(0,skew)，skew∈{2,4,8}µs\n"
+            "- Exp3：GEMV = max 专家 token 数 × τ_tok\n"
             "- 专家与 NPU 1:1；TopK=8\n"
         )
-    lines.append("### 1.4 参数矩阵（裁剪）\n")
+    lines.append("### 1.5 参数矩阵（裁剪）\n")
     lines.append(
-        "| 实验 | mode | 场景 | BatchSize | Zipf S | EP |\n"
-        "|---|---|---|---|---|---|\n"
-        "| 1 Dispatch | dispatch | 1/2/3 | 16,256,1024(+4096@场景1) | 0,0.3,0.7,0.9 | full |\n"
-        "| 2 Combine | combine | 同实验1 | 同左 | 同左 | full |\n"
-        "| 3 Roundtrip | roundtrip | 1→{32,64,128}; 2/3→{256,1024} | 256 | 同左 | 上列 |\n"
+        "| 实验 | mode | 场景 | Batch | Zipf S | EP | 启动偏差 | 调度 |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+        "| 1 Dispatch | dispatch | 1,4 | 16,256 | 0,0.3,0.7,0.9 | full | 2/4/8 µs | S1:+islip |\n"
+        "| 2 Combine | combine | 同实验1 | 同左 | 同左 | full | 同左 | 同左 |\n"
+        "| 3 Roundtrip+GEMV | roundtrip | 1→{32,64,128}; 4→{128,256,512} | 256 | 同左 | 上列 | 同左 | 同左 |\n"
+        "| 3 PDF | roundtrip | 同上 | 16,64,256 | 同左 | 每格 96 seeds | skew=4µs | 同左 |\n"
     )
+
     n = len(df)
     lines.append(f"\n引擎：**{engine}**；成功汇总运行数：**{n}**。原始结果：`{rel_results}/`。\n")
+    lines.append(
+        "> 上表对齐当前 runner：仅场景1+4；含启动偏差与场景1 iSLIP；"
+        "Exp3 输出 gemv_us/e2e_us。旧场景2/3 结果请忽略。\n"
+    )
     if engine == "packet":
         lines.append(
-            "> 逐包引擎按计划风险路径裁剪：场景1 不含 BatchSize=4096；"
-            "场景2/3 仅保留 BatchSize≤256。完整 216 组矩阵由行为级引擎覆盖；"
-            "逐包用于机制校验与场景1 规模对标。实验3 系统 CCT PDF 若本引擎样本未齐，"
-            "报告自动回退到行为级多 seed 结果。\n"
+            "> 逐包引擎按风险路径裁剪且当前完整度不足；"
+            "行为级引擎覆盖完整主矩阵与 PDF。"
+            "逐包目前只用于协议调试，不得单独作为绝对值校准。"
+            "实验3 系统 CCT PDF 若本引擎样本未齐，报告自动回退到行为级多 seed 结果。\n"
         )
 
     def table_for(exp: str, scenario: int, batch: int | None = None) -> tuple[str, int | None]:
@@ -732,20 +1047,19 @@ def write_report(
         for p in sorted(figs_dir.glob(f"exp2_combine_s{int(sc)}_*.png")):
             lines.append(md_img(p) + "\n")
 
-    lines.append("## 4. 实验3：系统级 Dispatch+Combine 完成时间 (CCT) PDF\n")
+    lines.append("## 4. 实验3：网络系统级 Dispatch+Combine 完成时间 (CCT) PDF\n")
     lines.append(
-        "横轴为**系统级一次迭代完成时间**（attention→dispatch→GEMV→combine 一个 roundtrip 步的 CCT，"
-        "口径 = kickoff→最后一个 combine token 完成，取自 summary.json 的 `cct_us`），"
-        "**不再是逐 token 时延**。对每个 (场景, BatchSize, Zipf S, EP) 组合，"
+        "横轴优先为**端到端完成时间**（`e2e_us`/`step_us`：dispatch→GEMV→combine；"
+        "GEMV 由 Zipf 专家负载与 batch 标定）。网络-only `cct_us` 仍写入 summary 供对照。"
+        "对每个 (场景, BatchSize, Zipf S, EP) 组合，"
         "在多个随机种子下各跑一次 roundtrip，每次运行贡献一个系统 CCT 样本，"
         "以此得到系统 CCT 的概率密度分布（PDF，无 CDF）。\n"
     )
     lines.append(
         "覆盖三个组网场景（与实验设计 §4.2.3 一致）：\n"
         "- **场景1** 单层 Clos：EP ∈ {32, 64, 128}\n"
-        "- **场景2** 两层 Clos：EP ∈ {256, 1024}\n"
-        "- **场景3** 两层 Clos 多平面：EP ∈ {256, 1024}\n"
-        "每场景单独出 PDF；另附跨场景对比图（S1-EP128 / S2-EP1024 / S3-EP1024）。"
+        "- **场景4** Sparse CLOS：EP ∈ {128, 256, 512}\n"
+        "每场景单独出 PDF；另附跨场景对比图（S1-EP128 / S4-EP512）。"
         "线型区分方案（实线 ub_rg，点划线 ub_rg_pop，虚线 packet_spray）。\n"
     )
     pdf_df = df[df["exp"] == "exp3_pdf"].copy()
@@ -784,7 +1098,7 @@ def write_report(
                     lines.append(md_img(p) + "\n")
             else:
                 lines.append("_（该场景 PDF 样本尚未齐）_\n")
-        lines.append("### 4.4 跨场景对比 PDF（S1-EP128 / S2-EP1024 / S3-EP1024）\n")
+        lines.append("### 4.4 跨场景对比 PDF（S1-EP128 / S4-EP512）\n")
         for p in sorted(pdf_figs_dir.glob("exp3_pdf_compare_b*_s*.png")):
             lines.append(md_img(p) + "\n")
     else:
@@ -801,10 +1115,19 @@ def write_report(
         # rows do not dominate the mean when a new scheme only has a subset.
         align_keys = ["scenario", "batch", "zipf_s", "ep_size"]
         piv = e1.pivot_table(index=align_keys, columns="scheme", values="step_us")
-        common = piv.dropna(subset=[c for c in SCHEMES if c in piv.columns], how="any")
+        # Align on base schemes only; islip is S1-only and must not drop S4 cells.
+        base = [c for c in ("ub_rg", "ub_rg_pop", "packet_spray") if c in piv.columns]
+        common = piv.dropna(subset=base, how="any") if base else piv.iloc[0:0]
+        sc_levels = (
+            set(common.index.get_level_values("scenario")) if not common.empty else set()
+        )
         for sc in sorted(e1["scenario"].unique()):
-            cell = common.xs(int(sc), level="scenario") if not common.empty else None
-            if cell is None or cell.empty:
+            cell = (
+                common.xs(int(sc), level="scenario")
+                if (not common.empty and int(sc) in sc_levels)
+                else None
+            )
+            if cell is None or (hasattr(cell, "empty") and cell.empty):
                 s = e1[e1["scenario"] == sc]
                 rg = s[s["scheme"] == "ub_rg"]["step_us"].mean()
                 pop = s[s["scheme"] == "ub_rg_pop"]["step_us"].mean()
@@ -885,8 +1208,10 @@ def write_report(
                     "```\n" + clean_table(sample.round(3).to_string(index=False)) + "\n```\n"
                 )
                 lines.append(
-                    "差异主要来自：逐包栈的静态时延（传播/转发/分配）、真实控制面报文、"
-                    "以及 TP/Jetty 注入路径；行为级模型把这些折叠为常量 RTT/屏障。\n"
+                    "若该比值显著偏离 1，不能仅解释为“逐包栈静态开销”。当前逐包实现还含"
+                    "50µs REQ pacing、10ms stale-credit 回收，且两引擎的本地专家和场景2/3"
+                    "plane 映射不一致；在统一输入、完成守恒和异常门禁通过前，"
+                    "这里是**交叉验证失败证据**，不是行为级绝对值校准。\n"
                 )
 
             ratio_keys = ["exp", "scenario", "mode", "batch", "zipf_s", "ep_size"]
@@ -919,26 +1244,45 @@ def write_report(
 
     lines.append("## 7. 结论\n")
     lines.append(
-        "- UB_RG 通过目的侧授权节奏控制将完成时间压到出口瓶颈附近，并隔离热点排队。\n"
+        "- 当前 UB_RG 配置包的 CCT 更接近自定义 König 下界；"
+        "由于 plane、path delay、jitter 与 barrier 尚未统一，这不是目的侧准入的受控因果结论。\n"
         "- UB_RG_POP（SHMEM-POP）与 RG 共享目的侧节奏/König 渐近；"
         "Push→Pull 多付一次单向启动，均匀小负载时常接近 RG，高偏斜/两层上偶发更差。\n"
-        "- Packet Spray 在倾斜流量下 p99/CCT 放大更明显，软件屏障也更重。\n"
-        "- 逐包引擎用于校验控制面与数据面交互；行为级引擎用于快速扫矩阵。\n"
+        "- 当前 Packet Spray 配置包在倾斜流量下 p99/CCT 更大；"
+        "需要消除上述混杂并统一计时起点后再解释机制原因。\n"
+        "- 当前 CCT 只包含网络 dispatch/combine 与屏障口径；"
+        "Exp3 已计入按 Zipf/batch 标定的 GEMV straggler；更细 HBM/算子队列仍未建模。\n"
+        "- 逐包引擎可用于调试控制面与数据面交互；当前性能结果尚未通过完成守恒和"
+        "跨引擎门禁，不能作为行为级绝对时延校准。\n"
     )
     lines.append("## 8. 复现方法\n")
-    lines.append(
-        "```bash\n"
-        "cd ns-3-ub && ./ns3 configure --enable-modules=unified-bus --enable-mtp "
-        "--disable-python -d optimized\n"
-        "./ns3 build ub_rg-packet-experiment\n"
-        "cd ..\n"
-        "python3 gen_ub_rg_topo.py --scenario 1\n"
-        "python3 run_ub_rg_experiments.py --engine packet --workers 4\n"
-        "python3 run_ub_rg_experiments.py --engine packet --exp3-pdf --seeds 8 "
-        "--batches 16,64,256,1024 --workers 4\n"
-        "python3 analyze_ub_rg_experiments.py --engine packet\n"
-        "```\n"
-    )
+    if engine == "behavioral":
+        lines.append(
+            "当前报告主体由行为级引擎生成。复现默认矩阵与 Exp3 PDF：\n"
+            "```bash\n"
+            "cd ns-3-ub && ./ns3 configure --enable-modules=unified-bus "
+            "--disable-python -d optimized\n"
+            "./ns3 build ub_rg-dispatch-experiment\n"
+            "cd ..\n"
+            "python3 run_ub_rg_experiments.py --engine behavioral\n"
+            "python3 run_ub_rg_experiments.py --engine behavioral --exp3-pdf "
+            "--seeds 96 --batches 16,64,256\n"
+            "python3 analyze_ub_rg_experiments.py --engine behavioral\n"
+            "```\n"
+        )
+    else:
+        lines.append(
+            "逐包引擎复现（仅用于协议调试；性能门禁通过前不要当作绝对值校准）：\n"
+            "```bash\n"
+            "cd ns-3-ub && ./ns3 configure --enable-modules=unified-bus --enable-mtp "
+            "--disable-python -d optimized\n"
+            "./ns3 build ub_rg-packet-experiment\n"
+            "cd ..\n"
+            "python3 gen_ub_rg_topo.py --scenario 1\n"
+            "python3 run_ub_rg_experiments.py --engine packet --workers 4\n"
+            "python3 analyze_ub_rg_experiments.py --engine packet\n"
+            "```\n"
+        )
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text("".join(lines), encoding="utf-8")
@@ -956,15 +1300,27 @@ def _analyze_one(results: Path) -> int:
     if df.empty:
         print("No summaries found under", results)
         return 1
+    # Prefer the active skewed matrix when present (drop legacy skew=0 / huge batch).
+    if "start_skew_us" in df.columns and (df["start_skew_us"].fillna(0) > 0).any():
+        df = df[df["start_skew_us"].fillna(0) > 0].copy()
+    if "batch" in df.columns and (df["batch"] <= 256).any():
+        df = df[df["batch"] <= 256].copy()
 
     peer = None
     other = ROOT / "results" / ("ub_rg" if results.name == "ub_rg_packet" else "ub_rg_packet")
     if other.exists():
         peer = load_summaries(other)
+        if peer is not None and not peer.empty:
+            if "start_skew_us" in peer.columns and (peer["start_skew_us"].fillna(0) > 0).any():
+                peer = peer[peer["start_skew_us"].fillna(0) > 0].copy()
+            if "batch" in peer.columns and (peer["batch"] <= 256).any():
+                peer = peer[peer["batch"] <= 256].copy()
 
     figs = []
     figs += plot_exp12(df, "exp1_dispatch", "Exp1 Dispatch", figs_dir)
+    figs += plot_exp12_bars(df, "exp1_dispatch", "Exp1 Dispatch", figs_dir)
     figs += plot_exp12(df, "exp2_combine", "Exp2 Combine", figs_dir)
+    figs += plot_exp12_bars(df, "exp2_combine", "Exp2 Combine", figs_dir)
     figs += plot_exp3(df, figs_dir)
     figs += plot_exp3_pdf(df, figs_dir)
     write_report(df, figs, results, figs_dir, peer)

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Batch runner for UB_RG experiments (behavioral and packet engines)."""
+"""Batch runner for UB_RG experiments (behavioral and packet engines).
+
+Matrix (2026-07): scenarios 1 + 4 only; start-skew 2/4/8 µs; S1 adds islip.
+"""
 
 from __future__ import annotations
 
@@ -16,18 +19,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 NS3 = ROOT / "ns-3-ub"
 ZIPF_S = [0.0, 0.3, 0.7, 0.9]
-SCHEMES = ["ub_rg", "ub_rg_pop", "packet_spray"]
+# Base schemes; islip is scenario-1 only (single-layer switch scheduler).
+SCHEMES_BASE = ["ub_rg", "ub_rg_pop", "packet_spray"]
+SCHEMES_S1 = SCHEMES_BASE + ["islip"]
+SCENARIOS = (1, 4)
+START_SKEW_US = [2.0, 4.0, 8.0]
 TOPK = 8
 SEED = 1
 
-# Exp3 PDF: per-scenario EP sets (matches UB_RG实验设计 §4.2.3; EP512 omitted).
 EXP3_PDF_SCENARIO_EPS = {
     1: [32, 64, 128],
-    2: [256, 1024],
-    3: [256, 1024],
+    4: [128, 256, 512],
 }
 EXP3_PDF_DEFAULT_BATCHES = [16, 64, 256]
-# More seeds widen empirical CCT spread for PDF tails (32→96).
 EXP3_PDF_DEFAULT_SEEDS = 96
 
 
@@ -42,12 +46,14 @@ class Job:
     ep_size: int
     engine: str
     seed: int = SEED
+    start_skew_us: float = 0.0
 
     @property
     def run_id(self) -> str:
+        skew = f"_sk{self.start_skew_us:g}" if self.start_skew_us else ""
         return (
             f"s{self.scenario}_{self.scheme}_b{self.batch}"
-            f"_z{self.zipf_s:g}_ep{self.ep_size}_sd{self.seed}"
+            f"_z{self.zipf_s:g}_ep{self.ep_size}_sd{self.seed}{skew}"
         )
 
     @property
@@ -59,54 +65,65 @@ class Job:
         return self.results_root / self.exp / self.run_id
 
 
+def schemes_for(scenario: int) -> list[str]:
+    return list(SCHEMES_S1 if scenario == 1 else SCHEMES_BASE)
+
+
 def build_jobs(engine: str) -> list[Job]:
     jobs: list[Job] = []
 
     for exp, mode in [("exp1_dispatch", "dispatch"), ("exp2_combine", "combine")]:
-        for scenario in (1, 2, 3):
-            # batch>=512 sweeps dropped: those ub_rg packet runs crash/timeout
-            # (multi-hour, rc=-6/-11) and add little over the batch<=256 matrix.
-            batches = [16, 256]
-            for batch in batches:
+        for scenario in SCENARIOS:
+            for batch in (16, 256):
                 for zipf_s in ZIPF_S:
-                    for scheme in SCHEMES:
-                        jobs.append(
-                            Job(
-                                exp=exp,
-                                mode=mode,
-                                scenario=scenario,
-                                scheme=scheme,
-                                batch=batch,
-                                zipf_s=zipf_s,
-                                ep_size=0,
-                                engine=engine,
+                    for scheme in schemes_for(scenario):
+                        for skew in START_SKEW_US:
+                            jobs.append(
+                                Job(
+                                    exp=exp,
+                                    mode=mode,
+                                    scenario=scenario,
+                                    scheme=scheme,
+                                    batch=batch,
+                                    zipf_s=zipf_s,
+                                    ep_size=0,
+                                    engine=engine,
+                                    start_skew_us=skew,
+                                )
                             )
-                        )
 
     ep_by_scenario = {
         1: [32, 64, 128],
-        2: [256, 1024],
-        3: [256, 1024],
+        4: [128, 256, 512],
     }
     for scenario, eps in ep_by_scenario.items():
         for ep in eps:
             for zipf_s in ZIPF_S:
-                for scheme in SCHEMES:
-                    jobs.append(
-                        Job(
-                            exp="exp3_roundtrip",
-                            mode="roundtrip",
-                            scenario=scenario,
-                            scheme=scheme,
-                            batch=256,
-                            zipf_s=zipf_s,
-                            ep_size=ep,
-                            engine=engine,
+                for scheme in schemes_for(scenario):
+                    for skew in START_SKEW_US:
+                        jobs.append(
+                            Job(
+                                exp="exp3_roundtrip",
+                                mode="roundtrip",
+                                scenario=scenario,
+                                scheme=scheme,
+                                batch=256,
+                                zipf_s=zipf_s,
+                                ep_size=ep,
+                                engine=engine,
+                                start_skew_us=skew,
+                            )
                         )
-                    )
-    # Prefer small/fast jobs first so the matrix accumulates results while large
-    # batch=1024 ub_rg runs (hours each) are still in flight.
-    jobs.sort(key=lambda j: (j.batch, j.scenario, j.exp, j.zipf_s, j.scheme))
+    jobs.sort(
+        key=lambda j: (
+            j.batch,
+            j.scenario,
+            j.start_skew_us,
+            j.exp,
+            j.zipf_s,
+            j.scheme,
+        )
+    )
     return jobs
 
 
@@ -116,17 +133,15 @@ def build_exp3_pdf_jobs(
     batches: list[int],
     zipf_list: list[float],
 ) -> list[Job]:
-    """Multi-seed roundtrip sweep for the system dispatch+combine CCT PDF.
-
-    Each (ep_size, scheme, batch, zipf_s) config yields `seeds` runs; each run's
-    summary.json cct_us is one system-CCT sample. Routed to exp3_pdf/.
-    """
+    """Multi-seed roundtrip sweep for system / E2E CCT PDF."""
     jobs: list[Job] = []
+    # PDF uses mid skew=4µs as representative start skew.
+    skew = 4.0
     for scenario, eps in EXP3_PDF_SCENARIO_EPS.items():
         for ep in eps:
             for batch in batches:
                 for zipf_s in zipf_list:
-                    for scheme in SCHEMES:
+                    for scheme in schemes_for(scenario):
                         for sd in range(1, seeds + 1):
                             jobs.append(
                                 Job(
@@ -139,6 +154,7 @@ def build_exp3_pdf_jobs(
                                     ep_size=ep,
                                     engine=engine,
                                     seed=sd,
+                                    start_skew_us=skew,
                                 )
                             )
     return jobs
@@ -171,6 +187,9 @@ def case_path_for(job: Job) -> str:
     if job.scenario == 1:
         n = job.ep_size if job.ep_size else 128
         return str(base / f"s1_n{n}")
+    if job.scenario == 4:
+        n = job.ep_size if job.ep_size else 512
+        return str(base / f"s4_n{n}")
     n = 1024
     return str(base / f"s{job.scenario}_n{n}")
 
@@ -183,13 +202,18 @@ def ensure_cases(engine: str) -> None:
         (1, 128),
         (1, 32),
         (1, 64),
-        (2, 1024),
-        (3, 1024),
+        # Scenario 4 packet cases generated when gen supports --scenario 4.
+        (4, 512),
+        (4, 256),
+        (4, 128),
     ]
     for sc, n in needed:
         out = NS3 / "scratch" / "ub_rg_cases" / (f"s{sc}_n{n}")
         marker = out / "routing_table.csv"
         if marker.exists():
+            continue
+        if sc == 4 and not _gen_supports_scenario4(gen):
+            print(f"Skip generating s{sc}_n{n}: gen_ub_rg_topo.py has no scenario 4 yet")
             continue
         print(f"Generating case s{sc}_n{n} ...")
         subprocess.run(
@@ -198,15 +222,12 @@ def ensure_cases(engine: str) -> None:
         )
 
 
-def workers_for(job: Job, default_workers: int) -> int:
-    # Scheduling hint only; ProcessPoolExecutor uses fixed workers.
-    return default_workers
-
-
-def mtp_threads_for(job: Job) -> int:
-    # MTP races with RG scheduler/agent shared state; keep single-threaded for correctness.
-    # Parallelism comes from ProcessPoolExecutor workers instead.
-    return 0
+def _gen_supports_scenario4(gen: Path) -> bool:
+    try:
+        text = gen.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return "scenario == 4" in text or "scenario=4" in text or '"4"' in text
 
 
 def run_job(job: Job, binary: str) -> dict:
@@ -230,19 +251,13 @@ def run_job(job: Job, binary: str) -> dict:
         f"--topk={TOPK}",
         f"--ep-size={job.ep_size}",
         f"--seed={job.seed}",
+        f"--start-skew-us={job.start_skew_us}",
         f"--out-dir={out}",
     ]
     if job.engine == "packet":
         cmd.append(f"--case-path={case_path_for(job)}")
-        mtp = mtp_threads_for(job)
-        if mtp:
-            cmd.append(f"--mtp-threads={mtp}")
 
-    # Packet Clos scenes (s2/s3) are event-heavy and need a larger wall budget.
-    if job.engine == "packet" and job.scenario >= 2:
-        timeout = 14400
-    else:
-        timeout = 3600
+    timeout = 3600
     t0 = time.time()
     try:
         proc = subprocess.run(
@@ -332,7 +347,6 @@ def main() -> int:
     if args.workers > 0:
         workers = args.workers
     elif args.engine == "packet":
-        # Small scenes: higher concurrency; large Clos: fewer concurrent sims
         workers = 4
     else:
         workers = max(1, (os.cpu_count() or 2) - 2)

@@ -847,33 +847,116 @@ def make_figures(rows: list[dict[str, Any]], figures_dir: Path) -> list[Path]:
     _finish_figure(fig, path)
     paths.append(path)
 
-    # Sys3: packet Tc and resulting system throughput by M:N.
-    path = figures_dir / "sys3_tc_throughput.svg"
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+    # Sys3 figures: small multiples so scheme / m / M:N stay readable.
     sys3 = [row for row in rows if row["experiment"] == "sys3"]
-    group_names3 = ("scenario", "scheme", "placement", "microbatches", "te_profile")
-    for ax, metric, ylabel in (
-        (axes[0], "tc_us", "One-way Tc (µs)"),
-        (axes[1], "throughput_tokens_s", "Per-device throughput (token/s)"),
-    ):
-        grouped = _group_mean(sys3, "m_to_n", metric, group_names3)
+    scheme_style = {
+        "packet_spray": ("#4c78a8", "o", "packet_spray"),
+        "ub_rg": ("#f58518", "s", "ub_rg"),
+    }
+
+    def _plot_scheme_vs_zipf(
+        ax: Any,
+        subset: Sequence[Mapping[str, Any]],
+        metric: str,
+        *,
+        log_y: bool,
+        ylabel: str,
+        title: str,
+    ) -> None:
+        grouped = _group_mean(list(subset), "zipf_s", metric, ("scheme",))
         if not grouped:
-            _placeholder(ax, "sys3 data missing")
-        else:
-            for group, (xs, ys) in sorted(grouped.items(), key=lambda item: str(item[0])):
-                ax.plot(
-                    xs,
-                    ys,
-                    marker="o",
-                    label=_label(group, ("S", "scheme", "placement", "m", "Te")),
-                )
-            ax.legend(fontsize=6)
-            ax.grid(alpha=0.3)
-        ax.set_xlabel("M:N ratio")
+            _placeholder(ax, "no data")
+            return
+        for scheme in ("packet_spray", "ub_rg"):
+            key = (scheme,)
+            if key not in grouped:
+                continue
+            xs, ys = grouped[key]
+            color, marker, label = scheme_style[scheme]
+            ax.plot(xs, ys, marker=marker, color=color, label=label, linewidth=1.6)
+        if log_y:
+            ax.set_yscale("log")
+        ax.set_xlabel("Zipf S")
         ax.set_ylabel(ylabel)
-    fig.suptitle("Sys3: AFD packet Tc and system throughput")
+        ax.set_title(title, fontsize=10)
+        ax.grid(alpha=0.3, which="both")
+        ax.legend(fontsize=7, loc="best")
+
+    # 7:1 main grid: rows = Tc / throughput; cols = m.
+    path = figures_dir / "sys3_7to1_vs_zipf.svg"
+    fig, axes = plt.subplots(2, 3, figsize=(12.5, 7.2), sharex=True)
+    main_7 = [
+        row
+        for row in sys3
+        if _number(row.get("attention_devices")) == 112
+        and _number(row.get("ffn_devices")) == 16
+    ]
+    for col, microbatches in enumerate((1, 2, 4)):
+        subset = [
+            row
+            for row in main_7
+            if _number(row.get("microbatches")) == microbatches
+        ]
+        _plot_scheme_vs_zipf(
+            axes[0, col],
+            subset,
+            "tc_us",
+            log_y=True,
+            ylabel="Tc (µs, log)" if col == 0 else "",
+            title=f"7:1 · m={microbatches} · Tc",
+        )
+        _plot_scheme_vs_zipf(
+            axes[1, col],
+            subset,
+            "throughput_tokens_s",
+            log_y=True,
+            ylabel="token/s/device (log)" if col == 0 else "",
+            title=f"7:1 · m={microbatches} · throughput",
+        )
+    fig.suptitle("Sys3 AFD 7:1 (M:N=112:16): scheme comparison vs Zipf")
     _finish_figure(fig, path)
     paths.append(path)
+
+    # Ratio controls at m=2: one column per M:N.
+    path = figures_dir / "sys3_mn_ratio_m2_vs_zipf.svg"
+    fig, axes = plt.subplots(2, 3, figsize=(12.5, 7.2), sharex=True)
+    ratio_panels = (
+        (1.0, 64, 64, "1:1"),
+        (7.0, 112, 16, "7:1"),
+        (31.0, 124, 4, "31:1"),
+    )
+    for col, (_ratio, m_attn, n_ffn, name) in enumerate(ratio_panels):
+        subset = [
+            row
+            for row in sys3
+            if _number(row.get("microbatches")) == 2
+            and _number(row.get("attention_devices")) == m_attn
+            and _number(row.get("ffn_devices")) == n_ffn
+        ]
+        _plot_scheme_vs_zipf(
+            axes[0, col],
+            subset,
+            "tc_us",
+            log_y=True,
+            ylabel="Tc (µs, log)" if col == 0 else "",
+            title=f"{name} (M:N={m_attn}:{n_ffn}) · Tc",
+        )
+        _plot_scheme_vs_zipf(
+            axes[1, col],
+            subset,
+            "throughput_tokens_s",
+            log_y=True,
+            ylabel="token/s/device (log)" if col == 0 else "",
+            title=f"{name} · throughput",
+        )
+    fig.suptitle("Sys3 AFD at m=2: M:N ratio comparison vs Zipf")
+    _finish_figure(fig, path)
+    paths.append(path)
+
+    # Drop the old crowded single-panel figure if present.
+    legacy = figures_dir / "sys3_tc_throughput.svg"
+    if legacy.exists():
+        legacy.unlink()
 
     # Cross-experiment anchor comparison, only from values actually present.
     path = figures_dir / "cross_experiment_compare.svg"
@@ -1069,9 +1152,10 @@ def _sys2_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
         "**设计（§4.3.2）**：仍为 Wide-EP；全局 batch 切成 m 个 microbatch，"
         "计算/通讯双 stream 做 TBO ping-pong，期望通讯被计算掩盖。"
         "主配置 m=2；对照 m=1（退化为不掩盖）与 m=4。"
-        "观测：相对串行的 speedup，以及通讯事件与计算重叠比例（mask）。\n",
-        "**本轮矩阵**：场景1、B=256、EP=128、L=60；主点 m=2 且 "
-        "S∈{0, 0.5, 0.9}；对照 m∈{1, 4} 且 S∈{0.5, 0.9}。"
+        "每 MB 网络时延取自 batch=$B/m$ 的逐包 Dispatch/Combine CCT，"
+        "并在 L 层上对每个 MB 各用一次。\n",
+        "**本轮矩阵**：场景1、B=256、EP=128、L=60；"
+        "m∈{1, 2, 4} × S∈{0, 0.5, 0.9} × {`packet_spray`, `ub_rg`}。"
         f"实收 summary **{len(rows)}** 个。\n",
         "**本轮结论**：\n",
     ]
@@ -1081,6 +1165,9 @@ def _sys2_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     rg_m1 = _find_anchor(rows, scheme="ub_rg", zipf_s=0.5, microbatches=1)
     rg_m2 = _find_anchor(rows, scheme="ub_rg", zipf_s=0.5, microbatches=2)
     rg_m4 = _find_anchor(rows, scheme="ub_rg", zipf_s=0.5, microbatches=4)
+    rg0_m1 = _find_anchor(rows, scheme="ub_rg", zipf_s=0.0, microbatches=1)
+    rg0_m2 = _find_anchor(rows, scheme="ub_rg", zipf_s=0.0, microbatches=2)
+    rg0_m4 = _find_anchor(rows, scheme="ub_rg", zipf_s=0.0, microbatches=4)
     spray9_m2 = _find_anchor(rows, scheme="packet_spray", zipf_s=0.9, microbatches=2)
     spray9_m1 = _find_anchor(rows, scheme="packet_spray", zipf_s=0.9, microbatches=1)
     if spray_m1 and spray_m2 and spray_m4:
@@ -1091,8 +1178,7 @@ def _sys2_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
             f"{base / float(spray_m4['step_time_us']):.2f}×"
             f"（mask：{_display(spray_m2.get('mask_label'))} / "
             f"{_display(spray_m4.get('mask_label'))}）。"
-            "加速是「切小 MB 后 CCT 变化 + 双 stream 重叠」的净效应，"
-            "本矩阵未做因素消融。\n"
+            "加速主要来自更小 MB 的 CCT 下降；本矩阵未做因素消融。\n"
         )
     if spray9_m1 and spray9_m2:
         ratio = float(spray9_m1["step_time_us"]) / float(spray9_m2["step_time_us"])
@@ -1104,10 +1190,34 @@ def _sys2_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
         base = float(rg_m1["step_time_us"])
         s2 = base / float(rg_m2["step_time_us"])
         s4 = base / float(rg_m4["step_time_us"])
+        d1 = _number(rg_m1.get("dispatch_us"))
+        c1 = _number(rg_m1.get("combine_us"))
+        d4 = _number(rg_m4.get("dispatch_us"))
+        c4 = _number(rg_m4.get("combine_us"))
         lines.append(
             f"- `ub_rg`、S=0.5：m=2/m=4 speedup 为 {s2:.2f}× / {s4:.2f}×"
             f"{'（m=4 相对串行退化）' if s4 < 1 else ''}；"
-            "通讯重叠均为 0% 量级。TBO 并非必然获益。\n"
+            "通讯利用率≈1，计算几乎藏不住通讯（mask≈0）。\n"
+        )
+        if None not in (d1, c1, d4, c4):
+            work1 = float(d1) + float(c1)
+            work4 = 4.0 * (float(d4) + float(c4))
+            lines.append(
+                f"- **为何 m=4 speedup 小于 1（`ub_rg`, S=0.5）**：step 由 "
+                f"$L \\cdot m \\cdot (\\mathrm{{Disp}}_{{B/m}}+\\mathrm{{Comb}}_{{B/m}})$ "
+                "主导。m=1 用 batch=256 CCT（Disp+Comb="
+                f"{work1:.1f} µs）；m=4 用 batch=64 CCT，但要跑 4 次，"
+                f"总通讯量 {work4:.1f} µs ≈ **{work4 / work1:.2f}×** m=1。"
+                "Combine CCT 随 batch 缩小近线性不足（固定/调度开销占比高），"
+                "切 4 份后总通讯变重，又几乎无计算可重叠，故 TBO 净效应为退化。\n"
+            )
+    if rg0_m1 and rg0_m2 and rg0_m4:
+        base = float(rg0_m1["step_time_us"])
+        lines.append(
+            f"- `ub_rg`、S=0（已补齐 m=1/2/4）：speedup="
+            f"{base / float(rg0_m2['step_time_us']):.2f}× / "
+            f"{base / float(rg0_m4['step_time_us']):.2f}×；"
+            "均匀流量下切 MB 同样放大总 RG 通讯，m 越大越差。\n"
         )
     return lines
 
@@ -1120,7 +1230,8 @@ def _sys3_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
         "系统侧看 Tc、双向掩盖是否通过、step/吞吐。"
         "场景1 主推荐 7:1（M:N=112:16），对照 1:1 与 31:1。\n",
         "**本轮矩阵**：场景1、B=256、L=60、placement=`role_packed`；"
-        "7:1 扫 m∈{1,2,4} 与 Zipf；另含 1:1、31:1 对照。"
+        "7:1 为 m∈{1,2,4}×S∈{0,0.5,1} 全网格；1:1 与 31:1（exposed）在 m=2 上扫 "
+        "S∈{0,0.5,1}；两方案 `packet_spray` / `ub_rg`。"
         f"实收 summary **{len(rows)}** 个。\n",
         "**本轮结论**：\n",
     ]
@@ -1201,6 +1312,8 @@ def _sys3_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     lines.append(
         "- Tc 口径为单 seed 方向 CCT 的 max，不是跨 seed CCT-P99；"
         "不用逐 token latency 替代。\n"
+        "- 下图分两张：① 7:1 按 m=1/2/4 分面，对比 scheme×Zipf；"
+        "② m=2 按 M:N=1:1/7:1/31:1 分面。Tc 与吞吐均用对数纵轴以便跨数量级对比。\n"
     )
     return lines
 

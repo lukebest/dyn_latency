@@ -315,7 +315,7 @@ def build_sys2_jobs() -> list[SystemJob]:
                     )
                 )
             for microbatches in (1, 4):
-                for zipf_s in (0.5, 0.9):
+                for zipf_s in (0.0, 0.5, 0.9):
                     jobs.append(
                         _wide_job(
                             "sys2",
@@ -386,28 +386,35 @@ def build_sys3_jobs() -> list[SystemJob]:
                         "main", scenario, scheme, ratio="7:1", zipf_s=zipf_s
                     )
                 )
-            jobs.append(
-                _afd_job("controls", scenario, scheme, ratio="1:1")
-            )
-            jobs.append(
-                _afd_job(
-                    "controls",
-                    scenario,
-                    scheme,
-                    ratio="31:1",
-                    te_profile="exposed",
+            for zipf_s in (0.0, 0.5, 1.0):
+                jobs.append(
+                    _afd_job(
+                        "controls", scenario, scheme, ratio="1:1", zipf_s=zipf_s
+                    )
                 )
-            )
-            for microbatches in (1, 4):
+            for zipf_s in (0.0, 0.5, 1.0):
                 jobs.append(
                     _afd_job(
                         "controls",
                         scenario,
                         scheme,
-                        ratio="7:1",
-                        microbatches=microbatches,
+                        ratio="31:1",
+                        te_profile="exposed",
+                        zipf_s=zipf_s,
                     )
                 )
+            for microbatches in (1, 4):
+                for zipf_s in (0.0, 0.5, 1.0):
+                    jobs.append(
+                        _afd_job(
+                            "controls",
+                            scenario,
+                            scheme,
+                            ratio="7:1",
+                            microbatches=microbatches,
+                            zipf_s=zipf_s,
+                        )
+                    )
             if scenario == 3:
                 jobs.append(
                     _afd_job(
