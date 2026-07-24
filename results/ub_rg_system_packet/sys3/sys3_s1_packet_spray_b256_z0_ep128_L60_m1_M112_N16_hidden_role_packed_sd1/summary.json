@@ -1,0 +1,97 @@
+{
+  "cluster_throughput_tokens_s": 1512836.4230436487,
+  "engine": "packet",
+  "experiment": "sys3",
+  "job": {
+    "batch": 256,
+    "ep_size": 128,
+    "exp": "sys3",
+    "layers": 60,
+    "m_attn": 112,
+    "microbatches": 1,
+    "n_ffn": 16,
+    "placement": "role_packed",
+    "scenario": 1,
+    "scheme": "packet_spray",
+    "seed": 1,
+    "te_profile": "hidden",
+    "tier": "controls",
+    "zipf_s": 0.0
+  },
+  "model": {
+    "cluster_throughput_tokens_s": 1512836.4230436487,
+    "config": {
+      "attention_devices": 112,
+      "batch_size": 256,
+      "ffn_devices": 16,
+      "layers": 60,
+      "microbatches": 1,
+      "seed": 1,
+      "ta_us": null,
+      "tc_us": 7138.82,
+      "te_profile": "hidden",
+      "uniform_high_us": 90.0,
+      "uniform_low_us": 75.0
+    },
+    "masking": {
+      "bidirectional_hidden": false,
+      "ffn_not_exposed": true,
+      "fully_hidden": false,
+      "single_direction_hidden": false
+    },
+    "per_device_throughput_tokens_s": 11819.034555028506,
+    "startup_us": 14408.566288224865,
+    "steady_state_us": 4543.912356039475,
+    "step_time_us": 18952.478644264338,
+    "ta_us": 77.01546366168601,
+    "tc_us": 7138.82,
+    "te_profile": "hidden",
+    "te_us": 53.910824563180206,
+    "tf_us": 77.01546366168601
+  },
+  "network_inputs": {
+    "m2n_cct_us": 7138.82,
+    "n2m_cct_us": 2261.078,
+    "seed_aggregation": "single-seed CCT; no cross-seed P99",
+    "tc_definition": "max(m2n_cct_us,n2m_cct_us)",
+    "tc_us": 7138.82
+  },
+  "network_runs": [
+    {
+      "key": {
+        "batch": 256,
+        "ep_size": 128,
+        "m_attn": 112,
+        "mode": "afd_m2n",
+        "n_ffn": 16,
+        "placement": "role_packed",
+        "scenario": 1,
+        "scheme": "packet_spray",
+        "seed": 1,
+        "zipf_s": 0.0
+      },
+      "run_id": "s1_packet_spray_afd_m2n_mb256_z0_ep128_M112_N16_role_packed_sd1",
+      "summary": "/home/luke/workspace/dyn_latency/results/ub_rg_system_packet/network/s1_packet_spray_afd_m2n_mb256_z0_ep128_M112_N16_role_packed_sd1/summary.json"
+    },
+    {
+      "key": {
+        "batch": 256,
+        "ep_size": 128,
+        "m_attn": 112,
+        "mode": "afd_n2m",
+        "n_ffn": 16,
+        "placement": "role_packed",
+        "scenario": 1,
+        "scheme": "packet_spray",
+        "seed": 1,
+        "zipf_s": 0.0
+      },
+      "run_id": "s1_packet_spray_afd_n2m_mb256_z0_ep128_M112_N16_role_packed_sd1",
+      "summary": "/home/luke/workspace/dyn_latency/results/ub_rg_system_packet/network/s1_packet_spray_afd_n2m_mb256_z0_ep128_M112_N16_role_packed_sd1/summary.json"
+    }
+  ],
+  "per_device_throughput_tokens_s": 11819.034555028506,
+  "run_id": "sys3_s1_packet_spray_b256_z0_ep128_L60_m1_M112_N16_hidden_role_packed_sd1",
+  "step_time_us": 18952.478644264338,
+  "tier": "controls"
+}

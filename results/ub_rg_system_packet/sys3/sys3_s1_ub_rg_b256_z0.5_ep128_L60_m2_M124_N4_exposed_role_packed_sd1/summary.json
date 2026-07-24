@@ -1,0 +1,97 @@
+{
+  "cluster_throughput_tokens_s": 3189.144263583995,
+  "engine": "packet",
+  "experiment": "sys3",
+  "job": {
+    "batch": 256,
+    "ep_size": 128,
+    "exp": "sys3",
+    "layers": 60,
+    "m_attn": 124,
+    "microbatches": 2,
+    "n_ffn": 4,
+    "placement": "role_packed",
+    "scenario": 1,
+    "scheme": "ub_rg",
+    "seed": 1,
+    "te_profile": "exposed",
+    "tier": "controls",
+    "zipf_s": 0.5
+  },
+  "model": {
+    "cluster_throughput_tokens_s": 3189.144263583995,
+    "config": {
+      "attention_devices": 124,
+      "batch_size": 256,
+      "ffn_devices": 4,
+      "layers": 60,
+      "microbatches": 2,
+      "seed": 1,
+      "ta_us": null,
+      "tc_us": 4970837.954,
+      "te_profile": "exposed",
+      "uniform_high_us": 90.0,
+      "uniform_low_us": 75.0
+    },
+    "masking": {
+      "bidirectional_hidden": false,
+      "ffn_not_exposed": false,
+      "fully_hidden": false,
+      "single_direction_hidden": false
+    },
+    "per_device_throughput_tokens_s": 24.91518955924996,
+    "startup_us": 9941853.043566423,
+    "steady_state_us": 11914.292228462828,
+    "step_time_us": 9953767.335794885,
+    "ta_us": 77.01546366168601,
+    "tc_us": 4970837.954,
+    "te_profile": "exposed",
+    "te_us": 100.12010276019183,
+    "tf_us": 100.12010276019183
+  },
+  "network_inputs": {
+    "m2n_cct_us": 477.747,
+    "n2m_cct_us": 4970837.954,
+    "seed_aggregation": "single-seed CCT; no cross-seed P99",
+    "tc_definition": "max(m2n_cct_us,n2m_cct_us)",
+    "tc_us": 4970837.954
+  },
+  "network_runs": [
+    {
+      "key": {
+        "batch": 128,
+        "ep_size": 128,
+        "m_attn": 124,
+        "mode": "afd_m2n",
+        "n_ffn": 4,
+        "placement": "role_packed",
+        "scenario": 1,
+        "scheme": "ub_rg",
+        "seed": 1,
+        "zipf_s": 0.5
+      },
+      "run_id": "s1_ub_rg_afd_m2n_mb128_z0.5_ep128_M124_N4_role_packed_sd1",
+      "summary": "/home/luke/workspace/dyn_latency/results/ub_rg_system_packet/network/s1_ub_rg_afd_m2n_mb128_z0.5_ep128_M124_N4_role_packed_sd1/summary.json"
+    },
+    {
+      "key": {
+        "batch": 128,
+        "ep_size": 128,
+        "m_attn": 124,
+        "mode": "afd_n2m",
+        "n_ffn": 4,
+        "placement": "role_packed",
+        "scenario": 1,
+        "scheme": "ub_rg",
+        "seed": 1,
+        "zipf_s": 0.5
+      },
+      "run_id": "s1_ub_rg_afd_n2m_mb128_z0.5_ep128_M124_N4_role_packed_sd1",
+      "summary": "/home/luke/workspace/dyn_latency/results/ub_rg_system_packet/network/s1_ub_rg_afd_n2m_mb128_z0.5_ep128_M124_N4_role_packed_sd1/summary.json"
+    }
+  ],
+  "per_device_throughput_tokens_s": 24.91518955924996,
+  "run_id": "sys3_s1_ub_rg_b256_z0.5_ep128_L60_m2_M124_N4_exposed_role_packed_sd1",
+  "step_time_us": 9953767.335794885,
+  "tier": "controls"
+}

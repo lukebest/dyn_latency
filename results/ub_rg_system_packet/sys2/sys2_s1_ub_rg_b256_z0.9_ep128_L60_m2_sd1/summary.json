@@ -1,0 +1,3924 @@
+{
+  "engine": "packet",
+  "experiment": "sys2",
+  "job": {
+    "batch": 256,
+    "ep_size": 128,
+    "exp": "sys2",
+    "layers": 60,
+    "m_attn": 0,
+    "microbatches": 2,
+    "n_ffn": 0,
+    "placement": "role_packed",
+    "scenario": 1,
+    "scheme": "ub_rg",
+    "seed": 1,
+    "te_profile": "hidden",
+    "tier": "main",
+    "zipf_s": 0.9
+  },
+  "model": {
+    "communication_busy_us": 198125347.67999917,
+    "communication_utilization": 0.9999996112792502,
+    "compute_busy_us": 19777.320933402094,
+    "compute_utilization": 9.982222606614811e-05,
+    "config": {
+      "batch_size": 256,
+      "combine_us": 1640306.17,
+      "dispatch_us": 10738.394,
+      "layers": 60,
+      "microbatches": 2,
+      "seed": 1,
+      "ta_us": null,
+      "te_us": null,
+      "uniform_high_us": 90.0,
+      "uniform_low_us": 75.0
+    },
+    "events": [
+      {
+        "end_us": 77.01546366168601,
+        "layer": 0,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 0.0
+      },
+      {
+        "end_us": 163.4720829463352,
+        "layer": 0,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 77.01546366168601
+      },
+      {
+        "end_us": 10815.409463661686,
+        "layer": 0,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 77.01546366168601
+      },
+      {
+        "end_us": 10903.120969715745,
+        "layer": 0,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 10815.409463661686
+      },
+      {
+        "end_us": 21553.803463661687,
+        "layer": 0,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 10815.409463661686
+      },
+      {
+        "end_us": 21632.629499047776,
+        "layer": 0,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 21553.803463661687
+      },
+      {
+        "end_us": 1661859.9734636615,
+        "layer": 0,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 21553.803463661687
+      },
+      {
+        "end_us": 1661942.4049899678,
+        "layer": 1,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 1661859.9734636615
+      },
+      {
+        "end_us": 3302166.1434636614,
+        "layer": 0,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 1661859.9734636615
+      },
+      {
+        "end_us": 3302250.917358252,
+        "layer": 1,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 3302166.1434636614
+      },
+      {
+        "end_us": 3312904.5374636613,
+        "layer": 1,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 3302166.1434636614
+      },
+      {
+        "end_us": 3312986.279829633,
+        "layer": 1,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 3312904.5374636613
+      },
+      {
+        "end_us": 3323642.931463661,
+        "layer": 1,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 3312904.5374636613
+      },
+      {
+        "end_us": 3323729.762313928,
+        "layer": 1,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 3323642.931463661
+      },
+      {
+        "end_us": 4963949.101463661,
+        "layer": 1,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 3323642.931463661
+      },
+      {
+        "end_us": 4964025.509357463,
+        "layer": 2,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 4963949.101463661
+      },
+      {
+        "end_us": 6604255.2714636605,
+        "layer": 1,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 4963949.101463661
+      },
+      {
+        "end_us": 6604342.8079402195,
+        "layer": 2,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 6604255.2714636605
+      },
+      {
+        "end_us": 6614993.665463661,
+        "layer": 2,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 6604255.2714636605
+      },
+      {
+        "end_us": 6615069.0906758085,
+        "layer": 2,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 6614993.665463661
+      },
+      {
+        "end_us": 6625732.059463661,
+        "layer": 2,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 6614993.665463661
+      },
+      {
+        "end_us": 6625813.55096968,
+        "layer": 2,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 6625732.059463661
+      },
+      {
+        "end_us": 8266038.229463661,
+        "layer": 2,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 6625732.059463661
+      },
+      {
+        "end_us": 8266124.663664898,
+        "layer": 3,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 8266038.229463661
+      },
+      {
+        "end_us": 9906344.399463661,
+        "layer": 2,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 8266038.229463661
+      },
+      {
+        "end_us": 9906426.080271572,
+        "layer": 3,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 9906344.399463661
+      },
+      {
+        "end_us": 9917082.79346366,
+        "layer": 3,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 9906344.399463661
+      },
+      {
+        "end_us": 9917157.825054461,
+        "layer": 3,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 9917082.79346366
+      },
+      {
+        "end_us": 9927821.18746366,
+        "layer": 3,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 9917082.79346366
+      },
+      {
+        "end_us": 9927907.010564145,
+        "layer": 3,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 9927821.18746366
+      },
+      {
+        "end_us": 11568127.35746366,
+        "layer": 3,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 9927821.18746366
+      },
+      {
+        "end_us": 11568205.788896978,
+        "layer": 4,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 11568127.35746366
+      },
+      {
+        "end_us": 13208433.52746366,
+        "layer": 3,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 11568127.35746366
+      },
+      {
+        "end_us": 13208522.048875524,
+        "layer": 4,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 13208433.52746366
+      },
+      {
+        "end_us": 13219171.921463659,
+        "layer": 4,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 13208433.52746366
+      },
+      {
+        "end_us": 13219261.100524092,
+        "layer": 4,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 13219171.921463659
+      },
+      {
+        "end_us": 13229910.315463658,
+        "layer": 4,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 13219171.921463659
+      },
+      {
+        "end_us": 13229985.774313403,
+        "layer": 4,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 13229910.315463658
+      },
+      {
+        "end_us": 14870216.485463658,
+        "layer": 4,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 13229910.315463658
+      },
+      {
+        "end_us": 14870291.867151573,
+        "layer": 5,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 14870216.485463658
+      },
+      {
+        "end_us": 16510522.655463658,
+        "layer": 4,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 14870216.485463658
+      },
+      {
+        "end_us": 16510611.7427011,
+        "layer": 5,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 16510522.655463658
+      },
+      {
+        "end_us": 16521261.049463658,
+        "layer": 5,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 16510522.655463658
+      },
+      {
+        "end_us": 16521344.17065075,
+        "layer": 5,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 16521261.049463658
+      },
+      {
+        "end_us": 16531999.443463657,
+        "layer": 5,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 16521261.049463658
+      },
+      {
+        "end_us": 16532080.161527222,
+        "layer": 5,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 16531999.443463657
+      },
+      {
+        "end_us": 18172305.613463655,
+        "layer": 5,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 16531999.443463657
+      },
+      {
+        "end_us": 18172383.86245461,
+        "layer": 6,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 18172305.613463655
+      },
+      {
+        "end_us": 19812611.783463657,
+        "layer": 5,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 18172305.613463655
+      },
+      {
+        "end_us": 19812687.21907547,
+        "layer": 6,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 19812611.783463657
+      },
+      {
+        "end_us": 19823350.17746366,
+        "layer": 6,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 19812611.783463657
+      },
+      {
+        "end_us": 19823431.509212293,
+        "layer": 6,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 19823350.17746366
+      },
+      {
+        "end_us": 19834088.57146366,
+        "layer": 6,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 19823350.17746366
+      },
+      {
+        "end_us": 19834166.896838654,
+        "layer": 6,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 19834088.57146366
+      },
+      {
+        "end_us": 21474394.74146366,
+        "layer": 6,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 19834088.57146366
+      },
+      {
+        "end_us": 21474476.309777565,
+        "layer": 7,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 21474394.74146366
+      },
+      {
+        "end_us": 23114700.911463663,
+        "layer": 6,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 21474394.74146366
+      },
+      {
+        "end_us": 23114779.407730415,
+        "layer": 7,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 23114700.911463663
+      },
+      {
+        "end_us": 23125439.305463664,
+        "layer": 7,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 23114700.911463663
+      },
+      {
+        "end_us": 23125521.742647287,
+        "layer": 7,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 23125439.305463664
+      },
+      {
+        "end_us": 23136177.699463665,
+        "layer": 7,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 23125439.305463664
+      },
+      {
+        "end_us": 23136256.162461787,
+        "layer": 7,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 23136177.699463665
+      },
+      {
+        "end_us": 24776483.869463667,
+        "layer": 7,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 23136177.699463665
+      },
+      {
+        "end_us": 24776562.151179228,
+        "layer": 8,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 24776483.869463667
+      },
+      {
+        "end_us": 26416790.03946367,
+        "layer": 7,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 24776483.869463667
+      },
+      {
+        "end_us": 26416869.38618789,
+        "layer": 8,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 26416790.03946367
+      },
+      {
+        "end_us": 26427528.43346367,
+        "layer": 8,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 26416790.03946367
+      },
+      {
+        "end_us": 26427610.327515658,
+        "layer": 8,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 26427528.43346367
+      },
+      {
+        "end_us": 26438266.82746367,
+        "layer": 8,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 26427528.43346367
+      },
+      {
+        "end_us": 26438342.14980925,
+        "layer": 8,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 26438266.82746367
+      },
+      {
+        "end_us": 28078572.997463673,
+        "layer": 8,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 26438266.82746367
+      },
+      {
+        "end_us": 28078660.561133306,
+        "layer": 9,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 28078572.997463673
+      },
+      {
+        "end_us": 29718879.167463675,
+        "layer": 8,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 28078572.997463673
+      },
+      {
+        "end_us": 29718963.80187912,
+        "layer": 9,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 29718879.167463675
+      },
+      {
+        "end_us": 29729617.561463676,
+        "layer": 9,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 29718879.167463675
+      },
+      {
+        "end_us": 29729700.908278517,
+        "layer": 9,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 29729617.561463676
+      },
+      {
+        "end_us": 29740355.955463678,
+        "layer": 9,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 29729617.561463676
+      },
+      {
+        "end_us": 29740433.744057667,
+        "layer": 9,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 29740355.955463678
+      },
+      {
+        "end_us": 31380662.12546368,
+        "layer": 9,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 29740355.955463678
+      },
+      {
+        "end_us": 31380752.013614863,
+        "layer": 10,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 31380662.12546368
+      },
+      {
+        "end_us": 33020968.29546368,
+        "layer": 9,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 31380662.12546368
+      },
+      {
+        "end_us": 33021045.108813077,
+        "layer": 10,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 33020968.29546368
+      },
+      {
+        "end_us": 33031706.689463682,
+        "layer": 10,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 33020968.29546368
+      },
+      {
+        "end_us": 33031794.588661615,
+        "layer": 10,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 33031706.689463682
+      },
+      {
+        "end_us": 33042445.083463684,
+        "layer": 10,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 33031706.689463682
+      },
+      {
+        "end_us": 33042525.073891465,
+        "layer": 10,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 33042445.083463684
+      },
+      {
+        "end_us": 34682751.253463686,
+        "layer": 10,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 33042445.083463684
+      },
+      {
+        "end_us": 34682837.0757298,
+        "layer": 11,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 34682751.253463686
+      },
+      {
+        "end_us": 36323057.42346369,
+        "layer": 10,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 34682751.253463686
+      },
+      {
+        "end_us": 36323146.47007249,
+        "layer": 11,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 36323057.42346369
+      },
+      {
+        "end_us": 36333795.81746369,
+        "layer": 11,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 36323057.42346369
+      },
+      {
+        "end_us": 36333881.48534024,
+        "layer": 11,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 36333795.81746369
+      },
+      {
+        "end_us": 36344534.21146369,
+        "layer": 11,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 36333795.81746369
+      },
+      {
+        "end_us": 36344615.54306869,
+        "layer": 11,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 36344534.21146369
+      },
+      {
+        "end_us": 37984840.38146369,
+        "layer": 11,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 36344534.21146369
+      },
+      {
+        "end_us": 37984927.83199909,
+        "layer": 12,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 37984840.38146369
+      },
+      {
+        "end_us": 39625146.55146369,
+        "layer": 11,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 37984840.38146369
+      },
+      {
+        "end_us": 39625226.101991355,
+        "layer": 12,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 39625146.55146369
+      },
+      {
+        "end_us": 39635884.945463695,
+        "layer": 12,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 39625146.55146369
+      },
+      {
+        "end_us": 39635970.00004719,
+        "layer": 12,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 39635884.945463695
+      },
+      {
+        "end_us": 39646623.339463696,
+        "layer": 12,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 39635884.945463695
+      },
+      {
+        "end_us": 39646707.15317279,
+        "layer": 12,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 39646623.339463696
+      },
+      {
+        "end_us": 41286929.5094637,
+        "layer": 12,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 39646623.339463696
+      },
+      {
+        "end_us": 41287017.74664871,
+        "layer": 13,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 41286929.5094637
+      },
+      {
+        "end_us": 42927235.6794637,
+        "layer": 12,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 41286929.5094637
+      },
+      {
+        "end_us": 42927318.25872101,
+        "layer": 13,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 42927235.6794637
+      },
+      {
+        "end_us": 42937974.0734637,
+        "layer": 13,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 42927235.6794637
+      },
+      {
+        "end_us": 42938061.76642498,
+        "layer": 13,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 42937974.0734637
+      },
+      {
+        "end_us": 42948712.4674637,
+        "layer": 13,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 42937974.0734637
+      },
+      {
+        "end_us": 42948796.30249757,
+        "layer": 13,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 42948712.4674637
+      },
+      {
+        "end_us": 44589018.637463704,
+        "layer": 13,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 42948712.4674637
+      },
+      {
+        "end_us": 44589094.155351155,
+        "layer": 14,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 44589018.637463704
+      },
+      {
+        "end_us": 46229324.807463706,
+        "layer": 13,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 44589018.637463704
+      },
+      {
+        "end_us": 46229411.76852742,
+        "layer": 14,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 46229324.807463706
+      },
+      {
+        "end_us": 46240063.20146371,
+        "layer": 14,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 46229324.807463706
+      },
+      {
+        "end_us": 46240141.84256331,
+        "layer": 14,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 46240063.20146371
+      },
+      {
+        "end_us": 46250801.59546371,
+        "layer": 14,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 46240063.20146371
+      },
+      {
+        "end_us": 46250882.8101737,
+        "layer": 14,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 46250801.59546371
+      },
+      {
+        "end_us": 47891107.76546371,
+        "layer": 14,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 46250801.59546371
+      },
+      {
+        "end_us": 47891185.36057474,
+        "layer": 15,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 47891107.76546371
+      },
+      {
+        "end_us": 49531413.93546371,
+        "layer": 14,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 47891107.76546371
+      },
+      {
+        "end_us": 49531499.481075145,
+        "layer": 15,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 49531413.93546371
+      },
+      {
+        "end_us": 49542152.32946371,
+        "layer": 15,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 49531413.93546371
+      },
+      {
+        "end_us": 49542235.56144513,
+        "layer": 15,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 49542152.32946371
+      },
+      {
+        "end_us": 49552890.723463714,
+        "layer": 15,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 49542152.32946371
+      },
+      {
+        "end_us": 49552975.84075117,
+        "layer": 15,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 49552890.723463714
+      },
+      {
+        "end_us": 51193196.893463716,
+        "layer": 15,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 49552890.723463714
+      },
+      {
+        "end_us": 51193277.51400902,
+        "layer": 16,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 51193196.893463716
+      },
+      {
+        "end_us": 52833503.06346372,
+        "layer": 15,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 51193196.893463716
+      },
+      {
+        "end_us": 52833585.689861044,
+        "layer": 16,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 52833503.06346372
+      },
+      {
+        "end_us": 52844241.45746372,
+        "layer": 16,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 52833503.06346372
+      },
+      {
+        "end_us": 52844323.04188817,
+        "layer": 16,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 52844241.45746372
+      },
+      {
+        "end_us": 52854979.85146372,
+        "layer": 16,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 52844241.45746372
+      },
+      {
+        "end_us": 52855066.52810294,
+        "layer": 16,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 52854979.85146372
+      },
+      {
+        "end_us": 54495286.02146372,
+        "layer": 16,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 52854979.85146372
+      },
+      {
+        "end_us": 54495368.83553999,
+        "layer": 17,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 54495286.02146372
+      },
+      {
+        "end_us": 56135592.191463724,
+        "layer": 16,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 54495286.02146372
+      },
+      {
+        "end_us": 56135674.53686653,
+        "layer": 17,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 56135592.191463724
+      },
+      {
+        "end_us": 56146330.585463725,
+        "layer": 17,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 56135592.191463724
+      },
+      {
+        "end_us": 56146411.48429015,
+        "layer": 17,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 56146330.585463725
+      },
+      {
+        "end_us": 56157068.97946373,
+        "layer": 17,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 56146330.585463725
+      },
+      {
+        "end_us": 56157144.423088185,
+        "layer": 17,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 56157068.97946373
+      },
+      {
+        "end_us": 57797375.14946373,
+        "layer": 17,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 56157068.97946373
+      },
+      {
+        "end_us": 57797450.801773086,
+        "layer": 18,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 57797375.14946373
+      },
+      {
+        "end_us": 59437681.31946373,
+        "layer": 17,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 57797375.14946373
+      },
+      {
+        "end_us": 59437771.06727949,
+        "layer": 18,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 59437681.31946373
+      },
+      {
+        "end_us": 59448419.71346373,
+        "layer": 18,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 59437681.31946373
+      },
+      {
+        "end_us": 59448505.26419506,
+        "layer": 18,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 59448419.71346373
+      },
+      {
+        "end_us": 59459158.10746373,
+        "layer": 18,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 59448419.71346373
+      },
+      {
+        "end_us": 59459242.00521969,
+        "layer": 18,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 59459158.10746373
+      },
+      {
+        "end_us": 61099464.277463734,
+        "layer": 18,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 59459158.10746373
+      },
+      {
+        "end_us": 61099545.18145903,
+        "layer": 19,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 61099464.277463734
+      },
+      {
+        "end_us": 62739770.447463736,
+        "layer": 18,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 61099464.277463734
+      },
+      {
+        "end_us": 62739852.98104211,
+        "layer": 19,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 62739770.447463736
+      },
+      {
+        "end_us": 62750508.84146374,
+        "layer": 19,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 62739770.447463736
+      },
+      {
+        "end_us": 62750586.39670169,
+        "layer": 19,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 62750508.84146374
+      },
+      {
+        "end_us": 62761247.23546374,
+        "layer": 19,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 62750508.84146374
+      },
+      {
+        "end_us": 62761336.9666133,
+        "layer": 19,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 62761247.23546374
+      },
+      {
+        "end_us": 64401553.40546374,
+        "layer": 19,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 62761247.23546374
+      },
+      {
+        "end_us": 64401639.96331084,
+        "layer": 20,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 64401553.40546374
+      },
+      {
+        "end_us": 66041859.57546374,
+        "layer": 19,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 64401553.40546374
+      },
+      {
+        "end_us": 66041947.479810424,
+        "layer": 20,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 66041859.57546374
+      },
+      {
+        "end_us": 66052597.96946374,
+        "layer": 20,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 66041859.57546374
+      },
+      {
+        "end_us": 66052681.06372547,
+        "layer": 20,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 66052597.96946374
+      },
+      {
+        "end_us": 66063336.363463745,
+        "layer": 20,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 66052597.96946374
+      },
+      {
+        "end_us": 66063414.846105665,
+        "layer": 20,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 66063336.363463745
+      },
+      {
+        "end_us": 67703642.53346375,
+        "layer": 20,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 66063336.363463745
+      },
+      {
+        "end_us": 67703725.2400387,
+        "layer": 21,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 67703642.53346375
+      },
+      {
+        "end_us": 69343948.70346375,
+        "layer": 20,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 67703642.53346375
+      },
+      {
+        "end_us": 69344032.37038587,
+        "layer": 21,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 69343948.70346375
+      },
+      {
+        "end_us": 69354687.09746374,
+        "layer": 21,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 69343948.70346375
+      },
+      {
+        "end_us": 69354776.38447456,
+        "layer": 21,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 69354687.09746374
+      },
+      {
+        "end_us": 69365425.49146374,
+        "layer": 21,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 69354687.09746374
+      },
+      {
+        "end_us": 69365507.37843971,
+        "layer": 21,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 69365425.49146374
+      },
+      {
+        "end_us": 71005731.66146374,
+        "layer": 21,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 69365425.49146374
+      },
+      {
+        "end_us": 71005810.70065589,
+        "layer": 22,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 71005731.66146374
+      },
+      {
+        "end_us": 72646037.83146374,
+        "layer": 21,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 71005731.66146374
+      },
+      {
+        "end_us": 72646127.18820795,
+        "layer": 22,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 72646037.83146374
+      },
+      {
+        "end_us": 72656776.22546373,
+        "layer": 22,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 72646037.83146374
+      },
+      {
+        "end_us": 72656859.44540837,
+        "layer": 22,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 72656776.22546373
+      },
+      {
+        "end_us": 72667514.61946373,
+        "layer": 22,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 72656776.22546373
+      },
+      {
+        "end_us": 72667589.70510067,
+        "layer": 22,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 72667514.61946373
+      },
+      {
+        "end_us": 74307820.78946373,
+        "layer": 22,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 72667514.61946373
+      },
+      {
+        "end_us": 74307907.54429221,
+        "layer": 23,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 74307820.78946373
+      },
+      {
+        "end_us": 75948126.95946373,
+        "layer": 22,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 74307820.78946373
+      },
+      {
+        "end_us": 75948215.25215745,
+        "layer": 23,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 75948126.95946373
+      },
+      {
+        "end_us": 75958865.35346372,
+        "layer": 23,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 75948126.95946373
+      },
+      {
+        "end_us": 75958952.6607524,
+        "layer": 23,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 75958865.35346372
+      },
+      {
+        "end_us": 75969603.74746372,
+        "layer": 23,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 75958865.35346372
+      },
+      {
+        "end_us": 75969689.85501489,
+        "layer": 23,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 75969603.74746372
+      },
+      {
+        "end_us": 77609909.91746372,
+        "layer": 23,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 75969603.74746372
+      },
+      {
+        "end_us": 77609997.05456223,
+        "layer": 24,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 77609909.91746372
+      },
+      {
+        "end_us": 79250216.08746372,
+        "layer": 23,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 77609909.91746372
+      },
+      {
+        "end_us": 79250299.5078317,
+        "layer": 24,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 79250216.08746372
+      },
+      {
+        "end_us": 79260954.48146372,
+        "layer": 24,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 79250216.08746372
+      },
+      {
+        "end_us": 79261037.26163797,
+        "layer": 24,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 79260954.48146372
+      },
+      {
+        "end_us": 79271692.87546371,
+        "layer": 24,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 79260954.48146372
+      },
+      {
+        "end_us": 79271774.2668239,
+        "layer": 24,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 79271692.87546371
+      },
+      {
+        "end_us": 80911999.04546371,
+        "layer": 24,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 79271692.87546371
+      },
+      {
+        "end_us": 80912074.88731317,
+        "layer": 25,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 80911999.04546371
+      },
+      {
+        "end_us": 82552305.21546371,
+        "layer": 24,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 80911999.04546371
+      },
+      {
+        "end_us": 82552388.76545373,
+        "layer": 25,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 82552305.21546371
+      },
+      {
+        "end_us": 82563043.6094637,
+        "layer": 25,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 82552305.21546371
+      },
+      {
+        "end_us": 82563131.65961604,
+        "layer": 25,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 82563043.6094637
+      },
+      {
+        "end_us": 82573782.0034637,
+        "layer": 25,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 82563043.6094637
+      },
+      {
+        "end_us": 82573860.001055,
+        "layer": 25,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 82573782.0034637
+      },
+      {
+        "end_us": 84214088.1734637,
+        "layer": 25,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 82573782.0034637
+      },
+      {
+        "end_us": 84214170.74427071,
+        "layer": 26,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 84214088.1734637
+      },
+      {
+        "end_us": 85854394.3434637,
+        "layer": 25,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 84214088.1734637
+      },
+      {
+        "end_us": 85854474.69531317,
+        "layer": 26,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 85854394.3434637
+      },
+      {
+        "end_us": 85865132.7374637,
+        "layer": 26,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 85854394.3434637
+      },
+      {
+        "end_us": 85865215.01134038,
+        "layer": 26,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 85865132.7374637
+      },
+      {
+        "end_us": 85875871.13146369,
+        "layer": 26,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 85865132.7374637
+      },
+      {
+        "end_us": 85875951.32263248,
+        "layer": 26,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 85875871.13146369
+      },
+      {
+        "end_us": 87516177.3014637,
+        "layer": 26,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 85875871.13146369
+      },
+      {
+        "end_us": 87516260.37864563,
+        "layer": 27,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 87516177.3014637
+      },
+      {
+        "end_us": 89156483.4714637,
+        "layer": 26,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 87516177.3014637
+      },
+      {
+        "end_us": 89156567.65825066,
+        "layer": 27,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 89156483.4714637
+      },
+      {
+        "end_us": 89167221.86546369,
+        "layer": 27,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 89156483.4714637
+      },
+      {
+        "end_us": 89167306.21780547,
+        "layer": 27,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 89167221.86546369
+      },
+      {
+        "end_us": 89177960.25946368,
+        "layer": 27,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 89167221.86546369
+      },
+      {
+        "end_us": 89178042.13166568,
+        "layer": 27,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 89177960.25946368
+      },
+      {
+        "end_us": 90818266.42946368,
+        "layer": 27,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 89177960.25946368
+      },
+      {
+        "end_us": 90818341.84908845,
+        "layer": 28,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 90818266.42946368
+      },
+      {
+        "end_us": 92458572.59946369,
+        "layer": 27,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 90818266.42946368
+      },
+      {
+        "end_us": 92458650.25763257,
+        "layer": 28,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 92458572.59946369
+      },
+      {
+        "end_us": 92469310.99346368,
+        "layer": 28,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 92458572.59946369
+      },
+      {
+        "end_us": 92469389.43753915,
+        "layer": 28,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 92469310.99346368
+      },
+      {
+        "end_us": 92480049.38746367,
+        "layer": 28,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 92469310.99346368
+      },
+      {
+        "end_us": 92480133.15437673,
+        "layer": 28,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 92480049.38746367
+      },
+      {
+        "end_us": 94120355.55746368,
+        "layer": 28,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 92480049.38746367
+      },
+      {
+        "end_us": 94120443.47259659,
+        "layer": 29,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 94120355.55746368
+      },
+      {
+        "end_us": 95760661.72746368,
+        "layer": 28,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 94120355.55746368
+      },
+      {
+        "end_us": 95760748.68392712,
+        "layer": 29,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 95760661.72746368
+      },
+      {
+        "end_us": 95771400.12146367,
+        "layer": 29,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 95760661.72746368
+      },
+      {
+        "end_us": 95771487.09804778,
+        "layer": 29,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 95771400.12146367
+      },
+      {
+        "end_us": 95782138.51546367,
+        "layer": 29,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 95771400.12146367
+      },
+      {
+        "end_us": 95782225.76202422,
+        "layer": 29,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 95782138.51546367
+      },
+      {
+        "end_us": 97422444.68546367,
+        "layer": 29,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 95782138.51546367
+      },
+      {
+        "end_us": 97422523.51487426,
+        "layer": 30,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 97422444.68546367
+      },
+      {
+        "end_us": 99062750.85546367,
+        "layer": 29,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 97422444.68546367
+      },
+      {
+        "end_us": 99062835.95216656,
+        "layer": 30,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 99062750.85546367
+      },
+      {
+        "end_us": 99073489.24946366,
+        "layer": 30,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 99062750.85546367
+      },
+      {
+        "end_us": 99073576.87563615,
+        "layer": 30,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 99073489.24946366
+      },
+      {
+        "end_us": 99084227.64346366,
+        "layer": 30,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 99073489.24946366
+      },
+      {
+        "end_us": 99084303.89197573,
+        "layer": 30,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 99084227.64346366
+      },
+      {
+        "end_us": 100724533.81346366,
+        "layer": 30,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 99084227.64346366
+      },
+      {
+        "end_us": 100724609.0638231,
+        "layer": 31,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 100724533.81346366
+      },
+      {
+        "end_us": 102364839.98346366,
+        "layer": 30,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 100724533.81346366
+      },
+      {
+        "end_us": 102364926.31726529,
+        "layer": 31,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 102364839.98346366
+      },
+      {
+        "end_us": 102375578.37746365,
+        "layer": 31,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 102364839.98346366
+      },
+      {
+        "end_us": 102375653.59586328,
+        "layer": 31,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 102375578.37746365
+      },
+      {
+        "end_us": 102386316.77146365,
+        "layer": 31,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 102375578.37746365
+      },
+      {
+        "end_us": 102386395.51485203,
+        "layer": 31,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 102386316.77146365
+      },
+      {
+        "end_us": 104026622.94146365,
+        "layer": 31,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 102386316.77146365
+      },
+      {
+        "end_us": 104026699.58379306,
+        "layer": 32,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 104026622.94146365
+      },
+      {
+        "end_us": 105666929.11146365,
+        "layer": 31,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 104026622.94146365
+      },
+      {
+        "end_us": 105667009.27780661,
+        "layer": 32,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 105666929.11146365
+      },
+      {
+        "end_us": 105677667.50546364,
+        "layer": 32,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 105666929.11146365
+      },
+      {
+        "end_us": 105677751.8774949,
+        "layer": 32,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 105677667.50546364
+      },
+      {
+        "end_us": 105688405.89946364,
+        "layer": 32,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 105677667.50546364
+      },
+      {
+        "end_us": 105688481.94219431,
+        "layer": 32,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 105688405.89946364
+      },
+      {
+        "end_us": 107328712.06946364,
+        "layer": 32,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 105688405.89946364
+      },
+      {
+        "end_us": 107328789.4638465,
+        "layer": 33,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 107328712.06946364
+      },
+      {
+        "end_us": 108969018.23946364,
+        "layer": 32,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 107328712.06946364
+      },
+      {
+        "end_us": 108969095.76163784,
+        "layer": 33,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 108969018.23946364
+      },
+      {
+        "end_us": 108979756.63346364,
+        "layer": 33,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 108969018.23946364
+      },
+      {
+        "end_us": 108979839.54416962,
+        "layer": 33,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 108979756.63346364
+      },
+      {
+        "end_us": 108990495.02746363,
+        "layer": 33,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 108979756.63346364
+      },
+      {
+        "end_us": 108990574.12118018,
+        "layer": 33,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 108990495.02746363
+      },
+      {
+        "end_us": 110630801.19746363,
+        "layer": 33,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 108990495.02746363
+      },
+      {
+        "end_us": 110630886.87131254,
+        "layer": 34,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 110630801.19746363
+      },
+      {
+        "end_us": 112271107.36746363,
+        "layer": 33,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 110630801.19746363
+      },
+      {
+        "end_us": 112271187.19749013,
+        "layer": 34,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 112271107.36746363
+      },
+      {
+        "end_us": 112281845.76146363,
+        "layer": 34,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 112271107.36746363
+      },
+      {
+        "end_us": 112281927.58198808,
+        "layer": 34,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 112281845.76146363
+      },
+      {
+        "end_us": 112292584.15546362,
+        "layer": 34,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 112281845.76146363
+      },
+      {
+        "end_us": 112292666.26202883,
+        "layer": 34,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 112292584.15546362
+      },
+      {
+        "end_us": 113932890.32546362,
+        "layer": 34,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 112292584.15546362
+      },
+      {
+        "end_us": 113932965.67998229,
+        "layer": 35,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 113932890.32546362
+      },
+      {
+        "end_us": 115573196.49546362,
+        "layer": 34,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 113932890.32546362
+      },
+      {
+        "end_us": 115573277.80924381,
+        "layer": 35,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 115573196.49546362
+      },
+      {
+        "end_us": 115583934.88946362,
+        "layer": 35,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 115573196.49546362
+      },
+      {
+        "end_us": 115584015.6878202,
+        "layer": 35,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 115583934.88946362
+      },
+      {
+        "end_us": 115594673.28346361,
+        "layer": 35,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 115583934.88946362
+      },
+      {
+        "end_us": 115594751.10405318,
+        "layer": 35,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 115594673.28346361
+      },
+      {
+        "end_us": 117234979.45346361,
+        "layer": 35,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 115594673.28346361
+      },
+      {
+        "end_us": 117235056.084889,
+        "layer": 36,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 117234979.45346361
+      },
+      {
+        "end_us": 118875285.62346362,
+        "layer": 35,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 117234979.45346361
+      },
+      {
+        "end_us": 118875368.27520333,
+        "layer": 36,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 118875285.62346362
+      },
+      {
+        "end_us": 118886024.01746361,
+        "layer": 36,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 118875285.62346362
+      },
+      {
+        "end_us": 118886112.51474111,
+        "layer": 36,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 118886024.01746361
+      },
+      {
+        "end_us": 118896762.4114636,
+        "layer": 36,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 118886024.01746361
+      },
+      {
+        "end_us": 118896840.5478285,
+        "layer": 36,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 118896762.4114636
+      },
+      {
+        "end_us": 120537068.5814636,
+        "layer": 36,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 118896762.4114636
+      },
+      {
+        "end_us": 120537152.6661932,
+        "layer": 37,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 120537068.5814636
+      },
+      {
+        "end_us": 122177374.7514636,
+        "layer": 36,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 120537068.5814636
+      },
+      {
+        "end_us": 122177450.06373523,
+        "layer": 37,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 122177374.7514636
+      },
+      {
+        "end_us": 122188113.1454636,
+        "layer": 37,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 122177374.7514636
+      },
+      {
+        "end_us": 122188200.40105863,
+        "layer": 37,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 122188113.1454636
+      },
+      {
+        "end_us": 122198851.5394636,
+        "layer": 37,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 122188113.1454636
+      },
+      {
+        "end_us": 122198926.8074314,
+        "layer": 37,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 122198851.5394636
+      },
+      {
+        "end_us": 123839157.7094636,
+        "layer": 37,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 122198851.5394636
+      },
+      {
+        "end_us": 123839234.9063897,
+        "layer": 38,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 123839157.7094636
+      },
+      {
+        "end_us": 125479463.8794636,
+        "layer": 37,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 123839157.7094636
+      },
+      {
+        "end_us": 125479541.28287749,
+        "layer": 38,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 125479463.8794636
+      },
+      {
+        "end_us": 125490202.27346359,
+        "layer": 38,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 125479463.8794636
+      },
+      {
+        "end_us": 125490288.05599569,
+        "layer": 38,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 125490202.27346359
+      },
+      {
+        "end_us": 125500940.66746359,
+        "layer": 38,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 125490202.27346359
+      },
+      {
+        "end_us": 125501026.236548,
+        "layer": 38,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 125500940.66746359
+      },
+      {
+        "end_us": 127141246.83746359,
+        "layer": 38,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 125500940.66746359
+      },
+      {
+        "end_us": 127141332.01010051,
+        "layer": 39,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 127141246.83746359
+      },
+      {
+        "end_us": 128781553.00746359,
+        "layer": 38,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 127141246.83746359
+      },
+      {
+        "end_us": 128781631.3164598,
+        "layer": 39,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 128781553.00746359
+      },
+      {
+        "end_us": 128792291.40146358,
+        "layer": 39,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 128781553.00746359
+      },
+      {
+        "end_us": 128792374.57199603,
+        "layer": 39,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 128792291.40146358
+      },
+      {
+        "end_us": 128803029.79546358,
+        "layer": 39,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 128792291.40146358
+      },
+      {
+        "end_us": 128803119.42938134,
+        "layer": 39,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 128803029.79546358
+      },
+      {
+        "end_us": 130443335.96546358,
+        "layer": 39,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 128803029.79546358
+      },
+      {
+        "end_us": 130443422.93262644,
+        "layer": 40,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 130443335.96546358
+      },
+      {
+        "end_us": 132083642.13546358,
+        "layer": 39,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 130443335.96546358
+      },
+      {
+        "end_us": 132083720.48340029,
+        "layer": 40,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 132083642.13546358
+      },
+      {
+        "end_us": 132094380.52946357,
+        "layer": 40,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 132083642.13546358
+      },
+      {
+        "end_us": 132094463.27845633,
+        "layer": 40,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 132094380.52946357
+      },
+      {
+        "end_us": 132105118.92346357,
+        "layer": 40,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 132094380.52946357
+      },
+      {
+        "end_us": 132105203.65105984,
+        "layer": 40,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 132105118.92346357
+      },
+      {
+        "end_us": 133745425.09346357,
+        "layer": 40,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 132105118.92346357
+      },
+      {
+        "end_us": 133745506.01693372,
+        "layer": 41,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 133745425.09346357
+      },
+      {
+        "end_us": 135385731.26346356,
+        "layer": 40,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 133745425.09346357
+      },
+      {
+        "end_us": 135385811.0821507,
+        "layer": 41,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 135385731.26346356
+      },
+      {
+        "end_us": 135396469.65746355,
+        "layer": 41,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 135385731.26346356
+      },
+      {
+        "end_us": 135396553.295153,
+        "layer": 41,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 135396469.65746355
+      },
+      {
+        "end_us": 135407208.05146354,
+        "layer": 41,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 135396469.65746355
+      },
+      {
+        "end_us": 135407292.51568148,
+        "layer": 41,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 135407208.05146354
+      },
+      {
+        "end_us": 137047514.22146353,
+        "layer": 41,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 135407208.05146354
+      },
+      {
+        "end_us": 137047590.10324028,
+        "layer": 42,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 137047514.22146353
+      },
+      {
+        "end_us": 138687820.39146352,
+        "layer": 41,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 137047514.22146353
+      },
+      {
+        "end_us": 138687909.91001317,
+        "layer": 42,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 138687820.39146352
+      },
+      {
+        "end_us": 138698558.7854635,
+        "layer": 42,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 138687820.39146352
+      },
+      {
+        "end_us": 138698638.26455274,
+        "layer": 42,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 138698558.7854635
+      },
+      {
+        "end_us": 138709297.1794635,
+        "layer": 42,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 138698558.7854635
+      },
+      {
+        "end_us": 138709385.31247717,
+        "layer": 42,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 138709297.1794635
+      },
+      {
+        "end_us": 140349603.3494635,
+        "layer": 42,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 138709297.1794635
+      },
+      {
+        "end_us": 140349682.9452628,
+        "layer": 43,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 140349603.3494635
+      },
+      {
+        "end_us": 141989909.51946348,
+        "layer": 42,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 140349603.3494635
+      },
+      {
+        "end_us": 141989989.17491788,
+        "layer": 43,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 141989909.51946348
+      },
+      {
+        "end_us": 142000647.91346347,
+        "layer": 43,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 141989909.51946348
+      },
+      {
+        "end_us": 142000735.79117957,
+        "layer": 43,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 142000647.91346347
+      },
+      {
+        "end_us": 142011386.30746347,
+        "layer": 43,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 142000647.91346347
+      },
+      {
+        "end_us": 142011475.39678994,
+        "layer": 43,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 142011386.30746347
+      },
+      {
+        "end_us": 143651692.47746345,
+        "layer": 43,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 142011386.30746347
+      },
+      {
+        "end_us": 143651778.63509524,
+        "layer": 44,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 143651692.47746345
+      },
+      {
+        "end_us": 145291998.64746344,
+        "layer": 43,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 143651692.47746345
+      },
+      {
+        "end_us": 145292077.43283498,
+        "layer": 44,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 145291998.64746344
+      },
+      {
+        "end_us": 145302737.04146343,
+        "layer": 44,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 145291998.64746344
+      },
+      {
+        "end_us": 145302818.28404737,
+        "layer": 44,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 145302737.04146343
+      },
+      {
+        "end_us": 145313475.43546343,
+        "layer": 44,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 145302737.04146343
+      },
+      {
+        "end_us": 145313550.56266737,
+        "layer": 44,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 145313475.43546343
+      },
+      {
+        "end_us": 146953781.60546342,
+        "layer": 44,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 145313475.43546343
+      },
+      {
+        "end_us": 146953869.78623188,
+        "layer": 45,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 146953781.60546342
+      },
+      {
+        "end_us": 148594087.7754634,
+        "layer": 44,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 146953781.60546342
+      },
+      {
+        "end_us": 148594175.06667507,
+        "layer": 45,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 148594087.7754634
+      },
+      {
+        "end_us": 148604826.1694634,
+        "layer": 45,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 148594087.7754634
+      },
+      {
+        "end_us": 148604901.73821136,
+        "layer": 45,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 148604826.1694634
+      },
+      {
+        "end_us": 148615564.5634634,
+        "layer": 45,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 148604826.1694634
+      },
+      {
+        "end_us": 148615653.99648026,
+        "layer": 45,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 148615564.5634634
+      },
+      {
+        "end_us": 150255870.73346338,
+        "layer": 45,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 148615564.5634634
+      },
+      {
+        "end_us": 150255954.28767192,
+        "layer": 46,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 150255870.73346338
+      },
+      {
+        "end_us": 151896176.90346336,
+        "layer": 45,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 150255870.73346338
+      },
+      {
+        "end_us": 151896264.92017934,
+        "layer": 46,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 151896176.90346336
+      },
+      {
+        "end_us": 151906915.29746336,
+        "layer": 46,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 151896176.90346336
+      },
+      {
+        "end_us": 151906992.8702198,
+        "layer": 46,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 151906915.29746336
+      },
+      {
+        "end_us": 151917653.69146335,
+        "layer": 46,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 151906915.29746336
+      },
+      {
+        "end_us": 151917743.2980919,
+        "layer": 46,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 151917653.69146335
+      },
+      {
+        "end_us": 153557959.86146334,
+        "layer": 46,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 151917653.69146335
+      },
+      {
+        "end_us": 153558045.42181048,
+        "layer": 47,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 153557959.86146334
+      },
+      {
+        "end_us": 155198266.03146333,
+        "layer": 46,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 153557959.86146334
+      },
+      {
+        "end_us": 155198346.70099583,
+        "layer": 47,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 155198266.03146333
+      },
+      {
+        "end_us": 155209004.42546332,
+        "layer": 47,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 155198266.03146333
+      },
+      {
+        "end_us": 155209087.05856952,
+        "layer": 47,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 155209004.42546332
+      },
+      {
+        "end_us": 155219742.8194633,
+        "layer": 47,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 155209004.42546332
+      },
+      {
+        "end_us": 155219823.0234266,
+        "layer": 47,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 155219742.8194633
+      },
+      {
+        "end_us": 156860048.9894633,
+        "layer": 47,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 155219742.8194633
+      },
+      {
+        "end_us": 156860127.07588965,
+        "layer": 48,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 156860048.9894633
+      },
+      {
+        "end_us": 158500355.1594633,
+        "layer": 47,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 156860048.9894633
+      },
+      {
+        "end_us": 158500436.6537151,
+        "layer": 48,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 158500355.1594633
+      },
+      {
+        "end_us": 158511093.55346328,
+        "layer": 48,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 158500355.1594633
+      },
+      {
+        "end_us": 158511178.6657585,
+        "layer": 48,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 158511093.55346328
+      },
+      {
+        "end_us": 158521831.94746327,
+        "layer": 48,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 158511093.55346328
+      },
+      {
+        "end_us": 158521909.85924295,
+        "layer": 48,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 158521831.94746327
+      },
+      {
+        "end_us": 160162138.11746326,
+        "layer": 48,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 158521831.94746327
+      },
+      {
+        "end_us": 160162214.6838266,
+        "layer": 49,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 160162138.11746326
+      },
+      {
+        "end_us": 161802444.28746325,
+        "layer": 48,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 160162138.11746326
+      },
+      {
+        "end_us": 161802523.72855335,
+        "layer": 49,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 161802444.28746325
+      },
+      {
+        "end_us": 161813182.68146324,
+        "layer": 49,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 161802444.28746325
+      },
+      {
+        "end_us": 161813267.67082617,
+        "layer": 49,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 161813182.68146324
+      },
+      {
+        "end_us": 161823921.07546324,
+        "layer": 49,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 161813182.68146324
+      },
+      {
+        "end_us": 161824003.57246208,
+        "layer": 49,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 161823921.07546324
+      },
+      {
+        "end_us": 163464227.24546322,
+        "layer": 49,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 161823921.07546324
+      },
+      {
+        "end_us": 163464307.12564805,
+        "layer": 50,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 163464227.24546322
+      },
+      {
+        "end_us": 165104533.4154632,
+        "layer": 49,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 163464227.24546322
+      },
+      {
+        "end_us": 165104621.91063726,
+        "layer": 50,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 165104533.4154632
+      },
+      {
+        "end_us": 165115271.8094632,
+        "layer": 50,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 165104533.4154632
+      },
+      {
+        "end_us": 165115359.8837858,
+        "layer": 50,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 165115271.8094632
+      },
+      {
+        "end_us": 165126010.2034632,
+        "layer": 50,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 165115271.8094632
+      },
+      {
+        "end_us": 165126085.47485796,
+        "layer": 50,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 165126010.2034632
+      },
+      {
+        "end_us": 166766316.37346318,
+        "layer": 50,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 165126010.2034632
+      },
+      {
+        "end_us": 166766394.38625836,
+        "layer": 51,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 166766316.37346318
+      },
+      {
+        "end_us": 168406622.54346317,
+        "layer": 50,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 166766316.37346318
+      },
+      {
+        "end_us": 168406712.34920895,
+        "layer": 51,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 168406622.54346317
+      },
+      {
+        "end_us": 168417360.93746316,
+        "layer": 51,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 168406622.54346317
+      },
+      {
+        "end_us": 168417440.85357374,
+        "layer": 51,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 168417360.93746316
+      },
+      {
+        "end_us": 168428099.33146316,
+        "layer": 51,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 168417360.93746316
+      },
+      {
+        "end_us": 168428186.0719688,
+        "layer": 51,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 168428099.33146316
+      },
+      {
+        "end_us": 170068405.50146315,
+        "layer": 51,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 168428099.33146316
+      },
+      {
+        "end_us": 170068485.58789787,
+        "layer": 52,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 170068405.50146315
+      },
+      {
+        "end_us": 171708711.67146313,
+        "layer": 51,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 170068405.50146315
+      },
+      {
+        "end_us": 171708796.7882892,
+        "layer": 52,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 171708711.67146313
+      },
+      {
+        "end_us": 171719450.06546313,
+        "layer": 52,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 171708711.67146313
+      },
+      {
+        "end_us": 171719528.26091006,
+        "layer": 52,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 171719450.06546313
+      },
+      {
+        "end_us": 171730188.45946312,
+        "layer": 52,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 171719450.06546313
+      },
+      {
+        "end_us": 171730276.02497917,
+        "layer": 52,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 171730188.45946312
+      },
+      {
+        "end_us": 173370494.6294631,
+        "layer": 52,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 171730188.45946312
+      },
+      {
+        "end_us": 173370583.61227518,
+        "layer": 53,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 173370494.6294631
+      },
+      {
+        "end_us": 175010800.7994631,
+        "layer": 52,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 173370494.6294631
+      },
+      {
+        "end_us": 175010889.03536114,
+        "layer": 53,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 175010800.7994631
+      },
+      {
+        "end_us": 175021539.1934631,
+        "layer": 53,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 175010800.7994631
+      },
+      {
+        "end_us": 175021619.3512103,
+        "layer": 53,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 175021539.1934631
+      },
+      {
+        "end_us": 175032277.58746308,
+        "layer": 53,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 175021539.1934631
+      },
+      {
+        "end_us": 175032362.8941158,
+        "layer": 53,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 175032277.58746308
+      },
+      {
+        "end_us": 176672583.75746307,
+        "layer": 53,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 175032277.58746308
+      },
+      {
+        "end_us": 176672666.02494392,
+        "layer": 54,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 176672583.75746307
+      },
+      {
+        "end_us": 178312889.92746305,
+        "layer": 53,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 176672583.75746307
+      },
+      {
+        "end_us": 178312968.4470696,
+        "layer": 54,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 178312889.92746305
+      },
+      {
+        "end_us": 178323628.32146305,
+        "layer": 54,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 178312889.92746305
+      },
+      {
+        "end_us": 178323718.1040865,
+        "layer": 54,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 178323628.32146305
+      },
+      {
+        "end_us": 178334366.71546304,
+        "layer": 54,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 178323628.32146305
+      },
+      {
+        "end_us": 178334452.59744084,
+        "layer": 54,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 178334366.71546304
+      },
+      {
+        "end_us": 179974672.88546303,
+        "layer": 54,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 178334366.71546304
+      },
+      {
+        "end_us": 179974749.15566647,
+        "layer": 55,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 179974672.88546303
+      },
+      {
+        "end_us": 181614979.05546302,
+        "layer": 54,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 179974672.88546303
+      },
+      {
+        "end_us": 181615067.72027978,
+        "layer": 55,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 181614979.05546302
+      },
+      {
+        "end_us": 181625717.449463,
+        "layer": 55,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 181614979.05546302
+      },
+      {
+        "end_us": 181625794.99487513,
+        "layer": 55,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 181625717.449463
+      },
+      {
+        "end_us": 181636455.843463,
+        "layer": 55,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 181625717.449463
+      },
+      {
+        "end_us": 181636534.03798592,
+        "layer": 55,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 181636455.843463
+      },
+      {
+        "end_us": 183276762.013463,
+        "layer": 55,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 181636455.843463
+      },
+      {
+        "end_us": 183276848.40020573,
+        "layer": 56,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 183276762.013463
+      },
+      {
+        "end_us": 184917068.18346298,
+        "layer": 55,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 183276762.013463
+      },
+      {
+        "end_us": 184917155.8004459,
+        "layer": 56,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 184917068.18346298
+      },
+      {
+        "end_us": 184927806.57746297,
+        "layer": 56,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 184917068.18346298
+      },
+      {
+        "end_us": 184927890.58059543,
+        "layer": 56,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 184927806.57746297
+      },
+      {
+        "end_us": 184938544.97146297,
+        "layer": 56,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 184927806.57746297
+      },
+      {
+        "end_us": 184938625.49308297,
+        "layer": 56,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 184938544.97146297
+      },
+      {
+        "end_us": 186578851.14146295,
+        "layer": 56,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 184938544.97146297
+      },
+      {
+        "end_us": 186578931.2457415,
+        "layer": 57,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 186578851.14146295
+      },
+      {
+        "end_us": 188219157.31146294,
+        "layer": 56,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 186578851.14146295
+      },
+      {
+        "end_us": 188219245.32276028,
+        "layer": 57,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 188219157.31146294
+      },
+      {
+        "end_us": 188229895.70546293,
+        "layer": 57,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 188219157.31146294
+      },
+      {
+        "end_us": 188229975.07369223,
+        "layer": 57,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 188229895.70546293
+      },
+      {
+        "end_us": 188240634.09946293,
+        "layer": 57,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 188229895.70546293
+      },
+      {
+        "end_us": 188240718.15920085,
+        "layer": 57,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 188240634.09946293
+      },
+      {
+        "end_us": 189880940.2694629,
+        "layer": 57,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 188240634.09946293
+      },
+      {
+        "end_us": 189881029.58407477,
+        "layer": 58,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 189880940.2694629
+      },
+      {
+        "end_us": 191521246.4394629,
+        "layer": 57,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 189880940.2694629
+      },
+      {
+        "end_us": 191521323.46965256,
+        "layer": 58,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 191521246.4394629
+      },
+      {
+        "end_us": 191531984.8334629,
+        "layer": 58,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 191521246.4394629
+      },
+      {
+        "end_us": 191532073.14243945,
+        "layer": 58,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 191531984.8334629
+      },
+      {
+        "end_us": 191542723.2274629,
+        "layer": 58,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 191531984.8334629
+      },
+      {
+        "end_us": 191542806.49502,
+        "layer": 58,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 191542723.2274629
+      },
+      {
+        "end_us": 193183029.39746287,
+        "layer": 58,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 191542723.2274629
+      },
+      {
+        "end_us": 193183105.96158785,
+        "layer": 59,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 193183029.39746287
+      },
+      {
+        "end_us": 194823335.56746286,
+        "layer": 58,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 193183029.39746287
+      },
+      {
+        "end_us": 194823411.66536415,
+        "layer": 59,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "attention",
+        "start_us": 194823335.56746286
+      },
+      {
+        "end_us": 194834073.96146286,
+        "layer": 59,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 194823335.56746286
+      },
+      {
+        "end_us": 194834149.54852983,
+        "layer": 59,
+        "microbatch": 0,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 194834073.96146286
+      },
+      {
+        "end_us": 194844812.35546285,
+        "layer": 59,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "dispatch",
+        "start_us": 194834073.96146286
+      },
+      {
+        "end_us": 194844900.34798822,
+        "layer": 59,
+        "microbatch": 1,
+        "resource": "compute",
+        "stage": "expert",
+        "start_us": 194844812.35546285
+      },
+      {
+        "end_us": 196485118.52546284,
+        "layer": 59,
+        "microbatch": 0,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 194844812.35546285
+      },
+      {
+        "end_us": 198125424.69546282,
+        "layer": 59,
+        "microbatch": 1,
+        "resource": "communication",
+        "stage": "combine",
+        "start_us": 196485118.52546284
+      }
+    ],
+    "per_device_throughput_tokens_s": 1.292110794934551,
+    "step_time_us": 198125424.69546282
+  },
+  "network_inputs": {
+    "combine_cct_us": 1640306.17,
+    "dispatch_cct_us": 10738.394
+  },
+  "network_runs": [
+    {
+      "key": {
+        "batch": 128,
+        "ep_size": 128,
+        "m_attn": 0,
+        "mode": "dispatch",
+        "n_ffn": 0,
+        "placement": "role_packed",
+        "scenario": 1,
+        "scheme": "ub_rg",
+        "seed": 1,
+        "zipf_s": 0.9
+      },
+      "run_id": "s1_ub_rg_dispatch_mb128_z0.9_ep128_sd1",
+      "summary": "/home/luke/workspace/dyn_latency/results/ub_rg_system_packet/network/s1_ub_rg_dispatch_mb128_z0.9_ep128_sd1/summary.json"
+    },
+    {
+      "key": {
+        "batch": 128,
+        "ep_size": 128,
+        "m_attn": 0,
+        "mode": "combine",
+        "n_ffn": 0,
+        "placement": "role_packed",
+        "scenario": 1,
+        "scheme": "ub_rg",
+        "seed": 1,
+        "zipf_s": 0.9
+      },
+      "run_id": "s1_ub_rg_combine_mb128_z0.9_ep128_sd1",
+      "summary": "/home/luke/workspace/dyn_latency/results/ub_rg_system_packet/network/s1_ub_rg_combine_mb128_z0.9_ep128_sd1/summary.json"
+    }
+  ],
+  "per_device_throughput_tokens_s": 1.292110794934551,
+  "run_id": "sys2_s1_ub_rg_b256_z0.9_ep128_L60_m2_sd1",
+  "step_time_us": 198125424.69546282,
+  "tier": "main"
+}

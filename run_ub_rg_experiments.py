@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Batch runner for UB_RG experiments (behavioral and packet engines).
 
-Matrix (2026-07): scenarios 1 + 4 only; start-skew 2/4/8 µs; S1 adds islip.
+Matrix (2026-07): scenarios 1 + 4 only; start-skew σ∈{0,2,4,8} µs (Normal);
+S1 adds islip.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ ZIPF_S = [0.0, 0.3, 0.7, 0.9]
 SCHEMES_BASE = ["ub_rg", "ub_rg_pop", "packet_spray"]
 SCHEMES_S1 = SCHEMES_BASE + ["islip"]
 SCENARIOS = (1, 4)
-START_SKEW_US = [2.0, 4.0, 8.0]
+START_SKEW_US = [0.0, 2.0, 4.0, 8.0]
 TOPK = 8
 SEED = 1
 
@@ -31,7 +32,7 @@ EXP3_PDF_SCENARIO_EPS = {
     1: [32, 64, 128],
     4: [128, 256, 512],
 }
-EXP3_PDF_DEFAULT_BATCHES = [16, 64, 256]
+EXP3_PDF_DEFAULT_BATCHES = [16, 64, 128, 256, 512]
 EXP3_PDF_DEFAULT_SEEDS = 96
 
 
@@ -50,10 +51,11 @@ class Job:
 
     @property
     def run_id(self) -> str:
-        skew = f"_sk{self.start_skew_us:g}" if self.start_skew_us else ""
+        # Always tag skew (incl. σ=0) so Normal-skew runs never collide with legacy U(0,sk).
         return (
             f"s{self.scenario}_{self.scheme}_b{self.batch}"
-            f"_z{self.zipf_s:g}_ep{self.ep_size}_sd{self.seed}{skew}"
+            f"_z{self.zipf_s:g}_ep{self.ep_size}_sd{self.seed}"
+            f"_nsk{self.start_skew_us:g}"
         )
 
     @property
@@ -114,6 +116,24 @@ def build_jobs(engine: str) -> list[Job]:
                                 start_skew_us=skew,
                             )
                         )
+    # S1 iSLIP also covers batch 128/512 (same EP/Zipf/skew grid as batch=256).
+    for ep in ep_by_scenario[1]:
+        for batch in (128, 512):
+            for zipf_s in ZIPF_S:
+                for skew in START_SKEW_US:
+                    jobs.append(
+                        Job(
+                            exp="exp3_roundtrip",
+                            mode="roundtrip",
+                            scenario=1,
+                            scheme="islip",
+                            batch=batch,
+                            zipf_s=zipf_s,
+                            ep_size=ep,
+                            engine=engine,
+                            start_skew_us=skew,
+                        )
+                    )
     jobs.sort(
         key=lambda j: (
             j.batch,
@@ -135,7 +155,7 @@ def build_exp3_pdf_jobs(
 ) -> list[Job]:
     """Multi-seed roundtrip sweep for system / E2E CCT PDF."""
     jobs: list[Job] = []
-    # PDF uses mid skew=4µs as representative start skew.
+    # PDF uses mid σ=4µs as representative Normal start-skew.
     skew = 4.0
     for scenario, eps in EXP3_PDF_SCENARIO_EPS.items():
         for ep in eps:
@@ -316,7 +336,7 @@ def main() -> int:
         "--batches",
         type=str,
         default="",
-        help="Comma list of batch sizes for --exp3-pdf (default 16,64,256)",
+        help="Comma list of batch sizes for --exp3-pdf (default 16,64,128,256,512)",
     )
     args = ap.parse_args()
 

@@ -1,0 +1,51 @@
+{
+  "scenario": 1,
+  "scheme": "ub_rg_pop",
+  "mode": "roundtrip",
+  "batch": 64,
+  "zipf_s": 0.900000,
+  "topk": 8,
+  "ep_size": 32,
+  "seed": 2,
+  "start_skew_us": 4.000000,
+  "tau_g_ns": 143.360000,
+  "grain_bytes": 7168,
+  "total_tokens": 32768,
+  "max_egress_load": 237,
+  "konig_us": 67.235840,
+  "rtt_us": 0.900000,
+  "barrier_us": 0.800000,
+  "cct_us": 91.227915,
+  "step_us": 164.371665,
+  "gemv_us": 72.343750,
+  "e2e_us": 163.571665,
+  "throughput_GBs": 1428.962976,
+  "latency_all": {
+    "count": 32768,
+    "mean_us": 16.362097,
+    "p50_us": 15.160351,
+    "p99_us": 39.614597,
+    "min_us": 1.448705,
+    "max_us": 47.924049
+  },
+  "latency_hot": {
+    "count": 9102,
+    "mean_us": 22.614521,
+    "p50_us": 22.099083,
+    "p99_us": 42.217162,
+    "min_us": 1.505713,
+    "max_us": 47.924049
+  },
+  "latency_cold": {
+    "count": 8288,
+    "mean_us": 12.136587,
+    "p50_us": 12.114858,
+    "p99_us": 22.675890,
+    "min_us": 1.448705,
+    "max_us": 24.749970
+  },
+  "dispatch_cct_us": 47.924049,
+  "combine_cct_us": 43.303866,
+  "roundtrip_step_us": 92.027915,
+  "e2e_step_us": 164.371665
+}
