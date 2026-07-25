@@ -16,16 +16,18 @@ import pandas as pd  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 REPORT = ROOT / "docs" / "UB_RG仿真报告.md"
-SCHEMES = ("ub_rg", "ub_rg_pop", "packet_spray", "islip")
+SCHEMES = ("ub_rg", "ub_rg_pop", "ub_rg_pop2", "packet_spray", "islip")
 SCHEME_LS = {
     "ub_rg": "-",
     "ub_rg_pop": "-.",
+    "ub_rg_pop2": (0, (2, 1)),  # densely dashed
     "packet_spray": "--",
     "islip": ":",
 }
 SCHEME_COLOR = {
     "ub_rg": "C0",
     "ub_rg_pop": "C2",
+    "ub_rg_pop2": "C4",
     "packet_spray": "C1",
     "islip": "C3",
 }
@@ -685,7 +687,7 @@ def code_evidence_index_md() -> str:
 | 行为级常量 / grain / 端口速率 | τ_g、50 GB/s、hop 时延 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:29-36` |
 | Zipf / TopK → grain | 负载与专家路由 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:260-351` |
 | Spray / RG / POP phase | 三方案排队与授权 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:438-738` |
-| S4 / iSLIP / 启动偏差 / GEMV | PathClass、iSLIP matching、start-skew、ComputeGemvUs | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc` |
+| S4 / iSLIP / POP2 / 空拍排空 / 启动偏差 / GEMV | PathClass、iSLIP、UniversalGntDepth、egress drain idle、start-skew、ComputeGemvUs | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc` |
 | 行为级 CCT / König | 指标与 summary | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:520-538, 730-812, 886-921` |
 | 逐包拓扑 / S3 路由过滤 | Leaf–Spine 与 FIB | `gen_ub_rg_topo.py:47-181`（S3：`144-180`） |
 | 逐包 token / scheduler map | 工作负载与挂接 | `ns-3-ub/src/unified-bus/model/ub-rg-experiment-app.cc:117-407` |
@@ -784,7 +786,7 @@ def topology_and_scheme_md(engine: str) -> str:
 
 - **跳数 / RTT**：场景1 RTT_rg≈0.6µs；场景4 典型 SW≈0.8µs，同机 PFM 更短。
 - **瓶颈**：场景1 目的侧平面下行；场景4 跨 Cluster SW 下行与 PFM 争用。
-- **调度**：场景1 含 `islip`；场景4 为 `ub_rg` / `ub_rg_pop` / `packet_spray`。
+- **调度**：场景1 含 `islip`；场景4 为 `ub_rg` / `ub_rg_pop` / `ub_rg_pop2` / `packet_spray`。
 
 ### 2.3 网络方案与实现差异
 
@@ -793,6 +795,7 @@ def topology_and_scheme_md(engine: str) -> str:
 | §2.1 | `packet_spray` | 自由注入 / Packet Spray 基线（参考报告中的 `ub_unscheduled`） |
 | §2.2 | `ub_rg` | 标准 Request-Grant：目的侧按 1 grain/τ_g 授权 |
 | §2.3 | `ub_rg_pop` | SHMEM-POP：Push 元数据 → ESC → PullGrant → 远端读 Pull |
+| POP2 | `ub_rg_pop2` | ub_rg + 源侧每 Plane 万能 GNT 预授权（见 [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)） |
 
 主 KPI：CCT / step（µs）；辅 KPI：hot/cold p99、吞吐、CCT/König。机制对照如下（以本仓库仿真为准，POP 为近似模型，非完整 supernode `UbRgPopEsc` 模块）。
 
@@ -803,11 +806,13 @@ def topology_and_scheme_md(engine: str) -> str:
 | `ub_request_grant.md` / 设计 | 文档 | 交换机侧分布式 REQ/GNT：每 τ_g 每出口 ≤1、路径钉扎、cursor/SYNC |
 | `ub_rg` | 仿真 scheme | 主协议的落地：目的侧授权节奏 + 源侧 FCFS；行为级折叠控制面为 RTT；逐包走真实 REQ/GNT/SYNC |
 | `ub_rg_pop` | 仿真 scheme | [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md) 的假设模型：行为级为 RG + startup + PullCredit；逐包为 RG 路径 + completion 计时 overlay |
+| `ub_rg_pop2` | 仿真 scheme | [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)：同 ub_rg 目的侧；源侧每 Plane 万能 GNT 池掩盖启动 RTT；投机 DATA 无钉扎 |
 | `packet_spray` | 仿真 scheme | 无授权准入；源上联自由注入；目的/中段 FIFO；分析阶段叠软件屏障 |
 | `islip` | 仿真 scheme | 与 `ub_rg` 相同：路径钉扎 + REQ/GNT + RTT/barrier；仅将每出口独立 RR 换成每 τ_g 的 iSLIP matching（对齐 `ub_request_grant.md` §2.7） |
 
 > **对齐的核心（设计 ↔ ub_rg）：** grain 量化、τ_g、每平面 ≤1 授权、Clos/MpClos 钉扎。
 > **POP 相对 RG：** 稳态 König 渐近相同；startup = RTT_rg + oneWay（≈1.5×）；小 batch 略慢，大负载/高偏斜时 pop≈rg。
+> **POP2 相对 RG：** 同目的侧节拍与 RTT_rg；前 N≈⌈RTT_rg/τ_g⌉ grain 可零等待投机注入；调度器可按出口 DATA 深度空拍排空。
 > **Spray 相对 RG：** 无目的侧节拍 → 热点队列放大，CCT/p99 与软件屏障更重。
 
 #### 三方机制对照
@@ -832,7 +837,7 @@ def topology_and_scheme_md(engine: str) -> str:
 | 冷流隔离 | 好（按需授权） | 接近 RG | 差（热点占满下行） |
 | 两层 Clos | 中段压力可控 | 偶发略差于 RG | 中段 FIFO 放大更明显 |
 
-CLI：`--scheme=ub_rg|ub_rg_pop|packet_spray|islip`；`--start-skew-us=0|2|4|8`（Normal σ）。
+CLI：`--scheme=ub_rg|ub_rg_pop|ub_rg_pop2|packet_spray|islip`；`--start-skew-us=0|2|4|8`（Normal σ）。
 """
 
 def md_img(path: Path) -> str:
@@ -865,10 +870,17 @@ def executive_summary_md(df: pd.DataFrame) -> str:
             if not common.empty:
                 pop_ratio = common["ub_rg_pop"] / common["ub_rg"].replace(0, np.nan)
                 spray_ratio = common["packet_spray"] / common["ub_rg"].replace(0, np.nan)
+                pop2_note = ""
+                if "ub_rg_pop2" in piv.columns:
+                    both2 = piv.dropna(subset=["ub_rg", "ub_rg_pop2"])
+                    if not both2.empty:
+                        r2 = both2["ub_rg_pop2"] / both2["ub_rg"].replace(0, np.nan)
+                        pop2_note = f"，POP2/RG 平均为 **{r2.mean():.3f}×**"
                 lines.append(
                     f"- **配置包输出差异**：Exp1 三方案共有参数格中，"
                     f"POP/RG 平均为 **{pop_ratio.mean():.3f}×**，"
-                    f"Spray/RG 平均为 **{spray_ratio.mean():.3f}×**。"
+                    f"Spray/RG 平均为 **{spray_ratio.mean():.3f}×**"
+                    f"{pop2_note}。"
                     "这是当前配置包的联合差异；plane、path delay、jitter 和 barrier "
                     "尚未统一，不能把比值单独归因于目的侧配速"
                     "（见 §1.1）。\n"
@@ -1120,9 +1132,13 @@ def write_report(
         lines.append(
             "- 端口 400Gbps（有效 50GB/s），grain = 7KB，τ_g ≈ 143.36 ns\n"
             "- 链路建模为串行化服务器 + FIFO；交换机直通 150 ns/跳，传播 50 ns/跳\n"
-            "- UB_RG：目的侧按 1 grain/τ_g 授权节奏 + 源端口 FCFS\n"
+            "- UB_RG：目的侧按 1 grain/τ_g 授权节奏 + 源端口 FCFS；"
+            "出口 DATA 深度≥3 时调度器可空拍排空\n"
             "- UB_RG_POP：同目的侧节奏；startup = RTT_rg + oneWay（Push→Grant→Pull）；"
             "PullCredit 窗口保稳态流水（见 [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md)）\n"
+            "- UB_RG_POP2：同 ub_rg 目的侧与 RTT_rg；源侧每 Plane 万能 GNT 池 "
+            "N=⌈RTT_rg/τ_g⌉，前 N grain 零等待投机注入（无钉扎）；"
+            "真实 GNT 对已投机 grain 仅归还池（见 [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)）\n"
             "- Packet Spray：自由注入；软件屏障在分析阶段叠加\n"
             "- 场景4 按 Sparse CLOS 路径类建模；场景1 另跑 iSLIP（同 ub_rg，仅 matching 不同）\n"
             "- 启动偏差：每 NPU ~N(0,σ²) 后平移至最早为 0；σ∈{0,2,4,8}µs\n"
@@ -1212,7 +1228,8 @@ def write_report(
         "- **场景4** Sparse CLOS：EP ∈ {128, 256, 512}；"
         "PDF batch∈{16,64,128,256,512}\n"
         "每场景单独出 PDF；另附跨场景对比图（S1-EP128 / S4-EP512）。"
-        "线型区分方案（实线 ub_rg，点划线 ub_rg_pop，虚线 packet_spray，点线 islip）。\n"
+        "线型区分方案（实线 ub_rg，点划线 ub_rg_pop，密虚线 ub_rg_pop2，"
+        "虚线 packet_spray，点线 islip）。\n"
     )
     pdf_df = df[df["exp"] == "exp3_pdf"].copy()
     pdf_df = pdf_df[pdf_df["cct_us"].notna() & (pdf_df["cct_us"] > 0)]
@@ -1266,7 +1283,11 @@ def write_report(
         align_keys = ["scenario", "batch", "zipf_s", "ep_size"]
         piv = e1.pivot_table(index=align_keys, columns="scheme", values="step_us")
         # Align on base schemes only; islip is S1-only and must not drop S4 cells.
-        base = [c for c in ("ub_rg", "ub_rg_pop", "packet_spray") if c in piv.columns]
+        base = [
+            c
+            for c in ("ub_rg", "ub_rg_pop", "ub_rg_pop2", "packet_spray")
+            if c in piv.columns
+        ]
         common = piv.dropna(subset=base, how="any") if base else piv.iloc[0:0]
         sc_levels = (
             set(common.index.get_level_values("scenario")) if not common.empty else set()

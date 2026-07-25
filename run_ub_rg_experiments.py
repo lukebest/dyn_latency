@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent
 NS3 = ROOT / "ns-3-ub"
 ZIPF_S = [0.0, 0.3, 0.7, 0.9]
 # Base schemes; islip is scenario-1 only (single-layer switch scheduler).
-SCHEMES_BASE = ["ub_rg", "ub_rg_pop", "packet_spray"]
+SCHEMES_BASE = ["ub_rg", "ub_rg_pop", "ub_rg_pop2", "packet_spray"]
 SCHEMES_S1 = SCHEMES_BASE + ["islip"]
 SCENARIOS = (1, 4)
 START_SKEW_US = [0.0, 2.0, 4.0, 8.0]
