@@ -184,10 +184,141 @@ def gen_clos(out_dir: Path, npu: int = 1024, isolated_planes: bool = False) -> N
     print(f"Wrote {tag} npu={npu} -> {out_dir}")
 
 
+def gen_sparse_clos(out_dir: Path, npu: int = 512) -> None:
+    """Scenario 4 Sparse CLOS: 8 Cluster × 64 Server, 32×SW128, 15 ports/NPU.
+
+    NPU id = cluster*64 + server (cluster,server in 0..7 / 0..63), matching
+    behavioral ClusterOf/ServerOf. Ports: 0..6 = PFM to other clusters on the
+    same server; 7..14 = uplink P1..P8. See docs/场景4_Sparse_CLOS_512P_设计说明.md.
+    """
+    if npu <= 0 or npu > 512:
+        raise SystemExit("sparse clos ep-size must be in 1..512")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    n_cluster, n_server = 8, 64
+    full_n = n_cluster * n_server
+    # (a,b,is_S,p_a,p_b) — 0-indexed clusters; p_* are 1..8 uplink indices
+    sw_edges = [
+        (0, 1, False, 1, 1),
+        (0, 1, True, 2, 2),
+        (0, 2, False, 3, 1),
+        (0, 3, False, 4, 1),
+        (0, 4, False, 5, 1),
+        (0, 5, False, 6, 1),
+        (0, 6, False, 7, 1),
+        (0, 7, False, 8, 1),
+        (2, 3, False, 2, 2),
+        (2, 3, True, 3, 3),
+        (1, 2, False, 3, 4),
+        (1, 3, False, 4, 4),
+        (1, 4, False, 5, 2),
+        (1, 5, False, 6, 2),
+        (1, 6, False, 7, 2),
+        (1, 7, False, 8, 2),
+        (4, 5, False, 3, 3),
+        (4, 5, True, 4, 4),
+        (2, 4, False, 5, 5),
+        (2, 5, False, 6, 5),
+        (2, 6, False, 7, 3),
+        (2, 7, False, 8, 3),
+        (3, 4, False, 5, 6),
+        (3, 5, False, 6, 6),
+        (3, 6, False, 7, 4),
+        (3, 7, False, 8, 4),
+        (6, 7, False, 5, 5),
+        (6, 7, True, 6, 6),
+        (4, 6, False, 7, 7),
+        (4, 7, False, 8, 7),
+        (5, 6, False, 7, 8),
+        (5, 7, False, 8, 8),
+    ]
+    assert len(sw_edges) == 32
+    # Intra-cluster uplink P index (1..8) per cluster
+    intra_p = {0: 2, 1: 2, 2: 3, 3: 3, 4: 4, 5: 4, 6: 6, 7: 6}
+
+    def npu_id(c: int, s: int) -> int:
+        return c * n_server + s
+
+    def pfm_port(src_c: int, dst_c: int) -> int:
+        # Compact the other-7 clusters into ports 0..6
+        assert src_c != dst_c
+        return dst_c if dst_c < src_c else dst_c - 1
+
+    def uplink_port(p: int) -> int:
+        return 6 + p  # P1..P8 -> ports 7..14
+
+    sw0 = full_n
+    # node.csv: always declare full 512 NPUs + 32 SW; ep-size clips active traffic.
+    with (out_dir / "node.csv").open("w", encoding="utf-8") as f:
+        f.write("nodeId,nodeType,portNum,allocationDelay,forwardDelay\n")
+        f.write(f"0..{full_n - 1},DEVICE,15,10ns,150ns\n")
+        f.write(f"{sw0}..{sw0 + 31},SWITCH,128,10ns,150ns\n")
+
+    # Topology: PFM mesh per server + NPU↔SW uplinks
+    with (out_dir / "topology.csv").open("w", encoding="utf-8") as f:
+        f.write("nodeId1,portId1,nodeId2,portId2,bandwidth,delay\n")
+        for s in range(n_server):
+            for c1 in range(n_cluster):
+                for c2 in range(n_cluster):
+                    if c1 >= c2:
+                        continue
+                    a, b = npu_id(c1, s), npu_id(c2, s)
+                    f.write(
+                        f"{a},{pfm_port(c1, c2)},{b},{pfm_port(c2, c1)},400Gbps,50ns\n"
+                    )
+        for sw_i, (ca, cb, _is_s, pa, pb) in enumerate(sw_edges):
+            sw = sw0 + sw_i
+            for s in range(n_server):
+                # side A: ports 0..63, side B: ports 64..127
+                f.write(
+                    f"{npu_id(ca, s)},{uplink_port(pa)},{sw},{s},400Gbps,50ns\n"
+                )
+                f.write(
+                    f"{npu_id(cb, s)},{uplink_port(pb)},{sw},{64 + s},400Gbps,50ns\n"
+                )
+
+    # Cross (src_c,dst_c) -> (uplink P, sw_index) for non-S edges
+    cross: dict[tuple[int, int], tuple[int, int]] = {}
+    intra_sw: dict[int, int] = {}
+    for sw_i, (ca, cb, is_s, pa, pb) in enumerate(sw_edges):
+        if is_s:
+            intra_sw[ca] = sw_i
+            intra_sw[cb] = sw_i
+            continue
+        cross[(ca, cb)] = (pa, sw_i)
+        cross[(cb, ca)] = (pb, sw_i)
+
+    with (out_dir / "routing_table.csv").open("w", encoding="utf-8") as f:
+        f.write("nodeId,dstNodeId,dstPortId,outPorts,metrics\n")
+        # SW: local downlinks only (unique path)
+        for sw_i, (ca, cb, _is_s, _pa, _pb) in enumerate(sw_edges):
+            sw = sw0 + sw_i
+            for s in range(n_server):
+                f.write(f"{sw},{npu_id(ca, s)},0,{s},3\n")
+                f.write(f"{sw},{npu_id(cb, s)},0,{64 + s},3\n")
+        # NPU routes (only among first npu endpoints used by experiments)
+        for src in range(npu):
+            sc, ss = src // n_server, src % n_server
+            for dst in range(npu):
+                if src == dst:
+                    continue
+                dc, ds = dst // n_server, dst % n_server
+                if ss == ds and sc != dc:
+                    out_p = pfm_port(sc, dc)
+                elif sc == dc and ss != ds:
+                    out_p = uplink_port(intra_p[sc])
+                else:
+                    out_p = uplink_port(cross[(sc, dc)][0])
+                f.write(f"{src},{dst},0,{out_p},3\n")
+
+    write_network_attribute(out_dir / "network_attribute.txt")
+    write_traffic_stub(out_dir)
+    print(f"Wrote sparse-clos scenario4 npu={npu} (full fabric 512) -> {out_dir}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--scenario", type=int, choices=[1, 2, 3, 0], default=1,
-                    help="0=mini, 1/2/3 as experiment design")
+    ap.add_argument("--scenario", type=int, choices=[1, 2, 3, 4, 0], default=1,
+                    help="0=mini, 1/2/3/4 as experiment design")
     ap.add_argument("--ep-size", type=int, default=0)
     ap.add_argument("--out", type=str, default="")
     args = ap.parse_args()
@@ -207,6 +338,10 @@ def main() -> None:
         n = args.ep_size if args.ep_size else 1024
         out = Path(args.out) if args.out else base / f"s3_n{n}"
         gen_clos(out, n, isolated_planes=True)
+    elif args.scenario == 4:
+        n = args.ep_size if args.ep_size else 512
+        out = Path(args.out) if args.out else base / f"s4_n{n}"
+        gen_sparse_clos(out, n)
     else:
         raise SystemExit("bad scenario")
 

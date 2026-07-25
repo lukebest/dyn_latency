@@ -21,8 +21,9 @@ ROOT = Path(__file__).resolve().parent
 NS3 = ROOT / "ns-3-ub"
 ZIPF_S = [0.0, 0.3, 0.7, 0.9]
 # Base schemes; islip is scenario-1 only (single-layer switch scheduler).
-SCHEMES_BASE = ["ub_rg", "ub_rg_pop", "ub_rg_pop2", "packet_spray"]
-SCHEMES_S1 = SCHEMES_BASE + ["islip"]
+# ub_rg_pop2 is packet-engine only (real UbRgSenderAgent universal-GNT path).
+SCHEMES_BASE = ["ub_rg", "ub_rg_pop", "packet_spray"]
+SCHEMES_PACKET_EXTRA = ["ub_rg_pop2"]
 SCENARIOS = (1, 4)
 START_SKEW_US = [0.0, 2.0, 4.0, 8.0]
 TOPK = 8
@@ -67,8 +68,14 @@ class Job:
         return self.results_root / self.exp / self.run_id
 
 
-def schemes_for(scenario: int) -> list[str]:
-    return list(SCHEMES_S1 if scenario == 1 else SCHEMES_BASE)
+def schemes_for(scenario: int, engine: str = "behavioral") -> list[str]:
+    schemes = list(SCHEMES_BASE)
+    if engine == "packet":
+        schemes = schemes + list(SCHEMES_PACKET_EXTRA)
+    if scenario == 1 and engine != "packet":
+        # iSLIP matching exists only in the behavioral dispatch engine.
+        schemes = schemes + ["islip"]
+    return schemes
 
 
 def build_jobs(engine: str) -> list[Job]:
@@ -78,7 +85,7 @@ def build_jobs(engine: str) -> list[Job]:
         for scenario in SCENARIOS:
             for batch in (16, 256):
                 for zipf_s in ZIPF_S:
-                    for scheme in schemes_for(scenario):
+                    for scheme in schemes_for(scenario, engine):
                         for skew in START_SKEW_US:
                             jobs.append(
                                 Job(
@@ -101,7 +108,7 @@ def build_jobs(engine: str) -> list[Job]:
     for scenario, eps in ep_by_scenario.items():
         for ep in eps:
             for zipf_s in ZIPF_S:
-                for scheme in schemes_for(scenario):
+                for scheme in schemes_for(scenario, engine):
                     for skew in START_SKEW_US:
                         jobs.append(
                             Job(
@@ -117,23 +124,24 @@ def build_jobs(engine: str) -> list[Job]:
                             )
                         )
     # S1 iSLIP also covers batch 128/512 (same EP/Zipf/skew grid as batch=256).
-    for ep in ep_by_scenario[1]:
-        for batch in (128, 512):
-            for zipf_s in ZIPF_S:
-                for skew in START_SKEW_US:
-                    jobs.append(
-                        Job(
-                            exp="exp3_roundtrip",
-                            mode="roundtrip",
-                            scenario=1,
-                            scheme="islip",
-                            batch=batch,
-                            zipf_s=zipf_s,
-                            ep_size=ep,
-                            engine=engine,
-                            start_skew_us=skew,
+    if engine != "packet":
+        for ep in ep_by_scenario[1]:
+            for batch in (128, 512):
+                for zipf_s in ZIPF_S:
+                    for skew in START_SKEW_US:
+                        jobs.append(
+                            Job(
+                                exp="exp3_roundtrip",
+                                mode="roundtrip",
+                                scenario=1,
+                                scheme="islip",
+                                batch=batch,
+                                zipf_s=zipf_s,
+                                ep_size=ep,
+                                engine=engine,
+                                start_skew_us=skew,
+                            )
                         )
-                    )
     jobs.sort(
         key=lambda j: (
             j.batch,
@@ -161,7 +169,7 @@ def build_exp3_pdf_jobs(
         for ep in eps:
             for batch in batches:
                 for zipf_s in zipf_list:
-                    for scheme in schemes_for(scenario):
+                    for scheme in schemes_for(scenario, engine):
                         for sd in range(1, seeds + 1):
                             jobs.append(
                                 Job(
@@ -208,8 +216,8 @@ def case_path_for(job: Job) -> str:
         n = job.ep_size if job.ep_size else 128
         return str(base / f"s1_n{n}")
     if job.scenario == 4:
-        n = job.ep_size if job.ep_size else 512
-        return str(base / f"s4_n{n}")
+        # Full Sparse-CLOS fabric; --ep-size clips active NPUs in the app.
+        return str(base / "s4_n512")
     n = 1024
     return str(base / f"s{job.scenario}_n{n}")
 
@@ -222,10 +230,7 @@ def ensure_cases(engine: str) -> None:
         (1, 128),
         (1, 32),
         (1, 64),
-        # Scenario 4 packet cases generated when gen supports --scenario 4.
         (4, 512),
-        (4, 256),
-        (4, 128),
     ]
     for sc, n in needed:
         out = NS3 / "scratch" / "ub_rg_cases" / (f"s{sc}_n{n}")
@@ -320,6 +325,7 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0, help="Limit jobs (debug)")
     ap.add_argument("--exp", type=str, default="", help="Filter exp name prefix")
     ap.add_argument("--scenario", type=int, default=0, help="Filter scenario")
+    ap.add_argument("--scheme", type=str, default="", help="Filter scheme name")
     ap.add_argument("--force", action="store_true", help="Re-run even if summary exists")
     ap.add_argument(
         "--exp3-pdf",
@@ -361,6 +367,8 @@ def main() -> int:
         jobs = [j for j in jobs if j.exp.startswith(args.exp)]
     if args.scenario:
         jobs = [j for j in jobs if j.scenario == args.scenario]
+    if args.scheme:
+        jobs = [j for j in jobs if j.scheme == args.scheme]
     if args.limit:
         jobs = jobs[: args.limit]
 

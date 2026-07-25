@@ -219,13 +219,14 @@ CLI / runner：`--scheme=ub_rg_pop2`。
 
 ### 5.3 逐包
 
-在 ub_rg 路径的 `UbRgSenderAgent` 上增加：
+在 ub_rg 路径的 `UbRgSenderAgent` 上落地（`--scheme=ub_rg_pop2`）：
 
-- `universal_gnt[plane]`、`speculative_inflight`；
-- REQ 登记后尝试投机 `InjectToken`（`injectPort` 可选/忽略）；
-- `HandleGnt`：已投机 → 归还池；未发 → 入 `m_grantQ[port]` 钉扎发送。
+- `SetPop2Enabled` / `universal_gnt[plane]` / `speculative_inflight`；
+- `StartPhase` 发 REQ 后 `TrySpeculate`：池非空则立即按 REQ plane 上联 `InjectToken`（不等真实 GNT）；
+- `HandleGnt`：已投机 → 归还池；未发 → 入 `m_grantQ[port]` 钉扎发送；
+- `UbRgScheduler`：支持 DATA 早于 GNT 到达的 `m_earlyData` 匹配记账（SYNC/credit 仍正确）。
 
-目的侧 `UbRgScheduler`、末跳拦截、SYNC **保持 ub_rg 不变**。
+目的侧调度节拍、末跳拦截、SYNC 报文族与 ub_rg 相同。
 
 ### 5.4 批跑
 

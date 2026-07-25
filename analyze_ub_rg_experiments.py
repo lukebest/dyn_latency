@@ -80,6 +80,7 @@ def load_summaries(results: Path) -> pd.DataFrame:
                 "e2e_us": d.get("e2e_us"),
                 "e2e_step_us": d.get("e2e_step_us"),
                 "start_skew_us": d.get("start_skew_us", 0.0),
+                "seed": d.get("seed", 1),
                 "throughput_GBs": d.get("throughput_GBs"),
                 "lat_mean": d.get("latency_all", {}).get("mean_us"),
                 "lat_p50": d.get("latency_all", {}).get("p50_us"),
@@ -124,7 +125,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
                 ax.plot(
                     g["zipf_s"],
                     g["throughput_GBs"],
-                    ls,
+                    linestyle=ls,
                     color=SCHEME_COLOR[scheme],
                     marker="o",
                     label=f"{scheme} b={batch}",
@@ -152,7 +153,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
             ax.plot(
                 g["zipf_s"],
                 g["hot_p99"],
-                ls,
+                linestyle=ls,
                 color=SCHEME_COLOR[scheme],
                 marker="o",
                 label=f"{scheme} hot p99",
@@ -160,7 +161,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
             ax.plot(
                 g["zipf_s"],
                 g["cold_p99"],
-                ls,
+                linestyle=ls,
                 color=SCHEME_COLOR[scheme],
                 marker="x",
                 label=f"{scheme} cold p99",
@@ -189,7 +190,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
             ax.plot(
                 g["batch"],
                 g["step_us"],
-                ls,
+                linestyle=ls,
                 color=SCHEME_COLOR[scheme],
                 marker="o",
                 label=f"{scheme} step",
@@ -197,7 +198,7 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
             ax.plot(
                 g["batch"],
                 g["cct_us"],
-                ls,
+                linestyle=ls,
                 color=SCHEME_COLOR[scheme],
                 marker="x",
                 label=f"{scheme} cct",
@@ -344,7 +345,7 @@ def plot_exp3(df: pd.DataFrame, figs_dir: Path):
                 ax.plot(
                     g["ep_size"],
                     step,
-                    ls,
+                    linestyle=ls,
                     color=SCHEME_COLOR[scheme],
                     marker="o",
                     label=f"{scheme} S={zipf_s:g}",
@@ -363,13 +364,13 @@ def plot_exp3(df: pd.DataFrame, figs_dir: Path):
     return figs
 
 
-def _plot_density(ax, samples: np.ndarray, ls: str, color: str, label: str) -> None:
+def _plot_density(ax, samples: np.ndarray, ls, color: str, label: str) -> None:
     """Plot a smooth density (KDE if available, else histogram) of CCT samples."""
     samples = np.asarray(samples, dtype=float)
     samples = samples[np.isfinite(samples)]
     lo, hi = float(samples.min()), float(samples.max())
     if hi <= lo:
-        ax.axvline(lo, ls=ls, color=color, alpha=0.8, label=label)
+        ax.axvline(lo, linestyle=ls, color=color, alpha=0.8, label=label)
         return
     span = max(hi - lo, 1e-9)
     try:
@@ -387,12 +388,12 @@ def _plot_density(ax, samples: np.ndarray, ls: str, color: str, label: str) -> N
         if mask.any():
             i0, i1 = int(np.argmax(mask)), int(len(mask) - 1 - np.argmax(mask[::-1]))
             xs, ys = xs[i0 : i1 + 1], ys[i0 : i1 + 1]
-        ax.plot(xs, ys, ls, color=color, label=label)
+        ax.plot(xs, ys, linestyle=ls, color=color, label=label)
     except Exception:
         bins = min(20, max(5, samples.size // 2))
         counts, edges = np.histogram(samples, bins=bins, density=True)
         centers = 0.5 * (edges[:-1] + edges[1:])
-        ax.plot(centers, counts, ls, color=color, marker=".", label=label)
+        ax.plot(centers, counts, linestyle=ls, color=color, marker=".", label=label)
 
 
 def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
@@ -688,6 +689,7 @@ def code_evidence_index_md() -> str:
 | Zipf / TopK → grain | 负载与专家路由 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:260-351` |
 | Spray / RG / POP phase | 三方案排队与授权 | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:438-738` |
 | S4 / iSLIP / POP2 / 空拍排空 / 启动偏差 / GEMV | PathClass、iSLIP、UniversalGntDepth、egress drain idle、start-skew、ComputeGemvUs | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc` |
+| 逐包 POP2 万能 GNT | `SetPop2Enabled` / `TrySpeculate` / `HandleGnt` 归还池 | `ns-3-ub/src/unified-bus/model/protocol/ub-rg-sender-agent.cc` |
 | 行为级 CCT / König | 指标与 summary | `ns-3-ub/scratch/ub_rg-dispatch-experiment.cc:520-538, 730-812, 886-921` |
 | 逐包拓扑 / S3 路由过滤 | Leaf–Spine 与 FIB | `gen_ub_rg_topo.py:47-181`（S3：`144-180`） |
 | 逐包 token / scheduler map | 工作负载与挂接 | `ns-3-ub/src/unified-bus/model/ub-rg-experiment-app.cc:117-407` |
@@ -806,7 +808,7 @@ def topology_and_scheme_md(engine: str) -> str:
 | `ub_request_grant.md` / 设计 | 文档 | 交换机侧分布式 REQ/GNT：每 τ_g 每出口 ≤1、路径钉扎、cursor/SYNC |
 | `ub_rg` | 仿真 scheme | 主协议的落地：目的侧授权节奏 + 源侧 FCFS；行为级折叠控制面为 RTT；逐包走真实 REQ/GNT/SYNC |
 | `ub_rg_pop` | 仿真 scheme | [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md) 的假设模型：行为级为 RG + startup + PullCredit；逐包为 RG 路径 + completion 计时 overlay |
-| `ub_rg_pop2` | 仿真 scheme | [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)：同 ub_rg 目的侧；源侧每 Plane 万能 GNT 池掩盖启动 RTT；投机 DATA 无钉扎 |
+| `ub_rg_pop2` | 仿真 scheme | [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)：同 ub_rg 目的侧；源侧每 Plane 万能 GNT 池；**工作矩阵 KPI 取自逐包** `UbRgSenderAgent`（`results/ub_rg_packet`） |
 | `packet_spray` | 仿真 scheme | 无授权准入；源上联自由注入；目的/中段 FIFO；分析阶段叠软件屏障 |
 | `islip` | 仿真 scheme | 与 `ub_rg` 相同：路径钉扎 + REQ/GNT + RTT/barrier；仅将每出口独立 RR 换成每 τ_g 的 iSLIP matching（对齐 `ub_request_grant.md` §2.7） |
 
@@ -1122,6 +1124,8 @@ def write_report(
             "目的侧 1 grain/τ_g + credit window + RR；源侧 FCFS grant 队列\n"
             "- UB_RG_POP：复用 RG 路径和相同 credit，只在 completion 统计上追加单向 startup；"
             "未实现独立 Push/Pull 数据通路（见 [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md)）\n"
+            "- UB_RG_POP2：源侧万能 GNT 池 + 投机 DATA；调度器 `m_earlyData` 匹配早到 DATA；"
+            "启动偏差 N(0,σ²) 与行为级对齐\n"
             "- SYNC：各调度器 LOCAL → 聚合 NPU(member0) → GLOBAL 广播（与文档 §4.9 聚合点差异见正文）\n"
             "- transport retrans 已启用；省略：完整 POP 状态机、预补偿、多世代窗口、PHASE 管理面\n"
             "- Packet Spray：`UsePacketSpray` + 自由注入；软件屏障在分析阶段叠加\n"
@@ -1136,9 +1140,9 @@ def write_report(
             "出口 DATA 深度≥3 时调度器可空拍排空\n"
             "- UB_RG_POP：同目的侧节奏；startup = RTT_rg + oneWay（Push→Grant→Pull）；"
             "PullCredit 窗口保稳态流水（见 [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md)）\n"
-            "- UB_RG_POP2：同 ub_rg 目的侧与 RTT_rg；源侧每 Plane 万能 GNT 池 "
-            "N=⌈RTT_rg/τ_g⌉，前 N grain 零等待投机注入（无钉扎）；"
-            "真实 GNT 对已投机 grain 仅归还池（见 [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)）\n"
+            "- UB_RG_POP2：**工作任务采用逐包仿真**（`UbRgSenderAgent` 万能 GNT + "
+            "调度器 early-DATA 记账）；本报告将 `results/ub_rg_packet` 的 pop2 行并入；"
+            "N=⌈RTT_rg/τ_g⌉（见 [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)）\n"
             "- Packet Spray：自由注入；软件屏障在分析阶段叠加\n"
             "- 场景4 按 Sparse CLOS 路径类建模；场景1 另跑 iSLIP（同 ub_rg，仅 matching 不同）\n"
             "- 启动偏差：每 NPU ~N(0,σ²) 后平移至最早为 0；σ∈{0,2,4,8}µs\n"
@@ -1167,6 +1171,13 @@ def write_report(
             "行为级引擎覆盖完整主矩阵与 PDF。"
             "逐包目前只用于协议调试，不得单独作为绝对值校准。"
             "实验3 系统 CCT PDF 若本引擎样本未齐，报告自动回退到行为级多 seed 结果。\n"
+        )
+    else:
+        lines.append(
+            "> **`ub_rg_pop2` 例外**：工作矩阵优先采用逐包 `UbRgSenderAgent` KPI"
+            "（`results/ub_rg_packet`）；场景1已切逐包，场景4在逐包 Sparse-CLOS "
+            "路径未完全收敛前以行为级结果补洞。其余 scheme 仍为行为级；"
+            "跨引擎比值请谨慎解读。\n"
         )
 
     def table_for(exp: str, scenario: int, batch: int | None = None) -> tuple[str, int | None]:
@@ -1453,31 +1464,87 @@ def write_report(
     print(f"Wrote {csv_path} ({len(df)} rows), {len(fig_paths)} figures")
 
 
+def _filter_matrix_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+    out = df
+    if "run_id" in out.columns and out["run_id"].astype(str).str.contains("_nsk", regex=False).any():
+        out = out[out["run_id"].astype(str).str.contains("_nsk", regex=False)].copy()
+    if "batch" in out.columns and (out["batch"] <= 512).any():
+        out = out[out["batch"] <= 512].copy()
+    return out
+
+
+def _packet_pop2_complete(row: pd.Series) -> bool:
+    """Drop watchdog-truncated packet POP2 rows (common on Sparse-CLOS S4)."""
+    tok = row.get("total_tokens")
+    batch = row.get("batch")
+    ep = row.get("ep_size")
+    if tok is None or batch is None or ep is None or pd.isna(tok) or pd.isna(batch) or pd.isna(ep):
+        return False
+    # Full-matrix MoE: NPU × batch × TopK(=8). Exp3 clipped EP uses ep_size.
+    expected = int(ep) * int(batch) * 8
+    if expected <= 0:
+        return False
+    # Allow slight under-count from late losses; reject Sparse-CLOS stalls (~few %).
+    return int(tok) >= int(0.90 * expected)
+
+
+def merge_packet_pop2(beh: pd.DataFrame, pkt: pd.DataFrame | None) -> pd.DataFrame:
+    """Prefer packet POP2 for work-matrix KPI; keep behavioral POP2 only as gap-fill."""
+    if beh is None or beh.empty:
+        return beh
+    out = beh[beh["scheme"] != "ub_rg_pop2"].copy()
+    beh_pop2 = beh[beh["scheme"] == "ub_rg_pop2"].copy()
+    pkt_pop2 = (
+        pkt[pkt["scheme"] == "ub_rg_pop2"].copy()
+        if pkt is not None and not pkt.empty and "scheme" in pkt.columns
+        else beh_pop2.iloc[0:0].copy()
+    )
+    if not pkt_pop2.empty and "total_tokens" in pkt_pop2.columns:
+        before = len(pkt_pop2)
+        pkt_pop2 = pkt_pop2[pkt_pop2.apply(_packet_pop2_complete, axis=1)].copy()
+        dropped = before - len(pkt_pop2)
+        if dropped:
+            print(f"Dropped incomplete packet ub_rg_pop2 rows: {dropped}")
+    if pkt_pop2.empty:
+        return pd.concat([out, beh_pop2], ignore_index=True) if not beh_pop2.empty else out
+
+    key_cols = [
+        c
+        for c in ("exp", "scenario", "scheme", "batch", "zipf_s", "ep_size", "start_skew_us", "seed")
+        if c in pkt_pop2.columns and (beh_pop2.empty or c in beh_pop2.columns)
+    ]
+    if not beh_pop2.empty and key_cols:
+        covered = set(map(tuple, pkt_pop2[key_cols].itertuples(index=False, name=None)))
+        fill = beh_pop2[
+            ~beh_pop2[key_cols].apply(lambda r: tuple(r) in covered, axis=1)
+        ]
+        pop2 = pd.concat([pkt_pop2, fill], ignore_index=True)
+    else:
+        pop2 = pkt_pop2
+    return pd.concat([out, pop2], ignore_index=True)
+
+
 def _analyze_one(results: Path) -> int:
     figs_dir = results / "figures"
     figs_dir.mkdir(parents=True, exist_ok=True)
-    df = load_summaries(results)
+    df = _filter_matrix_df(load_summaries(results))
     if df.empty:
         print("No summaries found under", results)
         return 1
-    # Prefer Normal-skew runs (_nsk*); drop legacy Uniform (_sk*) and batch=1024.
-    if "run_id" in df.columns and df["run_id"].astype(str).str.contains("_nsk", regex=False).any():
-        df = df[df["run_id"].astype(str).str.contains("_nsk", regex=False)].copy()
-    if "batch" in df.columns and (df["batch"] <= 512).any():
-        df = df[df["batch"] <= 512].copy()
 
     peer = None
     other = ROOT / "results" / ("ub_rg" if results.name == "ub_rg_packet" else "ub_rg_packet")
     if other.exists():
-        peer = load_summaries(other)
-        if peer is not None and not peer.empty:
-            if (
-                "run_id" in peer.columns
-                and peer["run_id"].astype(str).str.contains("_nsk", regex=False).any()
-            ):
-                peer = peer[peer["run_id"].astype(str).str.contains("_nsk", regex=False)].copy()
-            if "batch" in peer.columns and (peer["batch"] <= 512).any():
-                peer = peer[peer["batch"] <= 512].copy()
+        peer = _filter_matrix_df(load_summaries(other))
+
+    # Main report lives under behavioral results but POP2 KPI come from packet.
+    if results.name == "ub_rg":
+        before = len(df)
+        df = merge_packet_pop2(df, peer)
+        n_pop2 = int((df["scheme"] == "ub_rg_pop2").sum()) if "scheme" in df.columns else 0
+        print(f"Merged packet ub_rg_pop2 into behavioral report: rows {before} -> {len(df)} (pop2={n_pop2})")
 
     figs = []
     figs += plot_exp12(df, "exp1_dispatch", "Exp1 Dispatch", figs_dir)
@@ -1492,7 +1559,12 @@ def _analyze_one(results: Path) -> int:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--engine", choices=["behavioral", "packet", "both"], default="packet")
+    ap.add_argument(
+        "--engine",
+        choices=["behavioral", "packet", "both"],
+        default="behavioral",
+        help="behavioral (default) merges packet POP2 into the main report",
+    )
     ap.add_argument("--results", type=str, default="", help="Override results directory")
     args = ap.parse_args()
 
@@ -1500,8 +1572,8 @@ def main():
     if args.results:
         targets = [Path(args.results)]
     elif args.engine == "both":
-        # Behavioral first; packet last so docs/UB_RG仿真报告.* reflects packet.
-        targets = [ROOT / "results" / "ub_rg", ROOT / "results" / "ub_rg_packet"]
+        # Behavioral last so docs/UB_RG仿真报告.* is the hybrid main report.
+        targets = [ROOT / "results" / "ub_rg_packet", ROOT / "results" / "ub_rg"]
     elif args.engine == "behavioral":
         targets = [ROOT / "results" / "ub_rg"]
     else:
