@@ -10,6 +10,8 @@ ROOT = Path(__file__).resolve().parent
 
 
 def write_network_attribute(out: Path) -> None:
+    # Buffer sizing: 256KB per 400Gbps port/VL (exclusive CBFC).
+    # CbfcInitCreditCell = floor(256KiB / 160B cell) = 1638.
     out.write_text(
         """default ns3::UbApp::EnableMultiPath "false"
 default ns3::UbApp::UseShortestPaths "true"
@@ -17,6 +19,11 @@ default ns3::UbApp::UsePacketSpray "false"
 default ns3::UbLink::Delay "+50ns"
 default ns3::UbPort::UbDataRate "400Gbps"
 default ns3::UbPort::UbInterframeGap "+0ns"
+default ns3::UbPort::CbfcInitCreditCell "1638"
+default ns3::UbPort::PfcUpThld "204800"
+default ns3::UbPort::PfcLowThld "163840"
+default ns3::UbQueueManager::ReservePerQueueBytes "262144"
+default ns3::UbQueueManager::SharedPoolBytes "0"
 default ns3::UbSwitch::FlowControl "CBFC"
 default ns3::UbSwitch::InPortProcessingDelay "+150ns"
 default ns3::UbSwitchAllocator::AllocationTime "+10ns"

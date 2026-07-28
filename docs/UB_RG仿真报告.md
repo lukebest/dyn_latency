@@ -2,11 +2,11 @@
 > **可信性状态：实现证据存在，性能结论未验证。** 行为级结果仅作为网络机制假设；方案间路由、path delay、jitter 与 barrier 混杂尚未消除，逐包性能矩阵也未通过完成守恒与跨引擎校验。绝对硬件时延与完整POP硅片实现不得据此下结论；Exp3 GEMV 为标定服务模型。详见[UB_RG仿真可信性评估报告](./UB_RG仿真可信性评估报告.html)。
 ## 1. 主要实验结论
 > 结论适用于场景1/4；Exp1/2 为网络子系统；Exp3 含 Zipf×batch GEMV straggler；启动偏差为 N(0,σ²)，σ∈{0,2,4,8} µs。
-- **配置包输出差异**：Exp1 三方案共有参数格中，POP/RG 平均为 **1.002×**，Spray/RG 平均为 **0.267×**，POP2/RG 平均为 **29.447×**。这是当前配置包的联合差异；plane、path delay、jitter 和 barrier 尚未统一，不能把比值单独归因于目的侧配速（见 §1.1）。
+- **配置包输出差异**：Exp1 三方案共有参数格中，POP/RG 平均为 **1.002×**，Spray/RG 平均为 **0.267×**，POP2/RG 平均为 **1.000×**。这是当前配置包的联合差异；plane、path delay、jitter 和 barrier 尚未统一，不能把比值单独归因于目的侧配速（见 §1.1）。
 - **POP 启动开销会被负载摊薄**：batch=16 时 POP/RG=**1.003×**，batch=256 时为 **1.000×**；结果符合“多一次 one-way 启动、稳态节拍与 RG 相同”的模型预期。
 - **场景1 iSLIP（匹配对照）**：与 `ub_rg` 共路径钉扎/REQ-GNT/RTT/barrier，仅 SW 仲裁不同；Exp1 iSLIP/RG 平均 **1.002×**（中位 1.000×）。batch=16 为 **0.999×**，batch=256 为 **1.005×**。这是文档 §2.7「每 τ_g matching」相对当前模型「每出口独立 RR」的对照。
 - **Exp3（S1）iSLIP/RG** 平均 **1.141×**。 Exp3 端到端中 GEMV 约占 e2e 的 **19%**，调度差异被计算 straggler 摊薄，故 iSLIP≈RG。 iSLIP 另覆盖 batch∈{128,256,512}（与 RG 共有格上比值如下）。
-- **瓶颈下界**：CCT/König 中位数为 ub_rg=7.694、ub_rg_pop=7.703、ub_rg_pop2=7.760、packet_spray=1.480、islip=9.292；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。
+- **瓶颈下界**：CCT/König 中位数为 ub_rg=7.694、ub_rg_pop=7.703、ub_rg_pop2=7.721、packet_spray=1.480、islip=9.292；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。
 - **拓扑范围**：主矩阵为场景1（Clos+iSLIP）与场景4（Sparse CLOS 512P）。
 - **Exp3**：端到端含 GEMV；`gemv_us` 随 Zipf 热点与 batch 变化。
 - 当前 UB_RG 配置包的 CCT 更接近自定义 König 下界；与 Spray 的比值是**配置包联合差异**，不是“仅改目的侧准入”的受控因果结论（原因见 §1.1）。
@@ -93,7 +93,7 @@
 | `ub_request_grant.md` / 设计 | 文档 | 交换机侧分布式 REQ/GNT：每 τ_g 每出口 ≤1、路径钉扎、cursor/SYNC |
 | `ub_rg` | 仿真 scheme | 主协议的落地：目的侧授权节奏 + 源侧 FCFS；行为级折叠控制面为 RTT；逐包走真实 REQ/GNT/SYNC |
 | `ub_rg_pop` | 仿真 scheme | [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md) 的假设模型：行为级为 RG + startup + PullCredit；逐包为 RG 路径 + completion 计时 overlay |
-| `ub_rg_pop2` | 仿真 scheme | [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)：同 ub_rg 目的侧；源侧每 Plane 万能 GNT 池；**工作矩阵 KPI 取自逐包** `UbRgSenderAgent`（`results/ub_rg_packet`） |
+| `ub_rg_pop2` | 仿真 scheme | [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)：同 ub_rg 目的侧；源侧每 Plane 万能 GNT 池（与同引擎其它 scheme 比对） |
 | `packet_spray` | 仿真 scheme | 无授权准入；源上联自由注入；目的/中段 FIFO；分析阶段叠软件屏障 |
 | `islip` | 仿真 scheme | 与 `ub_rg` 相同：路径钉扎 + REQ/GNT + RTT/barrier；仅将每出口独立 RR 换成每 τ_g 的 iSLIP matching（对齐 `ub_request_grant.md` §2.7） |
 
@@ -128,9 +128,10 @@ CLI：`--scheme=ub_rg|ub_rg_pop|ub_rg_pop2|packet_spray|islip`；`--start-skew-u
 ### 2.4 模型假设与简化
 - 端口 400Gbps（有效 50GB/s），grain = 7KB，τ_g ≈ 143.36 ns
 - 链路建模为串行化服务器 + FIFO；交换机直通 150 ns/跳，传播 50 ns/跳
+- 行为级**不**建模交换机 byte buffer；逐包引擎为每入口 (port, VL) **256KB @ 400Gbps**（CBFC 初始信用 1638 cell，SharedPool=0）
 - UB_RG：目的侧按 1 grain/τ_g 授权节奏 + 源端口 FCFS；出口 DATA 深度≥3 时调度器可空拍排空
 - UB_RG_POP：同目的侧节奏；startup = RTT_rg + oneWay（Push→Grant→Pull）；PullCredit 窗口保稳态流水（见 [SHMEM-POP技术分档.md](./SHMEM-POP技术分档.md)）
-- UB_RG_POP2：**工作任务采用逐包仿真**（`UbRgSenderAgent` 万能 GNT + 调度器 early-DATA 记账）；本报告将 `results/ub_rg_packet` 的 pop2 行并入；N=⌈RTT_rg/τ_g⌉（见 [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)）
+- UB_RG_POP2：同 ub_rg 目的侧与 RTT_rg；源侧每 Plane 万能 GNT 池 N=⌈RTT_rg/τ_g⌉，前 N grain 零等待投机注入；真实 GNT 对已投机 grain 仅归还池（见 [UB_RG_POP2方案设计.md](./UB_RG_POP2方案设计.md)）；**方案对比仅在同引擎内进行**
 - Packet Spray：自由注入；软件屏障在分析阶段叠加
 - 场景4 按 Sparse CLOS 路径类建模；场景1 另跑 iSLIP（同 ub_rg，仅 matching 不同）
 - 启动偏差：每 NPU ~N(0,σ²) 后平移至最早为 0；σ∈{0,2,4,8}µs
@@ -146,7 +147,7 @@ CLI：`--scheme=ub_rg|ub_rg_pop|ub_rg_pop2|packet_spray|islip`；`--start-skew-u
 
 引擎：**behavioral**；成功汇总运行数：**52726**。原始结果：`results/ub_rg/`。
 > 上表对齐当前 runner：仅场景1+4；启动偏差为 N(0,σ²)（σ∈{0,2,4,8}）；场景1 含 iSLIP；Exp3 输出 gemv_us/e2e_us。旧场景2/3 结果请忽略。
-> **`ub_rg_pop2` 例外**：工作矩阵优先采用逐包 `UbRgSenderAgent` KPI（`results/ub_rg_packet`）；场景1已切逐包，场景4在逐包 Sparse-CLOS 路径未完全收敛前以行为级结果补洞。其余 scheme 仍为行为级；跨引擎比值请谨慎解读。
+> 方案对比（含 `ub_rg_pop2`）均取自**本引擎**行为级结果，不与逐包 KPI 混比。逐包 POP2 仅作协议路径验证，见 `results/ub_rg_packet`。
 ## 3. 实验1：倾斜专家流量下的 Dispatch
 ### 3.1 场景1
 **batch=256 对比表**
@@ -155,10 +156,10 @@ CLI：`--scheme=ub_rg|ub_rg_pop|ub_rg_pop2|packet_spray|islip`；`--start-skew-u
          cct_us                                             hot_p99                                             lat_p99                                             step_us                                            throughput_GBs
 scheme    islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2    islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2    islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2    islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2          islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2
 zipf_s
-0.0      323.52        93.44   318.36    318.66   11529.62   284.43        86.59   282.97    283.27      13.08   239.34        79.30   236.66    236.96      13.85   323.92        95.44   318.76    319.06   11530.02        9833.23     20413.70  9952.97   9924.04     162.98
-0.3      816.29       163.74   815.25    815.55   11473.99   720.80       145.81   717.96    718.26      24.94   265.66       106.45   262.82    263.12      16.49   816.69       165.74   815.65    815.95   11474.39        3850.30     11529.51  3852.20   3847.88     163.77
-0.7     2351.98       376.30  2339.60   2339.90   11403.35  2171.01       345.30  2165.76   2166.06      77.06   630.97       253.98   629.04    629.34      43.69  2352.38       378.30  2340.00   2340.30   11403.75        1337.44      4996.34  1340.14   1339.62     164.78
-0.9     3204.80       502.33  3212.09   3212.39   22885.67  3035.09       464.11  3028.17   3028.47      95.60  1062.32       350.08  1058.67   1058.97      72.87  3205.20       504.33  3212.49   3212.79   22886.07         981.07      3741.73   980.22    979.94      84.60
+0.0      323.52        93.44   318.36    318.66     318.30   284.43        86.59   282.97    283.27     282.98   239.34        79.30   236.66    236.96     236.63   323.92        95.44   318.76    319.06     318.70        9833.23     20413.70  9952.97   9924.04    9958.56
+0.3      816.29       163.74   815.25    815.55     815.20   720.80       145.81   717.96    718.26     717.96   265.66       106.45   262.82    263.12     262.79   816.69       165.74   815.65    815.95     815.60        3850.30     11529.51  3852.20   3847.88    3853.03
+0.7     2351.98       376.30  2339.60   2339.90    2339.55  2171.01       345.30  2165.76   2166.06    2165.75   630.97       253.98   629.04    629.34     629.11  2352.38       378.30  2340.00   2340.30    2339.95        1337.44      4996.34  1340.14   1339.62    1340.24
+0.9     3204.80       502.33  3212.09   3212.39    3212.03  3035.09       464.11  3028.17   3028.47    3028.16  1062.32       350.08  1058.67   1058.97    1058.73  3205.20       504.33  3212.49   3212.79    3212.43         981.07      3741.73   980.22    979.94     980.28
 ```
 ![exp1_dispatch_s1_bar_step_vs_batch_s0.7_nsk0.png](../results/ub_rg/figures/exp1_dispatch_s1_bar_step_vs_batch_s0.7_nsk0.png)
 ![exp1_dispatch_s1_bar_step_vs_batch_s0.7_nsk2.png](../results/ub_rg/figures/exp1_dispatch_s1_bar_step_vs_batch_s0.7_nsk2.png)
@@ -207,13 +208,13 @@ zipf_s
 **batch=256 对比表**
 
 ```
-         cct_us                                              hot_p99                                             lat_p99                                            step_us                                             throughput_GBs
-scheme    islip packet_spray    ub_rg ub_rg_pop  ub_rg_pop2    islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2    islip packet_spray   ub_rg ub_rg_pop ub_rg_pop2    islip packet_spray    ub_rg ub_rg_pop  ub_rg_pop2          islip packet_spray     ub_rg ub_rg_pop ub_rg_pop2
+         cct_us                                             hot_p99                                             lat_p99                                            step_us                                            throughput_GBs
+scheme    islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2    islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2    islip packet_spray   ub_rg ub_rg_pop ub_rg_pop2    islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2          islip packet_spray     ub_rg ub_rg_pop ub_rg_pop2
 zipf_s
-0.0      321.23        88.39   313.01    313.31    11480.22   288.96        52.72   282.44    282.74      15.31   238.56        75.10  235.58    235.88      16.09   321.63        90.39   313.41    313.71    11480.62        9862.54     21595.10  10182.96  10152.52     163.68
-0.3      820.98       155.26   528.47    528.77   377907.40   721.23       121.29   478.35    478.65      22.16   264.83       139.49  261.39    261.69      17.07   821.38       157.26   528.87    529.17   377907.80        3844.26     12143.26   5368.41   5360.82       4.97
-0.7     2352.64       364.14   937.78    938.08  5650904.50  2173.99       331.60   901.91    902.21      39.89   632.32       343.21  576.09    576.39      25.87  2353.04       366.14   938.18    938.48  5650904.90        1338.88      5163.45   2515.12   2513.76       0.33
-0.9     3206.56       488.58  1178.87   1179.17  7420708.58  3038.88       457.04  1141.97   1142.27      54.86  1062.92       465.49  790.39    790.69      35.73  3206.96       490.58  1179.27   1179.57  7420708.98         981.24      3847.30   1951.18   1950.39       0.24
+0.0      321.23        88.39   313.01    313.31     312.97   288.96        52.72   282.44    282.74     282.44   238.56        75.10  235.58    235.88     235.61   321.63        90.39   313.41    313.71     313.37        9862.54     21595.10  10182.96  10152.52   10187.07
+0.3      820.98       155.26   528.47    528.77     528.44   721.23       121.29   478.35    478.65     478.31   264.83       139.49  261.39    261.69     261.44   821.38       157.26   528.87    529.17     528.84        3844.26     12143.26   5368.41   5360.82    5368.16
+0.7     2352.64       364.14   937.78    938.08     937.74  2173.99       331.60   901.91    902.21     901.91   632.32       343.21  576.09    576.39     576.17  2353.04       366.14   938.18    938.48     938.14        1338.88      5163.45   2515.12   2513.76    2515.30
+0.9     3206.56       488.58  1178.87   1179.17    1178.85  3038.88       457.04  1141.97   1142.27    1141.95  1062.92       465.49  790.39    790.69     790.40  3206.96       490.58  1179.27   1179.57    1179.25         981.24      3847.30   1951.18   1950.39    1951.19
 ```
 ![exp2_combine_s1_bar_step_vs_batch_s0.7_nsk0.png](../results/ub_rg/figures/exp2_combine_s1_bar_step_vs_batch_s0.7_nsk0.png)
 ![exp2_combine_s1_bar_step_vs_batch_s0.7_nsk2.png](../results/ub_rg/figures/exp2_combine_s1_bar_step_vs_batch_s0.7_nsk2.png)
@@ -460,7 +461,7 @@ scenario ep_size batch zipf_s
 - **场景1** 平均 step（三方案共有参数格）：UB_RG=898.8µs vs POP=899.1µs（POP/RG=1.00×） vs Spray=160.5µs（Spray/RG=0.18×）
 - **场景1** ub_rg CCT/König：mean=7.846，median=9.047
 - **场景1** ub_rg_pop CCT/König：mean=7.864，median=9.049
-- **场景1** ub_rg_pop2 CCT/König：mean=499.231，median=251.246
+- **场景1** ub_rg_pop2 CCT/König：mean=7.850，median=9.047
 - **场景1** packet_spray CCT/König：mean=2.282，median=1.492
 - **场景1** islip CCT/König：mean=7.862，median=9.055
 - **场景4** 平均 step（三方案共有参数格）：UB_RG=2671.7µs vs POP=2672.1µs（POP/RG=1.00×） vs Spray=377.1µs（Spray/RG=0.14×）
@@ -470,29 +471,29 @@ scenario ep_size batch zipf_s
 - **场景4** packet_spray CCT/König：mean=2.070，median=1.195
 ## 7. 双引擎对比（逐包 vs 行为级）
 在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。
-对齐样本 **448** 组；step 比值（packet/behavioral）均值=210.138，中位数=61.841。
+对齐样本 **896** 组；step 比值（packet/behavioral）均值=730.847，中位数=102.781。
 ```
           exp  scenario     scheme     mode  batch  zipf_s  ep_size  step_packet  p99_packet  step_behav  p99_behav  step_ratio
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    10354.029       6.896      23.390     10.992     442.675
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    10354.029       6.896     123.718     58.704      83.690
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    10354.029       6.896     132.583     66.333      78.095
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    10354.029       6.896     153.529     82.660      67.440
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20355.903       3.518      23.390     10.992     870.294
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20355.903       3.518     123.718     58.704     164.534
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20355.903       3.518     132.583     66.333     153.533
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20355.903       3.518     153.529     82.660     132.586
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20358.046       2.208      23.390     10.992     870.386
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20358.046       2.208     123.718     58.704     164.552
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20358.046       2.208     132.583     66.333     153.549
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20358.046       2.208     153.529     82.660     132.600
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20363.885       2.179      23.390     10.992     870.635
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20363.885       2.179     123.718     58.704     164.599
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20363.885       2.179     132.583     66.333     153.593
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.3      512    20363.885       2.179     153.529     82.660     132.638
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.7      512    10357.192      28.186      97.971     70.418     105.717
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.7      512    10357.192      28.186     547.030    382.739      18.933
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.7      512    10357.192      28.186     557.359    390.180      18.583
-exp1_dispatch         4 ub_rg_pop2 dispatch     16     0.7      512    10357.192      28.186     579.356    405.942      17.877
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128      359.980       3.831      15.336      9.323      23.473
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128      359.980       3.831      80.499     47.999       4.472
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128      359.980       3.831      89.465     54.510       4.024
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128      359.980       3.831     107.397     68.633       3.352
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10359.829       2.134      15.336      9.323     675.531
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10359.829       2.134      80.499     47.999     128.695
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10359.829       2.134      89.465     54.510     115.798
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10359.829       2.134     107.397     68.633      96.463
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10358.436       2.056      15.336      9.323     675.440
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10358.436       2.056      80.499     47.999     128.678
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10358.436       2.056      89.465     54.510     115.782
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10358.436       2.056     107.397     68.633      96.450
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10359.981       2.018      15.336      9.323     675.540
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10359.981       2.018      80.499     47.999     128.697
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10359.981       2.018      89.465     54.510     115.799
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.3      128    10359.981       2.018     107.397     68.633      96.465
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.7      128      373.221       4.428      37.704     29.222       9.899
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.7      128      373.221       4.428     197.309    154.816       1.892
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.7      128      373.221       4.428     203.854    160.759       1.831
+exp1_dispatch         1 ub_rg_pop2 dispatch     16     0.7      128      373.221       4.428     216.123    171.914       1.727
 ```
 若该比值显著偏离 1，不能仅解释为“逐包栈静态开销”。当前逐包实现还含50µs REQ pacing、10ms stale-credit 回收，且两引擎的本地专家和场景2/3plane 映射不一致；在统一输入、完成守恒和异常门禁通过前，这里是**交叉验证失败证据**，不是行为级绝对值校准。
 - **behavioral** 同参数格平均：POP/RG=1.001×，Spray/RG=0.347×

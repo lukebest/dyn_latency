@@ -21,9 +21,8 @@ ROOT = Path(__file__).resolve().parent
 NS3 = ROOT / "ns-3-ub"
 ZIPF_S = [0.0, 0.3, 0.7, 0.9]
 # Base schemes; islip is scenario-1 only (single-layer switch scheduler).
-# ub_rg_pop2 is packet-engine only (real UbRgSenderAgent universal-GNT path).
-SCHEMES_BASE = ["ub_rg", "ub_rg_pop", "packet_spray"]
-SCHEMES_PACKET_EXTRA = ["ub_rg_pop2"]
+# Compare schemes within one engine (behavioral main matrix; packet optional).
+SCHEMES_BASE = ["ub_rg", "ub_rg_pop", "ub_rg_pop2", "packet_spray"]
 SCENARIOS = (1, 4)
 START_SKEW_US = [0.0, 2.0, 4.0, 8.0]
 TOPK = 8
@@ -70,8 +69,6 @@ class Job:
 
 def schemes_for(scenario: int, engine: str = "behavioral") -> list[str]:
     schemes = list(SCHEMES_BASE)
-    if engine == "packet":
-        schemes = schemes + list(SCHEMES_PACKET_EXTRA)
     if scenario == 1 and engine != "packet":
         # iSLIP matching exists only in the behavioral dispatch engine.
         schemes = schemes + ["islip"]
