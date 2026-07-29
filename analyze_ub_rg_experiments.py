@@ -17,6 +17,8 @@ import pandas as pd  # noqa: E402
 ROOT = Path(__file__).resolve().parent
 REPORT = ROOT / "docs" / "UB_RG仿真报告.md"
 SCHEMES = ("ub_rg", "ub_rg_pop", "ub_rg_pop2", "packet_spray", "islip")
+# Minimum fraction of expected tokens a run must complete to be comparable.
+COMPLETION_MIN = 0.99
 SCHEME_LS = {
     "ub_rg": "-",
     "ub_rg_pop": "-.",
@@ -71,6 +73,8 @@ def load_summaries(results: Path) -> pd.DataFrame:
                 "zipf_s": d.get("zipf_s"),
                 "ep_size": d.get("ep_size"),
                 "total_tokens": d.get("total_tokens"),
+                "expected_tokens": d.get("expected_tokens"),
+                "completion_frac": d.get("completion_frac"),
                 "konig_us": d.get("konig_us"),
                 "rtt_us": d.get("rtt_us"),
                 "barrier_us": d.get("barrier_us"),
@@ -1475,6 +1479,17 @@ def _filter_matrix_df(df: pd.DataFrame) -> pd.DataFrame:
         out = out[out["run_id"].astype(str).str.contains("_nsk", regex=False)].copy()
     if "batch" in out.columns and (out["batch"] <= 512).any():
         out = out[out["batch"] <= 512].copy()
+    # A watchdog cut-off still writes a CCT, measured over whatever finished. Such
+    # a run reads as extremely fast and is not comparable to a complete one.
+    if "completion_frac" in out.columns:
+        frac = pd.to_numeric(out["completion_frac"], errors="coerce")
+        dropped = int((frac.notna() & (frac < COMPLETION_MIN)).sum())
+        if dropped:
+            print(
+                f"Excluded {dropped} run(s) with completion_frac < {COMPLETION_MIN} "
+                "(incomplete phase; CCT not comparable)"
+            )
+        out = out[frac.isna() | (frac >= COMPLETION_MIN)].copy()
     return out
 
 
