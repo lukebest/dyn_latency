@@ -223,13 +223,21 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
 
 
 def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
-    """Grouped bar charts comparing schemes for Exp1/Exp2."""
+    """Grouped bar charts comparing schemes for Exp1/Exp2.
+
+    One figure per (scenario, batch, skew): batch=16 and batch=256 are never
+    co-plotted (linear y makes the smaller batch unreadable). Y-axis is log so
+    packet_spray vs ub_rg remains comparable without dwarfing the RG bars.
+    """
     sub = df[df["exp"] == exp].copy()
     if sub.empty:
         return []
     if "start_skew_us" not in sub.columns:
         sub["start_skew_us"] = 0.0
     sub["start_skew_us"] = sub["start_skew_us"].fillna(0.0)
+    # Drop legacy cross-batch bar figures (batch 16+256 on one axis).
+    for stale in figs_dir.glob(f"{exp}_s*_bar_step_vs_batch_*.png"):
+        stale.unlink()
     figs = []
     for scenario in sorted(sub["scenario"].unique()):
         s = sub[sub["scenario"] == scenario]
@@ -239,7 +247,7 @@ def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
         batches = sorted(s["batch"].unique())
         skews = sorted(s["start_skew_us"].unique())
         zipfs = sorted(s["zipf_s"].unique())
-        # Representative cells: each batch × each skew, bars over schemes × zipf
+        # One bar chart per batch × skew (schemes × Zipf).
         for batch in batches:
             for skew in skews:
                 cell = s[(s["batch"] == batch) & np.isclose(s["start_skew_us"], skew)]
@@ -252,7 +260,9 @@ def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
                     ys = []
                     for zs in zipfs:
                         g = cell[(cell["scheme"] == scheme) & np.isclose(cell["zipf_s"], zs)]
-                        ys.append(float(g["step_us"].mean()) if not g.empty else np.nan)
+                        v = float(g["step_us"].mean()) if not g.empty else np.nan
+                        # Log scale rejects non-positive heights.
+                        ys.append(v if (v == v and v > 0) else np.nan)
                     ax.bar(
                         x + i * width - 0.4 + width / 2,
                         ys,
@@ -262,12 +272,13 @@ def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
                     )
                 ax.set_xticks(x)
                 ax.set_xticklabels([f"{z:g}" for z in zipfs])
+                ax.set_yscale("log")
                 style_ax(
                     ax,
                     f"{tag} S{int(scenario)} bar: step_us vs Zipf "
-                    f"(batch={int(batch)}, σ={skew:g}µs)",
+                    f"(batch={int(batch)}, σ={skew:g}µs, log y)",
                     "Zipf S",
-                    "Step (µs)",
+                    "Step (µs, log)",
                 )
                 path = figs_dir / (
                     f"{exp}_s{int(scenario)}_bar_step_vs_zipf"
@@ -277,45 +288,6 @@ def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
                 fig.savefig(path, dpi=140)
                 plt.close(fig)
                 figs.append(path)
-
-        # Cross-batch bars at mid zipf / each skew
-        z_focus = 0.7 if any(np.isclose(zipfs, 0.7)) else zipfs[len(zipfs) // 2]
-        for skew in skews:
-            cell = s[np.isclose(s["start_skew_us"], skew) & np.isclose(s["zipf_s"], z_focus)]
-            if cell.empty:
-                continue
-            fig, ax = plt.subplots(figsize=(8.5, 4.8))
-            x = np.arange(len(batches))
-            width = 0.8 / max(len(schemes), 1)
-            for i, scheme in enumerate(schemes):
-                ys = []
-                for b in batches:
-                    g = cell[(cell["scheme"] == scheme) & (cell["batch"] == b)]
-                    ys.append(float(g["step_us"].mean()) if not g.empty else np.nan)
-                ax.bar(
-                    x + i * width - 0.4 + width / 2,
-                    ys,
-                    width=width * 0.92,
-                    label=scheme,
-                    color=SCHEME_COLOR.get(scheme, f"C{i}"),
-                )
-            ax.set_xticks(x)
-            ax.set_xticklabels([str(int(b)) for b in batches])
-            style_ax(
-                ax,
-                f"{tag} S{int(scenario)} bar: step_us vs Batch "
-                f"(S={z_focus:g}, σ={skew:g}µs)",
-                "BatchSize",
-                "Step (µs)",
-            )
-            path = figs_dir / (
-                f"{exp}_s{int(scenario)}_bar_step_vs_batch"
-                f"_s{z_focus:g}_nsk{skew:g}.png"
-            )
-            fig.tight_layout()
-            fig.savefig(path, dpi=140)
-            plt.close(fig)
-            figs.append(path)
     return figs
 
 
@@ -882,17 +854,25 @@ def executive_summary_md(df: pd.DataFrame) -> str:
                     if not both2.empty:
                         r2 = both2["ub_rg_pop2"] / both2["ub_rg"].replace(0, np.nan)
                         pop2_note = f"，POP2/RG 平均为 **{r2.mean():.3f}×**"
+                batches = sorted(common.index.get_level_values("batch").unique())
+                # Per-batch ratios — never average step_us across different batch sizes.
+                batch_bits = []
+                for b in batches:
+                    mask = common.index.get_level_values("batch") == b
+                    pr = pop_ratio[mask].mean()
+                    sr = spray_ratio[mask].mean()
+                    batch_bits.append(
+                        f"batch={int(b)}：POP/RG=**{pr:.3f}×**，Spray/RG=**{sr:.3f}×**"
+                    )
                 lines.append(
-                    f"- **配置包输出差异**：Exp1 三方案共有参数格中，"
-                    f"POP/RG 平均为 **{pop_ratio.mean():.3f}×**，"
-                    f"Spray/RG 平均为 **{spray_ratio.mean():.3f}×**"
-                    f"{pop2_note}。"
+                    "- **配置包输出差异**（Exp1，按 batch 分列，不跨 batch 平均 step）："
+                    + "；".join(batch_bits)
+                    + f"{pop2_note}。"
                     "这是当前配置包的联合差异；plane、path delay、jitter 和 barrier "
                     "尚未统一，不能把比值单独归因于目的侧配速"
                     "（见 §1.1）。\n"
                 )
-                batches = sorted(common.index.get_level_values("batch").unique())
-                if batches:
+                if len(batches) >= 2:
                     low = int(batches[0])
                     high = int(batches[-1])
                     low_ratio = pop_ratio[
@@ -1187,47 +1167,48 @@ def write_report(
             "不与逐包 KPI 混比。逐包 POP2 仅作协议路径验证，见 `results/ub_rg_packet`。\n"
         )
 
-    def table_for(exp: str, scenario: int, batch: int | None = None) -> tuple[str, int | None]:
-        s = df[(df["exp"] == exp) & (df["scenario"] == scenario)]
+    def table_for(exp: str, scenario: int, batch: int) -> str:
+        """One comparison table for a single batch — never mix batch sizes."""
+        s = df[(df["exp"] == exp) & (df["scenario"] == scenario) & (df["batch"] == batch)]
         if s.empty:
-            return "_（无数据）_\n", None
-        # Prefer batch=256; if still running / missing, fall back to largest available.
-        if batch is not None and not (s["batch"] == batch).any():
-            batch = None
-        if batch is None:
-            batch = int(s["batch"].max())
-        s = s[s["batch"] == batch]
-        if s.empty:
-            return "_（无数据）_\n", None
+            return "_（无数据）_\n"
         piv = s.pivot_table(
             index="zipf_s",
             columns="scheme",
             values=["step_us", "cct_us", "lat_p99", "hot_p99", "throughput_GBs"],
             aggfunc="mean",
         )
-        return "```\n" + clean_table(piv.round(2).to_string()) + "\n```\n", batch
+        return "```\n" + clean_table(piv.round(2).to_string()) + "\n```\n"
+
+    def batches_for(exp: str, scenario: int) -> list[int]:
+        s = df[(df["exp"] == exp) & (df["scenario"] == scenario)]
+        if s.empty or "batch" not in s.columns:
+            return []
+        return sorted(int(b) for b in s["batch"].dropna().unique())
 
     lines.append("## 3. 实验1：倾斜专家流量下的 Dispatch\n")
+    lines.append("> 下表按 **batch 分列**；不同 batch 的 `step_us` 不放在同一张表。\n")
     for sc in sorted(df[df["exp"] == "exp1_dispatch"]["scenario"].unique()):
         lines.append(f"### 3.{sc} 场景{sc}\n")
-        tbl, used_batch = table_for("exp1_dispatch", int(sc), 256)
-        tag = f"batch={used_batch}" if used_batch is not None else "batch=?"
-        if used_batch is not None and used_batch != 256:
-            tag += "（256 尚未齐，暂用已有最大 batch）"
-        lines.append(f"**{tag} 对比表**\n\n")
-        lines.append(tbl)
+        batches = batches_for("exp1_dispatch", int(sc))
+        if not batches:
+            lines.append("_（无数据）_\n")
+        for b in batches:
+            lines.append(f"**batch={b} 对比表**\n\n")
+            lines.append(table_for("exp1_dispatch", int(sc), b))
         for p in sorted(figs_dir.glob(f"exp1_dispatch_s{int(sc)}_*.png")):
             lines.append(md_img(p) + "\n")
 
     lines.append("## 4. 实验2：倾斜专家流量下的 Combine\n")
+    lines.append("> 下表按 **batch 分列**；不同 batch 的 `step_us` 不放在同一张表。\n")
     for sc in sorted(df[df["exp"] == "exp2_combine"]["scenario"].unique()):
         lines.append(f"### 4.{sc} 场景{sc}\n")
-        tbl, used_batch = table_for("exp2_combine", int(sc), 256)
-        tag = f"batch={used_batch}" if used_batch is not None else "batch=?"
-        if used_batch is not None and used_batch != 256:
-            tag += "（256 尚未齐，暂用已有最大 batch）"
-        lines.append(f"**{tag} 对比表**\n\n")
-        lines.append(tbl)
+        batches = batches_for("exp2_combine", int(sc))
+        if not batches:
+            lines.append("_（无数据）_\n")
+        for b in batches:
+            lines.append(f"**batch={b} 对比表**\n\n")
+            lines.append(table_for("exp2_combine", int(sc), b))
         for p in sorted(figs_dir.glob(f"exp2_combine_s{int(sc)}_*.png")):
             lines.append(md_img(p) + "\n")
 
@@ -1267,14 +1248,20 @@ def write_report(
     if not pdf_df.empty:
         if pdf_note:
             lines.append(pdf_note)
-        stats = pdf_df.pivot_table(
-            index=["scenario", "ep_size", "batch", "zipf_s"],
-            columns="scheme",
-            values="cct_us",
-            aggfunc=["mean", "std", "count"],
+        lines.append(
+            "**系统 CCT 样本统计（µs，mean/std/count）**——"
+            "按 batch 分表，不把不同 batch 混在一张表里。\n"
         )
-        lines.append("**系统 CCT 样本统计（µs，mean/std/count）**\n\n")
-        lines.append("```\n" + clean_table(stats.round(2).to_string()) + "\n```\n")
+        for b in sorted(pdf_df["batch"].dropna().unique()):
+            sub = pdf_df[pdf_df["batch"] == b]
+            stats = sub.pivot_table(
+                index=["scenario", "ep_size", "zipf_s"],
+                columns="scheme",
+                values="cct_us",
+                aggfunc=["mean", "std", "count"],
+            )
+            lines.append(f"**batch={int(b)}**\n\n")
+            lines.append("```\n" + clean_table(stats.round(2).to_string()) + "\n```\n")
         for sc in sorted(pdf_df["scenario"].unique()):
             lines.append(f"### 5.{int(sc)} 场景{int(sc)} PDF\n")
             sc_figs = sorted(pdf_figs_dir.glob(f"exp3_pdf_s{int(sc)}_b*_s*.png"))
@@ -1294,6 +1281,7 @@ def write_report(
             lines.append(md_img(p) + "\n")
 
     lines.append("## 6. 方案对比摘要\n")
+    lines.append("> 下列 step 均值均按 **batch 分列**，不跨 batch 平均。\n")
     e1 = df[df["exp"] == "exp1_dispatch"]
     if not e1.empty:
         # Align on cells present for every scheme so legacy larger-batch ub_rg
@@ -1316,44 +1304,57 @@ def write_report(
                 if (not common.empty and int(sc) in sc_levels)
                 else None
             )
-            if cell is None or (hasattr(cell, "empty") and cell.empty):
-                s = e1[e1["scenario"] == sc]
-                rg = s[s["scheme"] == "ub_rg"]["step_us"].mean()
-                pop = s[s["scheme"] == "ub_rg_pop"]["step_us"].mean()
-                sp = s[s["scheme"] == "packet_spray"]["step_us"].mean()
-            else:
-                rg = float(cell["ub_rg"].mean()) if "ub_rg" in cell.columns else float("nan")
-                pop = float(cell["ub_rg_pop"].mean()) if "ub_rg_pop" in cell.columns else float("nan")
-                sp = (
-                    float(cell["packet_spray"].mean())
-                    if "packet_spray" in cell.columns
-                    else float("nan")
-                )
-            parts = []
-            if rg == rg and rg > 0:  # not NaN
-                parts.append(f"UB_RG={rg:.1f}µs")
-            if pop == pop and pop > 0 and rg == rg and rg > 0:
-                parts.append(f"POP={pop:.1f}µs（POP/RG={(pop/rg):.2f}×）")
-            if sp == sp and sp > 0 and rg == rg and rg > 0:
-                parts.append(f"Spray={sp:.1f}µs（Spray/RG={(sp/rg):.2f}×）")
-            if parts:
-                lines.append(
-                    f"- **场景{int(sc)}** 平均 step（三方案共有参数格）："
-                    + " vs ".join(parts)
-                    + "\n"
-                )
-            # CCT / König ratio when bound is available (per-scheme, all rows)
+            batches = (
+                sorted(cell.index.get_level_values("batch").unique())
+                if cell is not None and not (hasattr(cell, "empty") and cell.empty)
+                else sorted(e1[e1["scenario"] == sc]["batch"].dropna().unique())
+            )
+            for b in batches:
+                if cell is not None and not (hasattr(cell, "empty") and cell.empty):
+                    bcell = cell.xs(int(b), level="batch")
+                    rg = float(bcell["ub_rg"].mean()) if "ub_rg" in bcell.columns else float("nan")
+                    pop = (
+                        float(bcell["ub_rg_pop"].mean())
+                        if "ub_rg_pop" in bcell.columns
+                        else float("nan")
+                    )
+                    sp = (
+                        float(bcell["packet_spray"].mean())
+                        if "packet_spray" in bcell.columns
+                        else float("nan")
+                    )
+                else:
+                    s = e1[(e1["scenario"] == sc) & (e1["batch"] == b)]
+                    rg = s[s["scheme"] == "ub_rg"]["step_us"].mean()
+                    pop = s[s["scheme"] == "ub_rg_pop"]["step_us"].mean()
+                    sp = s[s["scheme"] == "packet_spray"]["step_us"].mean()
+                parts = []
+                if rg == rg and rg > 0:  # not NaN
+                    parts.append(f"UB_RG={rg:.1f}µs")
+                if pop == pop and pop > 0 and rg == rg and rg > 0:
+                    parts.append(f"POP={pop:.1f}µs（POP/RG={(pop/rg):.2f}×）")
+                if sp == sp and sp > 0 and rg == rg and rg > 0:
+                    parts.append(f"Spray={sp:.1f}µs（Spray/RG={(sp/rg):.2f}×）")
+                if parts:
+                    lines.append(
+                        f"- **场景{int(sc)} batch={int(b)}** 平均 step（共有参数格）："
+                        + " vs ".join(parts)
+                        + "\n"
+                    )
+            # CCT / König ratio when bound is available (per-scheme, per-batch)
             s = e1[e1["scenario"] == sc]
             s2 = s[s["konig_us"].notna() & (s["konig_us"] > 0)].copy()
             if not s2.empty:
                 s2["ratio"] = s2["cct_us"] / s2["konig_us"]
-                for scheme in SCHEMES:
-                    g = s2[s2["scheme"] == scheme]["ratio"]
-                    if not g.empty:
-                        lines.append(
-                            f"- **场景{int(sc)}** {scheme} CCT/König："
-                            f"mean={g.mean():.3f}，median={g.median():.3f}\n"
-                        )
+                for b in sorted(s2["batch"].dropna().unique()):
+                    sb = s2[s2["batch"] == b]
+                    for scheme in SCHEMES:
+                        g = sb[sb["scheme"] == scheme]["ratio"]
+                        if not g.empty:
+                            lines.append(
+                                f"- **场景{int(sc)} batch={int(b)}** {scheme} CCT/König："
+                                f"mean={g.mean():.3f}，median={g.median():.3f}\n"
+                            )
 
     if peer_df is not None and not peer_df.empty:
         lines.append("## 7. 双引擎对比（逐包 vs 行为级）\n")
@@ -1397,10 +1398,10 @@ def write_report(
                     "```\n" + clean_table(sample.round(3).to_string(index=False)) + "\n```\n"
                 )
                 lines.append(
-                    "若该比值显著偏离 1，不能仅解释为“逐包栈静态开销”。当前逐包实现还含"
-                    "50µs REQ pacing、10ms stale-credit 回收，且两引擎的本地专家和场景2/3"
-                    "plane 映射不一致；在统一输入、完成守恒和异常门禁通过前，"
-                    "这里是**交叉验证失败证据**，不是行为级绝对值校准。\n"
+                    "若该比值显著偏离 1，不能仅解释为“逐包栈静态开销”。逐包引擎含真实"
+                    "CBFC/缓冲与控制面，行为级折叠了 byte buffer；两引擎 plane 映射也不一致。"
+                    "在统一输入、完成守恒和异常门禁通过前，这里是**交叉验证对照**，"
+                    "不是行为级绝对值校准。\n"
                 )
 
             ratio_keys = ["exp", "scenario", "mode", "batch", "zipf_s", "ep_size"]
@@ -1413,23 +1414,26 @@ def write_report(
                 )
                 if "ub_rg" not in scheme_steps.columns:
                     continue
-                ratios = []
-                if "ub_rg_pop" in scheme_steps.columns:
-                    pop = (
-                        scheme_steps["ub_rg_pop"]
-                        / scheme_steps["ub_rg"].replace(0, np.nan)
-                    ).dropna()
-                    if not pop.empty:
-                        ratios.append(f"POP/RG={pop.mean():.3f}×")
-                if "packet_spray" in scheme_steps.columns:
-                    spray = (
-                        scheme_steps["packet_spray"]
-                        / scheme_steps["ub_rg"].replace(0, np.nan)
-                    ).dropna()
-                    if not spray.empty:
-                        ratios.append(f"Spray/RG={spray.mean():.3f}×")
-                if ratios:
-                    lines.append(f"- **{eng}** 同参数格平均：" + "，".join(ratios) + "\n")
+                # Report scheme ratios per batch — do not average step across batch sizes.
+                for b in sorted(scheme_steps.index.get_level_values("batch").unique()):
+                    sub = scheme_steps.xs(int(b), level="batch")
+                    bits = []
+                    if "ub_rg_pop" in sub.columns:
+                        pop = (sub["ub_rg_pop"] / sub["ub_rg"].replace(0, np.nan)).dropna()
+                        if not pop.empty:
+                            bits.append(f"POP/RG={pop.mean():.3f}×")
+                    if "packet_spray" in sub.columns:
+                        sp = (
+                            sub["packet_spray"] / sub["ub_rg"].replace(0, np.nan)
+                        ).dropna()
+                        if not sp.empty:
+                            bits.append(f"Spray/RG={sp.mean():.3f}×")
+                    if bits:
+                        lines.append(
+                            f"- **{eng}** batch={int(b)} 同参数格平均："
+                            + "，".join(bits)
+                            + "\n"
+                        )
 
     lines.append("## 8. 复现方法\n")
     if engine == "behavioral":
