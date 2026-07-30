@@ -112,12 +112,12 @@ def load_summaries(results: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def style_ax(ax, title, xlabel, ylabel):
+def style_ax(ax, title, xlabel, ylabel, *, legend_ncol: int = 1, legend_fontsize: int = 8):
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=8)
+    ax.legend(fontsize=legend_fontsize, ncol=legend_ncol, loc="best")
 
 
 def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
@@ -443,6 +443,8 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
                     "End-to-end CCT (µs)  "
                     "[dispatch→GEMV(Zipf,batch)→combine]",
                     "Density",
+                    legend_ncol=2,
+                    legend_fontsize=7,
                 )
                 path = figs_dir / f"exp3_pdf_s{int(scenario)}_ep{int(ep)}_s{zs:g}.png"
                 fig.tight_layout()
@@ -489,6 +491,8 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
             "End-to-end CCT (µs)  "
             "[dispatch→GEMV(Zipf,batch)→combine]",
             "Density",
+            legend_ncol=2,
+            legend_fontsize=7,
         )
         path = figs_dir / f"exp3_pdf_compare_s{zs:g}.png"
         fig.tight_layout()
