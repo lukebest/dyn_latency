@@ -323,6 +323,24 @@ def main() -> int:
     ap.add_argument("--exp", type=str, default="", help="Filter exp name prefix")
     ap.add_argument("--scenario", type=int, default=0, help="Filter scenario")
     ap.add_argument("--scheme", type=str, default="", help="Filter scheme name")
+    ap.add_argument(
+        "--schemes",
+        type=str,
+        default="",
+        help="Comma list of schemes (overrides --scheme when set)",
+    )
+    ap.add_argument(
+        "--zipf-s",
+        type=str,
+        default="",
+        help="Comma list of zipf_s values to keep (e.g. 0,0.9)",
+    )
+    ap.add_argument(
+        "--start-skew-us",
+        type=str,
+        default="",
+        help="Comma list of start_skew_us values to keep (e.g. 0,4)",
+    )
     ap.add_argument("--force", action="store_true", help="Re-run even if summary exists")
     ap.add_argument(
         "--exp3-pdf",
@@ -364,8 +382,17 @@ def main() -> int:
         jobs = [j for j in jobs if j.exp.startswith(args.exp)]
     if args.scenario:
         jobs = [j for j in jobs if j.scenario == args.scenario]
-    if args.scheme:
+    if args.schemes:
+        allowed = {s.strip() for s in args.schemes.split(",") if s.strip()}
+        jobs = [j for j in jobs if j.scheme in allowed]
+    elif args.scheme:
         jobs = [j for j in jobs if j.scheme == args.scheme]
+    if args.zipf_s:
+        allowed_z = {float(x) for x in args.zipf_s.split(",") if x.strip()}
+        jobs = [j for j in jobs if j.zipf_s in allowed_z]
+    if args.start_skew_us:
+        allowed_sk = {float(x) for x in args.start_skew_us.split(",") if x.strip()}
+        jobs = [j for j in jobs if j.start_skew_us in allowed_sk]
     if args.limit:
         jobs = jobs[: args.limit]
 
