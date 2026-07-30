@@ -33,6 +33,14 @@ SCHEME_COLOR = {
     "packet_spray": "C1",
     "islip": "C3",
 }
+# Exp3 PDF: linestyle encodes batch (schemes share colors across batches).
+BATCH_LS = {
+    16: "-",
+    64: "--",
+    128: "-.",
+    256: (0, (2, 1)),
+    512: ":",
+}
 
 
 def schemes_in(df: pd.DataFrame) -> list[str]:
@@ -375,9 +383,11 @@ def _plot_density(ax, samples: np.ndarray, ls, color: str, label: str) -> None:
 def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
     """PDF (no CDF) of system dispatch+combine CCT for exp3_pdf runs.
 
-    - One figure per (scenario, batch, zipf_s): all EP sizes of that scenario.
-    - One cross-scenario compare figure per (batch, zipf_s): s1-EP128 / s2-EP1024 /
-      s3-EP1024 (the previous EP128-vs-EP1024 view, plus scenario 3).
+    Visual encoding (readable with 5 schemes × many batches):
+      - color     = scheme
+      - linestyle = batch size
+    One figure per (scenario, ep_size, zipf_s). Cross-scenario compare uses the
+    representative EP of each topology (S1-EP128 / S4-EP512), same encoding.
     """
     sub = df[df["exp"] == "exp3_pdf"].copy()
     if sub.empty:
@@ -386,40 +396,40 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
     if sub.empty:
         return []
 
-    scheme_ls = SCHEME_LS
-    ep_color = {32: "C0", 64: "C1", 128: "C2", 256: "C4", 512: "C5", 1024: "C3"}
-    sc_color = {1: "C0", 4: "C1", 2: "C3", 3: "C2"}
     figs = []
 
-    # Per-scenario PDFs
+    def _metric_samples(g: pd.DataFrame) -> np.ndarray:
+        metric = (
+            "e2e_us"
+            if "e2e_us" in g.columns and g["e2e_us"].notna().any()
+            else "cct_us"
+        )
+        samples = g[metric].to_numpy(dtype=float)
+        return samples[np.isfinite(samples)]
+
+    # Per-scenario PDFs: one panel per (scenario, EP, Zipf).
     for scenario in sorted(sub["scenario"].unique()):
         sc = sub[sub["scenario"] == scenario]
-        eps = sorted(sc["ep_size"].dropna().unique())
-        for batch in sorted(sc["batch"].unique()):
+        for ep in sorted(sc["ep_size"].dropna().unique()):
             for zs in sorted(sc["zipf_s"].unique()):
-                cell = sc[(sc["batch"] == batch) & np.isclose(sc["zipf_s"], zs)]
+                cell = sc[(sc["ep_size"] == ep) & np.isclose(sc["zipf_s"], zs)]
                 if cell.empty:
                     continue
                 fig, ax = plt.subplots(figsize=(7.5, 4.5))
                 any_curve = False
-                for ep in eps:
+                for batch in sorted(cell["batch"].unique()):
+                    ls = BATCH_LS.get(int(batch), "-")
                     for scheme in schemes_in(cell):
-                        g = cell[(cell["ep_size"] == ep) & (cell["scheme"] == scheme)]
-                        metric = (
-                            "e2e_us"
-                            if "e2e_us" in g.columns and g["e2e_us"].notna().any()
-                            else "cct_us"
-                        )
-                        samples = g[metric].to_numpy(dtype=float)
-                        samples = samples[np.isfinite(samples)]
+                        g = cell[(cell["batch"] == batch) & (cell["scheme"] == scheme)]
+                        samples = _metric_samples(g)
                         if samples.size < 2:
                             continue
-                        label = f"EP={int(ep)} {scheme} (n={samples.size})"
+                        label = f"{scheme} b={int(batch)} (n={samples.size})"
                         _plot_density(
                             ax,
                             samples,
-                            scheme_ls[scheme],
-                            ep_color.get(int(ep), "C0"),
+                            ls,
+                            SCHEME_COLOR.get(scheme, "C0"),
                             label,
                         )
                         any_curve = True
@@ -429,12 +439,12 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
                 style_ax(
                     ax,
                     f"Exp3 S{int(scenario)} System CCT PDF "
-                    f"(batch={int(batch)}, S={zs:g})",
+                    f"(EP={int(ep)}, S={zs:g})",
                     "End-to-end CCT (µs)  "
                     "[dispatch→GEMV(Zipf,batch)→combine]",
                     "Density",
                 )
-                path = figs_dir / f"exp3_pdf_s{int(scenario)}_b{int(batch)}_s{zs:g}.png"
+                path = figs_dir / f"exp3_pdf_s{int(scenario)}_ep{int(ep)}_s{zs:g}.png"
                 fig.tight_layout()
                 fig.savefig(path, dpi=140)
                 plt.close(fig)
@@ -445,59 +455,58 @@ def plot_exp3_pdf(df: pd.DataFrame, figs_dir: Path):
         (1, 128),
         (4, 512),
     ]
-    for batch in sorted(sub["batch"].unique()):
-        for zs in sorted(sub["zipf_s"].unique()):
-            fig, ax = plt.subplots(figsize=(7.5, 4.5))
-            any_curve = False
-            for scenario, ep in compare:
-                cell = sub[
-                    (sub["scenario"] == scenario)
-                    & (sub["ep_size"] == ep)
-                    & (sub["batch"] == batch)
-                    & np.isclose(sub["zipf_s"], zs)
-                ]
+    for zs in sorted(sub["zipf_s"].unique()):
+        fig, ax = plt.subplots(figsize=(7.5, 4.5))
+        any_curve = False
+        for scenario, ep in compare:
+            cell = sub[
+                (sub["scenario"] == scenario)
+                & (sub["ep_size"] == ep)
+                & np.isclose(sub["zipf_s"], zs)
+            ]
+            for batch in sorted(cell["batch"].unique()):
+                ls = BATCH_LS.get(int(batch), "-")
                 for scheme in schemes_in(cell):
-                    g = cell[cell["scheme"] == scheme]
-                    metric = (
-                        "e2e_us"
-                        if "e2e_us" in g.columns and g["e2e_us"].notna().any()
-                        else "cct_us"
-                    )
-                    samples = g[metric].to_numpy(dtype=float)
-                    samples = samples[np.isfinite(samples)]
+                    g = cell[(cell["batch"] == batch) & (cell["scheme"] == scheme)]
+                    samples = _metric_samples(g)
                     if samples.size < 2:
                         continue
-                    label = f"S{scenario} EP={ep} {scheme} (n={samples.size})"
+                    label = f"S{scenario} {scheme} b={int(batch)} (n={samples.size})"
                     _plot_density(
                         ax,
                         samples,
-                        scheme_ls[scheme],
-                        sc_color[scenario],
+                        ls,
+                        SCHEME_COLOR.get(scheme, "C0"),
                         label,
                     )
                     any_curve = True
-            if not any_curve:
-                plt.close(fig)
-                continue
-            style_ax(
-                ax,
-                f"Exp3 Cross-Scenario CCT PDF (batch={int(batch)}, S={zs:g})",
-                "End-to-end CCT (µs)  "
-                "[dispatch→GEMV(Zipf,batch)→combine]",
-                "Density",
-            )
-            path = figs_dir / f"exp3_pdf_compare_b{int(batch)}_s{zs:g}.png"
-            fig.tight_layout()
-            fig.savefig(path, dpi=140)
+        if not any_curve:
             plt.close(fig)
-            figs.append(path)
+            continue
+        style_ax(
+            ax,
+            f"Exp3 Cross-Scenario CCT PDF (S={zs:g}; S1-EP128 / S4-EP512)",
+            "End-to-end CCT (µs)  "
+            "[dispatch→GEMV(Zipf,batch)→combine]",
+            "Density",
+        )
+        path = figs_dir / f"exp3_pdf_compare_s{zs:g}.png"
+        fig.tight_layout()
+        fig.savefig(path, dpi=140)
+        plt.close(fig)
+        figs.append(path)
 
-    # Drop legacy names (exp3_pdf_b16_s0.3.png) that omitted the scenario tag.
-    for stale in figs_dir.glob("exp3_pdf_b*_s*.png"):
-        try:
-            stale.unlink()
-        except OSError:
-            pass
+    # Drop legacy figure names (per-batch or untagged).
+    for pattern in (
+        "exp3_pdf_b*_s*.png",
+        "exp3_pdf_s*_b*_s*.png",
+        "exp3_pdf_compare_b*_s*.png",
+    ):
+        for stale in figs_dir.glob(pattern):
+            try:
+                stale.unlink()
+            except OSError:
+                pass
     return figs
 
 
@@ -1226,9 +1235,9 @@ def write_report(
         "PDF batch∈{16,64,128,256,512}（含 iSLIP）\n"
         "- **场景4** Sparse CLOS：EP ∈ {128, 256, 512}；"
         "PDF batch∈{16,64,128,256,512}\n"
-        "每场景单独出 PDF；另附跨场景对比图（S1-EP128 / S4-EP512）。"
-        "线型区分方案（实线 ub_rg，点划线 ub_rg_pop，密虚线 ub_rg_pop2，"
-        "虚线 packet_spray，点线 islip）。\n"
+        "每场景单独出 PDF（每个 (EP, Zipf S) 一张）；另附跨场景对比图（S1-EP128 / S4-EP512）。"
+        "**颜色区分方案**（ub_rg / ub_rg_pop / ub_rg_pop2 / packet_spray / islip），"
+        "**线型区分 batch**（16 实线、64 虚线、128 点划、256 密虚线、512 点线）。\n"
     )
     pdf_df = df[df["exp"] == "exp3_pdf"].copy()
     pdf_df = pdf_df[pdf_df["cct_us"].notna() & (pdf_df["cct_us"] > 0)]
@@ -1264,14 +1273,14 @@ def write_report(
             lines.append("```\n" + clean_table(stats.round(2).to_string()) + "\n```\n")
         for sc in sorted(pdf_df["scenario"].unique()):
             lines.append(f"### 5.{int(sc)} 场景{int(sc)} PDF\n")
-            sc_figs = sorted(pdf_figs_dir.glob(f"exp3_pdf_s{int(sc)}_b*_s*.png"))
+            sc_figs = sorted(pdf_figs_dir.glob(f"exp3_pdf_s{int(sc)}_ep*_s*.png"))
             if sc_figs:
                 for p in sc_figs:
                     lines.append(md_img(p) + "\n")
             else:
                 lines.append("_（该场景 PDF 样本尚未齐）_\n")
         lines.append("### 5.4 跨场景对比 PDF（S1-EP128 / S4-EP512）\n")
-        for p in sorted(pdf_figs_dir.glob("exp3_pdf_compare_b*_s*.png")):
+        for p in sorted(pdf_figs_dir.glob("exp3_pdf_compare_s*.png")):
             lines.append(md_img(p) + "\n")
     else:
         lines.append("_（exp3_pdf 系统 CCT 样本尚未生成，运行 `run_ub_rg_experiments.py --exp3-pdf`）_\n")
