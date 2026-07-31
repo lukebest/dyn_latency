@@ -144,6 +144,12 @@ CLI：`--scheme=ub_rg|ub_rg_pop|ub_rg_pop2|packet_spray|islip`；`--start-skew-u
 > 逐包引擎按风险路径裁剪且当前完整度不足；行为级引擎覆盖完整主矩阵与 PDF。本报告方案对比仅使用本引擎结果，不与行为级混比。实验3 系统 CCT PDF 若本引擎样本未齐，报告自动回退到行为级多 seed 结果。
 ## 3. 实验1：倾斜专家流量下的 Dispatch
 > 下表按 **batch 分列**；不同 batch 的 `step_us` 不放在同一张表。
+> **读图（Exp1/2 汇总图均为分组柱状，不再用多线折线）**
+> - **颜色 = 方案**；数值对 seed / 启动偏差 σ 取均值。
+> - `throughput_vs_s`：每栏一个 batch，横轴 Zipf S → 聚合吞吐；偏斜升高时常下降。
+> - `hotcold_p99_vs_s`：左 hot（Zipf 最热 10% token p99）/ 右 cold（最冷 50%）；S↑ 时 hot 应升、cold 应大致持平；cold 也被抬高 ⇒ 拥塞外溢。
+> - `step_vs_batch`：左 `step_us`（含屏障）/ 右 `cct_us`（纯数据面）；固定某一 Zipf S，横轴 batch（log y）。
+> - `bar_step_vs_zipf_*`：按 (batch, σ) 拆开的 step 柱图，与逐 token hot/cold 不是同一指标。
 ### 3.1 场景1
 **batch=16 对比表**
 
@@ -212,6 +218,12 @@ zipf_s
 ![exp1_dispatch_s4_throughput_vs_s.png](../results/ub_rg_packet/figures/exp1_dispatch_s4_throughput_vs_s.png)
 ## 4. 实验2：倾斜专家流量下的 Combine
 > 下表按 **batch 分列**；不同 batch 的 `step_us` 不放在同一张表。
+> **读图（Exp1/2 汇总图均为分组柱状，不再用多线折线）**
+> - **颜色 = 方案**；数值对 seed / 启动偏差 σ 取均值。
+> - `throughput_vs_s`：每栏一个 batch，横轴 Zipf S → 聚合吞吐；偏斜升高时常下降。
+> - `hotcold_p99_vs_s`：左 hot（Zipf 最热 10% token p99）/ 右 cold（最冷 50%）；S↑ 时 hot 应升、cold 应大致持平；cold 也被抬高 ⇒ 拥塞外溢。
+> - `step_vs_batch`：左 `step_us`（含屏障）/ 右 `cct_us`（纯数据面）；固定某一 Zipf S，横轴 batch（log y）。
+> - `bar_step_vs_zipf_*`：按 (batch, σ) 拆开的 step 柱图，与逐 token hot/cold 不是同一指标。
 ### 4.1 场景1
 **batch=16 对比表**
 
@@ -473,6 +485,7 @@ scenario ep_size zipf_s
 ![exp3_pdf_compare_s0.9.png](../results/ub_rg/figures/exp3_pdf_compare_s0.9.png)
 ![exp3_pdf_compare_s0.png](../results/ub_rg/figures/exp3_pdf_compare_s0.png)
 ### 5.x Roundtrip Step vs EP（汇总）
+> **读图**：每个面板一个 Zipf S；横轴 EP size，颜色=方案（log y）。对比同一偏斜下方案随 EP 的 roundtrip step，不再把 scheme×S 叠成折线。
 ![exp3_s1_step_vs_ep.png](../results/ub_rg_packet/figures/exp3_s1_step_vs_ep.png)
 ![exp3_s4_step_vs_ep.png](../results/ub_rg_packet/figures/exp3_s4_step_vs_ep.png)
 ## 6. 方案对比摘要

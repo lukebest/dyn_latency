@@ -120,6 +120,58 @@ def style_ax(ax, title, xlabel, ylabel, *, legend_ncol: int = 1, legend_fontsize
     ax.legend(fontsize=legend_fontsize, ncol=legend_ncol, loc="best")
 
 
+def _bar_panel(
+    ax,
+    *,
+    schemes: list[str],
+    x_labels: list[str],
+    series: dict[str, list[float]],
+    title: str,
+    xlabel: str,
+    ylabel: str | None = None,
+    log_y: bool = False,
+    show_legend: bool = False,
+) -> None:
+    """Draw scheme-grouped bars for one panel; series[scheme] aligns with x_labels."""
+    x = np.arange(len(x_labels))
+    width = 0.8 / max(len(schemes), 1)
+    for i, scheme in enumerate(schemes):
+        ys = series.get(scheme, [np.nan] * len(x_labels))
+        ax.bar(
+            x + i * width - 0.4 + width / 2,
+            ys,
+            width=width * 0.92,
+            label=scheme,
+            color=SCHEME_COLOR.get(scheme, f"C{i}"),
+        )
+    ax.set_xticks(x)
+    ax.set_xticklabels(x_labels)
+    ax.set_title(title, fontsize=10)
+    ax.set_xlabel(xlabel)
+    if ylabel:
+        ax.set_ylabel(ylabel)
+    if log_y:
+        ax.set_yscale("log")
+    ax.grid(True, axis="y", alpha=0.3)
+    if show_legend:
+        ax.legend(fontsize=8, loc="best")
+
+
+def _mean_metric(
+    df: pd.DataFrame, scheme: str, metric: str, **eq_filters
+) -> float:
+    g = df[df["scheme"] == scheme]
+    for col, val in eq_filters.items():
+        if col.endswith("_s") or col in ("zipf_s", "start_skew_us"):
+            g = g[np.isclose(g[col], val)]
+        else:
+            g = g[g[col] == val]
+    if g.empty or metric not in g.columns:
+        return np.nan
+    v = float(g[metric].mean())
+    return v if (v == v and v > 0) else np.nan
+
+
 def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
     sub = df[df["exp"] == exp].copy()
     if sub.empty:
@@ -127,107 +179,174 @@ def plot_exp12(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
     figs = []
     for scenario in sorted(sub["scenario"].unique()):
         s = sub[sub["scenario"] == scenario]
-        fig, ax = plt.subplots(figsize=(7, 4.5))
-        for scheme in schemes_in(s):
-            ls = SCHEME_LS[scheme]
-            for batch in sorted(s["batch"].unique()):
-                g = s[(s["scheme"] == scheme) & (s["batch"] == batch)].sort_values("zipf_s")
-                if g.empty:
-                    continue
-                ax.plot(
-                    g["zipf_s"],
-                    g["throughput_GBs"],
-                    linestyle=ls,
-                    color=SCHEME_COLOR[scheme],
-                    marker="o",
-                    label=f"{scheme} b={batch}",
-                )
-        style_ax(
-            ax,
-            f"{tag} scenario{scenario}: Throughput vs Zipf S",
-            "Zipf S",
-            "Throughput (GB/s)",
+        schemes = schemes_in(s)
+        if not schemes:
+            continue
+        batches = sorted(int(b) for b in s["batch"].unique())
+        zipfs = sorted(s["zipf_s"].unique())
+
+        # Throughput: one panel per batch (schemes × Zipf), not scheme×batch lines.
+        n_b = len(batches)
+        fig, axes = plt.subplots(1, n_b, figsize=(5.2 * n_b, 4.4), sharey=True)
+        if n_b == 1:
+            axes = [axes]
+        for ax, batch in zip(axes, batches):
+            series = {
+                sch: [
+                    _mean_metric(s, sch, "throughput_GBs", batch=batch, zipf_s=zs)
+                    for zs in zipfs
+                ]
+                for sch in schemes
+            }
+            _bar_panel(
+                ax,
+                schemes=schemes,
+                x_labels=[f"{z:g}" for z in zipfs],
+                series=series,
+                title=f"batch={batch}",
+                xlabel="Zipf S (higher → more skewed)",
+                ylabel="Throughput (GB/s)" if ax is axes[0] else None,
+                show_legend=(ax is axes[0]),
+            )
+        fig.suptitle(
+            f"{tag} S{int(scenario)}: throughput vs Zipf (mean over σ)",
+            fontsize=11,
+            y=1.02,
+        )
+        fig.text(
+            0.5,
+            -0.02,
+            "Read: higher bars = more aggregate goodput. Under Zipf skew, "
+            "hot-expert incast usually lowers throughput; RG should degrade less than spray.",
+            ha="center",
+            va="top",
+            fontsize=8,
         )
         path = figs_dir / f"{exp}_s{scenario}_throughput_vs_s.png"
         fig.tight_layout()
-        fig.savefig(path, dpi=140)
+        fig.savefig(path, dpi=140, bbox_inches="tight")
         plt.close(fig)
         figs.append(path)
 
-        batches = sorted(s["batch"].unique())
         batch_focus = 256 if 256 in batches else batches[len(batches) // 2]
-        fig, ax = plt.subplots(figsize=(7, 4.5))
-        for scheme in schemes_in(s):
-            ls = SCHEME_LS[scheme]
-            g = s[(s["scheme"] == scheme) & (s["batch"] == batch_focus)].sort_values("zipf_s")
-            if g.empty:
-                continue
-            ax.plot(
-                g["zipf_s"],
-                g["hot_p99"],
-                linestyle=ls,
-                color=SCHEME_COLOR[scheme],
-                marker="o",
-                label=f"{scheme} hot p99",
+        figs.extend(
+            _plot_hotcold_p99_bars(
+                s,
+                exp=exp,
+                tag=tag,
+                scenario=int(scenario),
+                batch_focus=int(batch_focus),
+                figs_dir=figs_dir,
             )
-            ax.plot(
-                g["zipf_s"],
-                g["cold_p99"],
-                linestyle=ls,
-                color=SCHEME_COLOR[scheme],
-                marker="x",
-                label=f"{scheme} cold p99",
-            )
-        style_ax(
-            ax,
-            f"{tag} scenario{scenario}: hot/cold p99 (batch={batch_focus})",
-            "Zipf S",
-            "Latency p99 (us)",
         )
-        path = figs_dir / f"{exp}_s{scenario}_hotcold_p99_vs_s.png"
-        fig.tight_layout()
-        fig.savefig(path, dpi=140)
-        plt.close(fig)
-        figs.append(path)
 
-        s_focus = 0.7 if 0.7 in set(s["zipf_s"]) else sorted(s["zipf_s"].unique())[-1]
-        fig, ax = plt.subplots(figsize=(7, 4.5))
-        for scheme in schemes_in(s):
-            ls = SCHEME_LS[scheme]
-            g = s[(s["scheme"] == scheme) & (np.isclose(s["zipf_s"], s_focus))].sort_values(
-                "batch"
+        # Step vs CCT at fixed Zipf: dual panel, x=batch, bars=schemes.
+        s_focus = 0.7 if 0.7 in set(s["zipf_s"]) else float(sorted(s["zipf_s"].unique())[-1])
+        fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.4), sharey=True)
+        for ax, metric, panel_title in (
+            (axes[0], "step_us", "step_us (CCT + software barrier)"),
+            (axes[1], "cct_us", "cct_us (data-plane completion only)"),
+        ):
+            series = {
+                sch: [
+                    _mean_metric(s, sch, metric, batch=b, zipf_s=s_focus)
+                    for b in batches
+                ]
+                for sch in schemes
+            }
+            _bar_panel(
+                ax,
+                schemes=schemes,
+                x_labels=[str(b) for b in batches],
+                series=series,
+                title=panel_title,
+                xlabel="BatchSize",
+                ylabel="Time (µs)" if ax is axes[0] else None,
+                log_y=True,
+                show_legend=(ax is axes[0]),
             )
-            if g.empty:
-                continue
-            ax.plot(
-                g["batch"],
-                g["step_us"],
-                linestyle=ls,
-                color=SCHEME_COLOR[scheme],
-                marker="o",
-                label=f"{scheme} step",
-            )
-            ax.plot(
-                g["batch"],
-                g["cct_us"],
-                linestyle=ls,
-                color=SCHEME_COLOR[scheme],
-                marker="x",
-                label=f"{scheme} cct",
-            )
-        ax.set_xscale("log", base=2)
-        style_ax(
-            ax,
-            f"{tag} scenario{scenario}: CCT/Step vs BatchSize (S={s_focus})",
-            "BatchSize",
-            "Time (us)",
+        fig.suptitle(
+            f"{tag} S{int(scenario)}: step vs CCT by batch "
+            f"(Zipf S={s_focus:g}, mean over σ, log y)",
+            fontsize=11,
+            y=1.02,
+        )
+        fig.text(
+            0.5,
+            -0.02,
+            "Read: left includes barrier; right is pure data CCT. "
+            "Gap (step−CCT) ≈ barrier. Spray ≫ RG on either panel ⇒ scheduling, not just barrier.",
+            ha="center",
+            va="top",
+            fontsize=8,
         )
         path = figs_dir / f"{exp}_s{scenario}_step_vs_batch.png"
         fig.tight_layout()
-        fig.savefig(path, dpi=140)
+        fig.savefig(path, dpi=140, bbox_inches="tight")
         plt.close(fig)
         figs.append(path)
     return figs
+
+
+def _plot_hotcold_p99_bars(
+    s: pd.DataFrame,
+    *,
+    exp: str,
+    tag: str,
+    scenario: int,
+    batch_focus: int,
+    figs_dir: Path,
+) -> list[Path]:
+    """Side-by-side hot vs cold p99 grouped bars (replaces the cluttered line plot).
+
+    Hot = tokens to Zipf-rank < top 10% experts; cold = rank ≥ bottom 50%.
+    Values are means over seeds and start-skew σ.
+    """
+    schemes = schemes_in(s)
+    cell = s[s["batch"] == batch_focus]
+    if cell.empty or not schemes:
+        return []
+    zipfs = sorted(cell["zipf_s"].unique())
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.4), sharey=True)
+    for ax, metric, panel_title in (
+        (axes[0], "hot_p99", "Hot experts (Zipf rank < top 10%)"),
+        (axes[1], "cold_p99", "Cold experts (Zipf rank ≥ bottom 50%)"),
+    ):
+        series = {
+            sch: [_mean_metric(cell, sch, metric, zipf_s=zs) for zs in zipfs]
+            for sch in schemes
+        }
+        _bar_panel(
+            ax,
+            schemes=schemes,
+            x_labels=[f"{z:g}" for z in zipfs],
+            series=series,
+            title=panel_title,
+            xlabel="Zipf S (higher → more skewed)",
+            ylabel="Per-token latency p99 (µs)" if ax is axes[0] else None,
+            show_legend=(ax is axes[0]),
+        )
+    fig.suptitle(
+        f"{tag} S{scenario}: hot vs cold token p99 (batch={batch_focus}, mean over σ)",
+        fontsize=11,
+        y=1.02,
+    )
+    fig.text(
+        0.5,
+        -0.02,
+        "Read: left = incast victims (should rise with S); right = cold flows "
+        "(should stay flat if scheduling isolates hot congestion). "
+        "Spray cold rising with S ⇒ congestion spills beyond hot experts.",
+        ha="center",
+        va="top",
+        fontsize=8,
+        wrap=True,
+    )
+    path = figs_dir / f"{exp}_s{scenario}_hotcold_p99_vs_s.png"
+    fig.tight_layout()
+    fig.savefig(path, dpi=140, bbox_inches="tight")
+    plt.close(fig)
+    return [path]
 
 
 def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
@@ -308,41 +427,66 @@ def plot_exp3(df: pd.DataFrame, figs_dir: Path):
     sub = df[df["exp"] == "exp3_roundtrip"].copy()
     if sub.empty:
         return []
+    # Prefer e2e/roundtrip step when present.
+    sub["_plot_step"] = sub["step_us"]
+    if "e2e_step_us" in sub.columns:
+        sub["_plot_step"] = sub["e2e_step_us"].fillna(sub["_plot_step"])
+    if "roundtrip_step_us" in sub.columns:
+        sub["_plot_step"] = sub["_plot_step"].fillna(sub["roundtrip_step_us"])
     figs = []
     for scenario in sorted(sub["scenario"].unique()):
         s = sub[sub["scenario"] == scenario]
-        # step_us vs ep_size
-        fig, ax = plt.subplots(figsize=(7, 4.5))
-        for scheme in schemes_in(s):
-            ls = SCHEME_LS[scheme]
-            for zipf_s in sorted(s["zipf_s"].unique()):
-                g = s[(s["scheme"] == scheme) & np.isclose(s["zipf_s"], zipf_s)].sort_values(
-                    "ep_size"
-                )
-                if g.empty:
-                    continue
-                step = g["step_us"].copy()
-                if "e2e_step_us" in g.columns:
-                    step = g["e2e_step_us"].fillna(step)
-                if "roundtrip_step_us" in g.columns:
-                    step = step.fillna(g["roundtrip_step_us"])
-                ax.plot(
-                    g["ep_size"],
-                    step,
-                    linestyle=ls,
-                    color=SCHEME_COLOR[scheme],
-                    marker="o",
-                    label=f"{scheme} S={zipf_s:g}",
-                )
-        style_ax(
-            ax,
-            f"Exp3 scenario{scenario}: Roundtrip Step vs EP",
-            "EP size",
-            "Step (us)",
+        schemes = schemes_in(s)
+        if not schemes:
+            continue
+        eps = sorted(int(e) for e in s["ep_size"].dropna().unique())
+        zipfs = sorted(s["zipf_s"].unique())
+        # One panel per Zipf S (scheme bars vs EP); avoids scheme×S line spaghetti.
+        n_z = len(zipfs)
+        ncols = min(n_z, 4)
+        nrows = (n_z + ncols - 1) // ncols
+        fig, axes = plt.subplots(
+            nrows, ncols, figsize=(5.0 * ncols, 4.0 * nrows), sharey=True, squeeze=False
+        )
+        for idx, zs in enumerate(zipfs):
+            ax = axes[idx // ncols][idx % ncols]
+            series = {
+                sch: [
+                    _mean_metric(s, sch, "_plot_step", ep_size=ep, zipf_s=zs)
+                    for ep in eps
+                ]
+                for sch in schemes
+            }
+            _bar_panel(
+                ax,
+                schemes=schemes,
+                x_labels=[str(ep) for ep in eps],
+                series=series,
+                title=f"Zipf S={zs:g}",
+                xlabel="EP size",
+                ylabel="Roundtrip step (µs)" if idx % ncols == 0 else None,
+                log_y=True,
+                show_legend=(idx == 0),
+            )
+        for idx in range(n_z, nrows * ncols):
+            axes[idx // ncols][idx % ncols].set_visible(False)
+        fig.suptitle(
+            f"Exp3 S{int(scenario)}: roundtrip step vs EP (mean over σ/batch, log y)",
+            fontsize=11,
+            y=1.02,
+        )
+        fig.text(
+            0.5,
+            -0.02,
+            "Read: each panel is one Zipf S; bars compare schemes at each EP. "
+            "Step rises with skew/EP when incast or path diversity dominates.",
+            ha="center",
+            va="top",
+            fontsize=8,
         )
         path = figs_dir / f"exp3_s{scenario}_step_vs_ep.png"
         fig.tight_layout()
-        fig.savefig(path, dpi=140)
+        fig.savefig(path, dpi=140, bbox_inches="tight")
         plt.close(fig)
         figs.append(path)
     return figs
@@ -1199,8 +1343,20 @@ def write_report(
             return []
         return sorted(int(b) for b in s["batch"].dropna().unique())
 
+    exp12_fig_note = (
+        "> **读图（Exp1/2 汇总图均为分组柱状，不再用多线折线）**\n"
+        "> - **颜色 = 方案**；数值对 seed / 启动偏差 σ 取均值。\n"
+        "> - `throughput_vs_s`：每栏一个 batch，横轴 Zipf S → 聚合吞吐；偏斜升高时常下降。\n"
+        "> - `hotcold_p99_vs_s`：左 hot（Zipf 最热 10% token p99）/ 右 cold（最冷 50%）；"
+        "S↑ 时 hot 应升、cold 应大致持平；cold 也被抬高 ⇒ 拥塞外溢。\n"
+        "> - `step_vs_batch`：左 `step_us`（含屏障）/ 右 `cct_us`（纯数据面）；"
+        "固定某一 Zipf S，横轴 batch（log y）。\n"
+        "> - `bar_step_vs_zipf_*`：按 (batch, σ) 拆开的 step 柱图，与逐 token hot/cold 不是同一指标。\n"
+    )
+
     lines.append("## 3. 实验1：倾斜专家流量下的 Dispatch\n")
     lines.append("> 下表按 **batch 分列**；不同 batch 的 `step_us` 不放在同一张表。\n")
+    lines.append(exp12_fig_note)
     for sc in sorted(df[df["exp"] == "exp1_dispatch"]["scenario"].unique()):
         lines.append(f"### 3.{sc} 场景{sc}\n")
         batches = batches_for("exp1_dispatch", int(sc))
@@ -1214,6 +1370,7 @@ def write_report(
 
     lines.append("## 4. 实验2：倾斜专家流量下的 Combine\n")
     lines.append("> 下表按 **batch 分列**；不同 batch 的 `step_us` 不放在同一张表。\n")
+    lines.append(exp12_fig_note)
     for sc in sorted(df[df["exp"] == "exp2_combine"]["scenario"].unique()):
         lines.append(f"### 4.{sc} 场景{sc}\n")
         batches = batches_for("exp2_combine", int(sc))
@@ -1289,6 +1446,10 @@ def write_report(
     else:
         lines.append("_（exp3_pdf 系统 CCT 样本尚未生成，运行 `run_ub_rg_experiments.py --exp3-pdf`）_\n")
     lines.append("### 5.x Roundtrip Step vs EP（汇总）\n")
+    lines.append(
+        "> **读图**：每个面板一个 Zipf S；横轴 EP size，颜色=方案（log y）。"
+        "对比同一偏斜下方案随 EP 的 roundtrip step，不再把 scheme×S 叠成折线。\n"
+    )
     for sc in sorted(df[df["exp"] == "exp3_roundtrip"]["scenario"].unique()):
         for p in sorted(figs_dir.glob(f"exp3_s{int(sc)}_step_vs_ep.png")):
             lines.append(md_img(p) + "\n")
