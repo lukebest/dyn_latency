@@ -135,16 +135,16 @@ CLI：`--scheme=ub_rg|ub_rg_pop|ub_rg_pop2|packet_spray|islip`；`--start-skew-u
 | 实验 | mode | 场景 | Batch | Zipf S | EP | 启动偏差 | 调度 |
 |---|---|---|---|---|---|---|---|
 | 1 Dispatch | dispatch | 1,4 | 16,256 | 0,0.3,0.7,0.9 | full | σ=0/2/4/8 µs | S1:+islip |
-| 2 Combine | combine | 同实验1 | 同左 | 同左 | full | 同左 | 同左 |
-| 3 Roundtrip+GEMV | roundtrip | 1→{32,64,128}; 4→{128,256,512} | 256（S1 iSLIP 另含 128/512） | 同左 | 上列 | 同左 | 同左 |
-| 3 PDF | roundtrip | 同上 | 16,64,128,256,512 | 同左 | 每格 96 seeds | σ=4µs | 同左 |
+| 2 Roundtrip+GEMV | roundtrip | 1→{32,64,128}; 4→{128,256,512} | 256（S1 iSLIP 另含 128/512） | 同左 | 上列 | 同左 | 同左 |
+| 2 PDF | roundtrip | 同上 | 16,64,128,256,512 | 同左 | 每格 96 seeds | σ=4µs | 同左 |
+> 本报告不单独展示 Combine（`exp2_combine`）扫参；Combine 仅作为 Exp3 roundtrip 的后半段计入系统 CCT。
 
 引擎：**packet**；成功汇总运行数：**611**。原始结果：`results/ub_rg_packet/`。
 > 上表对齐当前 runner：仅场景1+4；启动偏差为 N(0,σ²)（σ∈{0,2,4,8}）；场景1 含 iSLIP；Exp3 输出 gemv_us/e2e_us。旧场景2/3 结果请忽略。
 > 逐包引擎按风险路径裁剪（S4 主扫为 ub_rg/packet_spray × 部分 Zipf/σ；若干 ep512 曾 timeout）。本报告**只含本引擎**表与图，不回退嵌入行为级 PDF/KPI。
 ## 3. 实验1：倾斜专家流量下的 Dispatch
 > 下表按 **batch 分列**；不同 batch 的 `step_us` 不放在同一张表。
-> **读图（Exp1/2 汇总图均为分组柱状，不再用多线折线）**
+> **读图（Exp1 汇总图均为分组柱状，不再用多线折线）**
 > - **颜色 = 方案**；数值对 seed / 启动偏差 σ 取均值。
 > - `throughput_vs_s`：每栏一个 batch，横轴 Zipf S → 聚合吞吐；偏斜升高时常下降。
 > - `hotcold_p99_vs_s`：左 hot（Zipf 最热 10% token p99）/ 右 cold（最冷 50%）；S↑ 时 hot 应升、cold 应大致持平；cold 也被抬高 ⇒ 拥塞外溢。
@@ -214,94 +214,22 @@ zipf_s
 ![exp1_dispatch_s4_hotcold_p99_vs_s.png](../results/ub_rg_packet/figures/exp1_dispatch_s4_hotcold_p99_vs_s.png)
 ![exp1_dispatch_s4_step_vs_batch.png](../results/ub_rg_packet/figures/exp1_dispatch_s4_step_vs_batch.png)
 ![exp1_dispatch_s4_throughput_vs_s.png](../results/ub_rg_packet/figures/exp1_dispatch_s4_throughput_vs_s.png)
-## 4. 实验2：倾斜专家流量下的 Combine
-> 下表按 **batch 分列**；不同 batch 的 `step_us` 不放在同一张表。
-> **读图（Exp1/2 汇总图均为分组柱状，不再用多线折线）**
-> - **颜色 = 方案**；数值对 seed / 启动偏差 σ 取均值。
-> - `throughput_vs_s`：每栏一个 batch，横轴 Zipf S → 聚合吞吐；偏斜升高时常下降。
-> - `hotcold_p99_vs_s`：左 hot（Zipf 最热 10% token p99）/ 右 cold（最冷 50%）；S↑ 时 hot 应升、cold 应大致持平；cold 也被抬高 ⇒ 拥塞外溢。
-> - `step_vs_batch`：左 `step_us`（含屏障）/ 右 `cct_us`（纯数据面）；固定某一 Zipf S，横轴 batch（log y）。
-> - `bar_step_vs_zipf_*`：按 (batch, σ) 拆开的 step 柱图，与逐 token hot/cold 不是同一指标。
-### 4.1 场景1
-**batch=16 对比表**
-
-```
-             cct_us                                  hot_p99                                  lat_p99                                  step_us                             throughput_GBs
-scheme packet_spray  ub_rg ub_rg_pop ub_rg_pop2 packet_spray  ub_rg ub_rg_pop ub_rg_pop2 packet_spray  ub_rg ub_rg_pop ub_rg_pop2 packet_spray  ub_rg ub_rg_pop ub_rg_pop2   packet_spray    ub_rg ub_rg_pop ub_rg_pop2
-zipf_s
-0.0           43.21  25.51     25.81      24.99        31.37   4.79      5.09       5.11        31.18   4.82      5.12       5.30        45.21  25.91     26.21      25.39        2948.56  6472.60   6337.93    6733.36
-0.3           67.18  28.31     28.61      27.69        58.26  10.85     11.15      11.14        50.61   8.45      8.75       8.46        69.18  28.71     29.01      28.09        1757.36  4831.31   4766.05    4977.16
-0.7          180.14  47.88     48.18      52.93       167.86  25.47     25.77      25.56       156.17  22.16     22.46      22.14       182.14  48.28     48.58      53.33         652.29  2471.58   2455.96    2261.33
-0.9          245.44  64.55     64.85      64.14       231.54  33.34     33.64      33.45       220.97  30.43     30.73      30.28       247.44  64.95     65.25      64.54         478.64  1843.35   1834.61    1833.43
-```
-**batch=256 对比表**
-
-```
-             cct_us                                    hot_p99                                   lat_p99                                  step_us                               throughput_GBs
-scheme packet_spray    ub_rg ub_rg_pop ub_rg_pop2 packet_spray   ub_rg ub_rg_pop ub_rg_pop2 packet_spray  ub_rg ub_rg_pop ub_rg_pop2 packet_spray    ub_rg ub_rg_pop ub_rg_pop2   packet_spray     ub_rg ub_rg_pop ub_rg_pop2
-zipf_s
-0.0          406.04   161.56    161.86     156.17       383.70   63.38     63.68      64.66       348.80  56.78     57.08      57.60       408.04   161.96    162.26     156.57        4630.42  11669.97  11648.19   12090.13
-0.3          989.19   358.20    358.50     328.49       926.11  160.81    161.11     165.69       341.92  59.66     59.96      60.62       991.19   358.60    358.90     328.89        1899.59   5250.34   5245.94    5721.41
-0.7         2811.21   995.32    995.62    1086.90       709.16  108.85    109.15     109.43       505.77  65.07     65.37      65.79      2813.21   995.72    996.02    1087.30         668.42   1890.90   1890.32    1749.90
-0.9         3892.93  1645.33   1645.63    1622.03       705.26   98.73     99.03      99.55       758.26  97.80     98.10     100.29      3894.93  1645.73   1646.03    1622.43         482.68   1147.56   1147.35    1167.23
-```
-![exp2_combine_s1_bar_step_vs_zipf_b16_nsk0.png](../results/ub_rg_packet/figures/exp2_combine_s1_bar_step_vs_zipf_b16_nsk0.png)
-![exp2_combine_s1_bar_step_vs_zipf_b16_nsk2.png](../results/ub_rg_packet/figures/exp2_combine_s1_bar_step_vs_zipf_b16_nsk2.png)
-![exp2_combine_s1_bar_step_vs_zipf_b16_nsk4.png](../results/ub_rg_packet/figures/exp2_combine_s1_bar_step_vs_zipf_b16_nsk4.png)
-![exp2_combine_s1_bar_step_vs_zipf_b16_nsk8.png](../results/ub_rg_packet/figures/exp2_combine_s1_bar_step_vs_zipf_b16_nsk8.png)
-![exp2_combine_s1_bar_step_vs_zipf_b256_nsk0.png](../results/ub_rg_packet/figures/exp2_combine_s1_bar_step_vs_zipf_b256_nsk0.png)
-![exp2_combine_s1_bar_step_vs_zipf_b256_nsk2.png](../results/ub_rg_packet/figures/exp2_combine_s1_bar_step_vs_zipf_b256_nsk2.png)
-![exp2_combine_s1_bar_step_vs_zipf_b256_nsk4.png](../results/ub_rg_packet/figures/exp2_combine_s1_bar_step_vs_zipf_b256_nsk4.png)
-![exp2_combine_s1_bar_step_vs_zipf_b256_nsk8.png](../results/ub_rg_packet/figures/exp2_combine_s1_bar_step_vs_zipf_b256_nsk8.png)
-![exp2_combine_s1_hotcold_p99_vs_s.png](../results/ub_rg_packet/figures/exp2_combine_s1_hotcold_p99_vs_s.png)
-![exp2_combine_s1_step_vs_batch.png](../results/ub_rg_packet/figures/exp2_combine_s1_step_vs_batch.png)
-![exp2_combine_s1_throughput_vs_s.png](../results/ub_rg_packet/figures/exp2_combine_s1_throughput_vs_s.png)
-### 4.4 场景4
-**batch=16 对比表**
-
-```
-             cct_us                                   hot_p99                                  lat_p99                                  step_us                              throughput_GBs
-scheme packet_spray   ub_rg ub_rg_pop ub_rg_pop2 packet_spray  ub_rg ub_rg_pop ub_rg_pop2 packet_spray  ub_rg ub_rg_pop ub_rg_pop2 packet_spray   ub_rg ub_rg_pop ub_rg_pop2   packet_spray     ub_rg ub_rg_pop ub_rg_pop2
-zipf_s
-0.0           28.69   29.34     29.89      28.80         6.54   5.57      6.12       5.74         6.36   5.37      5.92       5.57        32.69   30.54     31.09      30.00       26693.00  24798.09  23822.87   25769.90
-0.3           35.05   35.97     36.52      35.21        19.25  13.00     13.55      13.70        13.35  10.35     10.90      10.78        39.05   37.17     37.72      36.41       15083.03  14534.65  14271.86   14946.28
-0.7           98.95  108.12    108.67     107.50        80.84  44.29     44.84      45.07        69.73  37.61     38.16      38.28       102.95  109.32    109.87     108.70        4768.60   4349.66   4327.60    4376.21
-0.9          161.98  191.56    192.11     194.79       137.89  70.51     71.06      70.52       129.35  63.58     64.13      63.18       165.98  192.76    193.31     195.99        2905.21   2454.95   2447.91    2412.59
-```
-**batch=256 对比表**
-
-```
-             cct_us               hot_p99              lat_p99             step_us          throughput_GBs
-scheme packet_spray    ub_rg packet_spray   ub_rg packet_spray  ub_rg packet_spray    ub_rg   packet_spray     ub_rg
-zipf_s
-0.0          208.75   211.59       147.24  121.25       111.87  77.87       212.75   212.79       36057.59  35647.08
-0.9        13114.80  6527.96       154.43  111.83       167.43  81.69     13118.80  6529.16         572.76   1178.85
-```
-![exp2_combine_s4_bar_step_vs_zipf_b16_nsk0.png](../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b16_nsk0.png)
-![exp2_combine_s4_bar_step_vs_zipf_b16_nsk2.png](../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b16_nsk2.png)
-![exp2_combine_s4_bar_step_vs_zipf_b16_nsk4.png](../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b16_nsk4.png)
-![exp2_combine_s4_bar_step_vs_zipf_b16_nsk8.png](../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b16_nsk8.png)
-![exp2_combine_s4_bar_step_vs_zipf_b256_nsk0.png](../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b256_nsk0.png)
-![exp2_combine_s4_bar_step_vs_zipf_b256_nsk4.png](../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b256_nsk4.png)
-![exp2_combine_s4_hotcold_p99_vs_s.png](../results/ub_rg_packet/figures/exp2_combine_s4_hotcold_p99_vs_s.png)
-![exp2_combine_s4_step_vs_batch.png](../results/ub_rg_packet/figures/exp2_combine_s4_step_vs_batch.png)
-![exp2_combine_s4_throughput_vs_s.png](../results/ub_rg_packet/figures/exp2_combine_s4_throughput_vs_s.png)
-## 5. 实验3：网络系统级 Dispatch+Combine 完成时间 (CCT) PDF
+## 4. 实验3：网络系统级 Dispatch+Combine 完成时间 (CCT) PDF
 横轴优先为**端到端完成时间**（`e2e_us`/`step_us`：dispatch→GEMV→combine；GEMV 由 Zipf 专家负载与 batch 标定）。网络-only `cct_us` 仍写入 summary 供对照。对每个 (场景, BatchSize, Zipf S, EP) 组合，在多个随机种子下各跑一次 roundtrip，每次运行贡献一个系统 CCT 样本，以此得到系统 CCT 的概率密度分布（PDF，无 CDF）。
 覆盖三个组网场景（与实验设计 §4.2.3 一致）：
 - **场景1** 单层 Clos：EP ∈ {32, 64, 128}；PDF batch∈{16,64,128,256,512}（含 iSLIP）
 - **场景4** Sparse CLOS：EP ∈ {128, 256, 512}；PDF batch∈{16,64,128,256,512}
 每场景单独出 PDF（每个 (EP, Zipf S) 一张）；另附跨场景对比图（S1-EP128 / S4-EP512）。**颜色区分方案**（ub_rg / ub_rg_pop / ub_rg_pop2 / packet_spray / islip），**线型区分 batch**（16 实线、64 虚线、128 点划、256 密虚线、512 点线）。
 _（本引擎尚无 `exp3_pdf` 系统 CCT 样本；Exp3 请看下方 roundtrip step 汇总。补齐：`python3 run_ub_rg_experiments.py --engine packet --exp3-pdf`）_
-### 5.1 场景1 PDF
+### 4.1 场景1 PDF
 _（无本引擎 PDF 样本）_
-### 5.4 场景4 PDF
+### 4.4 场景4 PDF
 _（无本引擎 PDF 样本）_
-### 5.x Roundtrip Step vs EP（汇总）
+### 4.x Roundtrip Step vs EP（汇总）
 > **读图**：每个面板一个 Zipf S；横轴 EP size，颜色=方案（log y）。对比同一偏斜下方案随 EP 的 roundtrip step，不再把 scheme×S 叠成折线。
 ![exp3_s1_step_vs_ep.png](../results/ub_rg_packet/figures/exp3_s1_step_vs_ep.png)
 ![exp3_s4_step_vs_ep.png](../results/ub_rg_packet/figures/exp3_s4_step_vs_ep.png)
-## 6. 方案对比摘要
+## 5. 方案对比摘要
 > 下列 step 均值均按 **batch 分列**，不跨 batch 平均。
 - **场景1 batch=16** 平均 step（共有参数格）：UB_RG=40.6µs vs POP=40.9µs（POP/RG=1.01×） vs Spray=38.1µs（Spray/RG=0.94×）
 - **场景1 batch=256** 平均 step（共有参数格）：UB_RG=505.6µs vs POP=505.9µs（POP/RG=1.00×） vs Spray=1161.3µs（Spray/RG=2.30×）
@@ -321,7 +249,7 @@ _（无本引擎 PDF 样本）_
 - **场景4 batch=256** ub_rg CCT/König：mean=0.692，median=0.678
 - **场景4 batch=256** ub_rg_pop CCT/König：mean=0.635，median=0.635
 - **场景4 batch=256** packet_spray CCT/König：mean=0.935，median=0.934
-## 7. 双引擎对比（逐包 vs 行为级）
+## 6. 双引擎对比（逐包 vs 行为级）
 在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。
 对齐样本 **2444** 组；step 比值（packet/behavioral）均值=1.838，中位数=0.877。
 ```
@@ -355,7 +283,7 @@ exp1_dispatch         1 packet_spray dispatch     16     0.7      128       37.8
 - **behavioral** batch=128 同参数格平均：POP/RG=1.000×，Spray/RG=1.144×
 - **behavioral** batch=256 同参数格平均：POP/RG=1.000×，Spray/RG=0.644×
 - **behavioral** batch=512 同参数格平均：POP/RG=1.000×，Spray/RG=1.158×
-## 8. 复现方法
+## 7. 复现方法
 逐包引擎复现（仅用于协议调试；性能门禁通过前不要当作绝对值校准）：
 ```bash
 cd ns-3-ub && ./ns3 configure --enable-modules=unified-bus --enable-mtp --disable-python -d optimized

@@ -1322,9 +1322,11 @@ def write_report(
         "| 实验 | mode | 场景 | Batch | Zipf S | EP | 启动偏差 | 调度 |\n"
         "|---|---|---|---|---|---|---|---|\n"
         "| 1 Dispatch | dispatch | 1,4 | 16,256 | 0,0.3,0.7,0.9 | full | σ=0/2/4/8 µs | S1:+islip |\n"
-        "| 2 Combine | combine | 同实验1 | 同左 | 同左 | full | 同左 | 同左 |\n"
-        "| 3 Roundtrip+GEMV | roundtrip | 1→{32,64,128}; 4→{128,256,512} | 256（S1 iSLIP 另含 128/512） | 同左 | 上列 | 同左 | 同左 |\n"
-        "| 3 PDF | roundtrip | 同上 | 16,64,128,256,512 | 同左 | 每格 96 seeds | σ=4µs | 同左 |\n"
+        "| 2 Roundtrip+GEMV | roundtrip | 1→{32,64,128}; 4→{128,256,512} | 256（S1 iSLIP 另含 128/512） | 同左 | 上列 | 同左 | 同左 |\n"
+        "| 2 PDF | roundtrip | 同上 | 16,64,128,256,512 | 同左 | 每格 96 seeds | σ=4µs | 同左 |\n"
+    )
+    lines.append(
+        "> 本报告不单独展示 Combine（`exp2_combine`）扫参；Combine 仅作为 Exp3 roundtrip 的后半段计入系统 CCT。\n"
     )
 
     n = len(df)
@@ -1364,8 +1366,8 @@ def write_report(
             return []
         return sorted(int(b) for b in s["batch"].dropna().unique())
 
-    exp12_fig_note = (
-        "> **读图（Exp1/2 汇总图均为分组柱状，不再用多线折线）**\n"
+    exp1_fig_note = (
+        "> **读图（Exp1 汇总图均为分组柱状，不再用多线折线）**\n"
         "> - **颜色 = 方案**；数值对 seed / 启动偏差 σ 取均值。\n"
         "> - `throughput_vs_s`：每栏一个 batch，横轴 Zipf S → 聚合吞吐；偏斜升高时常下降。\n"
         "> - `hotcold_p99_vs_s`：左 hot（Zipf 最热 10% token p99）/ 右 cold（最冷 50%）；"
@@ -1377,7 +1379,7 @@ def write_report(
 
     lines.append("## 3. 实验1：倾斜专家流量下的 Dispatch\n")
     lines.append("> 下表按 **batch 分列**；不同 batch 的 `step_us` 不放在同一张表。\n")
-    lines.append(exp12_fig_note)
+    lines.append(exp1_fig_note)
     for sc in sorted(df[df["exp"] == "exp1_dispatch"]["scenario"].unique()):
         lines.append(f"### 3.{sc} 场景{sc}\n")
         batches = batches_for("exp1_dispatch", int(sc))
@@ -1389,21 +1391,7 @@ def write_report(
         for p in sorted(figs_dir.glob(f"exp1_dispatch_s{int(sc)}_*.png")):
             lines.append(md_img(p) + "\n")
 
-    lines.append("## 4. 实验2：倾斜专家流量下的 Combine\n")
-    lines.append("> 下表按 **batch 分列**；不同 batch 的 `step_us` 不放在同一张表。\n")
-    lines.append(exp12_fig_note)
-    for sc in sorted(df[df["exp"] == "exp2_combine"]["scenario"].unique()):
-        lines.append(f"### 4.{sc} 场景{sc}\n")
-        batches = batches_for("exp2_combine", int(sc))
-        if not batches:
-            lines.append("_（无数据）_\n")
-        for b in batches:
-            lines.append(f"**batch={b} 对比表**\n\n")
-            lines.append(table_for("exp2_combine", int(sc), b))
-        for p in sorted(figs_dir.glob(f"exp2_combine_s{int(sc)}_*.png")):
-            lines.append(md_img(p) + "\n")
-
-    lines.append("## 5. 实验3：网络系统级 Dispatch+Combine 完成时间 (CCT) PDF\n")
+    lines.append("## 4. 实验3：网络系统级 Dispatch+Combine 完成时间 (CCT) PDF\n")
     lines.append(
         "横轴优先为**端到端完成时间**（`e2e_us`/`step_us`：dispatch→GEMV→combine；"
         "GEMV 由 Zipf 专家负载与 batch 标定）。网络-only `cct_us` 仍写入 summary 供对照。"
@@ -1443,7 +1431,7 @@ def write_report(
             lines.append("```\n" + clean_table(stats.round(2).to_string()) + "\n```\n")
         report_scenarios = sorted(df["scenario"].dropna().unique())
         for sc in report_scenarios:
-            lines.append(f"### 5.{int(sc)} 场景{int(sc)} PDF\n")
+            lines.append(f"### 4.{int(sc)} 场景{int(sc)} PDF\n")
             sc_pdf = pdf_df[pdf_df["scenario"] == sc]
             sc_figs = sorted(pdf_figs_dir.glob(f"exp3_pdf_s{int(sc)}_ep*_s*.png"))
             if sc_pdf.empty:
@@ -1457,7 +1445,7 @@ def write_report(
                     lines.append(md_img(p) + "\n")
             else:
                 lines.append("_（该场景 PDF 样本尚未齐）_\n")
-        lines.append("### 5.4 跨场景对比 PDF（S1-EP128 / S4-EP512）\n")
+        lines.append("### 4.9 跨场景对比 PDF（S1-EP128 / S4-EP512）\n")
         compare_figs = sorted(pdf_figs_dir.glob("exp3_pdf_compare_s*.png"))
         if compare_figs:
             for p in compare_figs:
@@ -1471,9 +1459,9 @@ def write_report(
             f"`python3 run_ub_rg_experiments.py --engine {engine} --exp3-pdf`）_\n"
         )
         for sc in sorted(df["scenario"].dropna().unique()):
-            lines.append(f"### 5.{int(sc)} 场景{int(sc)} PDF\n")
+            lines.append(f"### 4.{int(sc)} 场景{int(sc)} PDF\n")
             lines.append("_（无本引擎 PDF 样本）_\n")
-    lines.append("### 5.x Roundtrip Step vs EP（汇总）\n")
+    lines.append("### 4.x Roundtrip Step vs EP（汇总）\n")
     lines.append(
         "> **读图**：每个面板一个 Zipf S；横轴 EP size，颜色=方案（log y）。"
         "对比同一偏斜下方案随 EP 的 roundtrip step，不再把 scheme×S 叠成折线。\n"
@@ -1482,7 +1470,7 @@ def write_report(
         for p in sorted(figs_dir.glob(f"exp3_s{int(sc)}_step_vs_ep.png")):
             lines.append(md_img(p) + "\n")
 
-    lines.append("## 6. 方案对比摘要\n")
+    lines.append("## 5. 方案对比摘要\n")
     lines.append("> 下列 step 均值均按 **batch 分列**，不跨 batch 平均。\n")
     e1 = df[df["exp"] == "exp1_dispatch"]
     if not e1.empty:
@@ -1559,7 +1547,7 @@ def write_report(
                             )
 
     if peer_df is not None and not peer_df.empty:
-        lines.append("## 7. 双引擎对比（逐包 vs 行为级）\n")
+        lines.append("## 6. 双引擎对比（逐包 vs 行为级）\n")
         lines.append(
             "在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。\n"
         )
@@ -1637,7 +1625,7 @@ def write_report(
                             + "\n"
                         )
 
-    lines.append("## 8. 复现方法\n")
+    lines.append("## 7. 复现方法\n")
     if engine == "behavioral":
         lines.append(
             "当前报告主体由行为级引擎生成。复现默认矩阵与 Exp3 PDF：\n"
@@ -1717,8 +1705,7 @@ def _analyze_one(results: Path) -> int:
     figs = []
     figs += plot_exp12(df, "exp1_dispatch", "Exp1 Dispatch", figs_dir)
     figs += plot_exp12_bars(df, "exp1_dispatch", "Exp1 Dispatch", figs_dir)
-    figs += plot_exp12(df, "exp2_combine", "Exp2 Combine", figs_dir)
-    figs += plot_exp12_bars(df, "exp2_combine", "Exp2 Combine", figs_dir)
+    # Exp2 Combine is omitted from the report (Combine only appears inside Exp3 roundtrip).
     figs += plot_exp3(df, figs_dir)
     figs += plot_exp3_pdf(df, figs_dir)
     write_report(df, figs, results, figs_dir, peer)
