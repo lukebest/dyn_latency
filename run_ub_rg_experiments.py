@@ -279,7 +279,13 @@ def run_job(job: Job, binary: str) -> dict:
     if job.engine == "packet":
         cmd.append(f"--case-path={case_path_for(job)}")
 
-    timeout = 3600
+    # S4 packet roundtrip/PDF jobs (esp. ep512) routinely exceed 1h wall.
+    if job.engine == "packet" and job.scenario == 4 and job.mode == "roundtrip":
+        timeout = 10800
+    elif job.engine == "packet":
+        timeout = 7200
+    else:
+        timeout = 3600
     t0 = time.time()
     try:
         proc = subprocess.run(
