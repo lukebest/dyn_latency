@@ -2,9 +2,9 @@
 > **可信性状态：实现证据存在，性能结论未验证。** 行为级结果仅作为网络机制假设；方案间路由、path delay、jitter 与 barrier 混杂尚未消除，逐包性能矩阵也未通过完成守恒与跨引擎校验。绝对硬件时延与完整POP硅片实现不得据此下结论；Exp3 GEMV 为标定服务模型。详见[UB_RG仿真可信性评估报告](./UB_RG仿真可信性评估报告.html)。
 ## 1. 主要实验结论
 > 结论适用于场景1/4；Exp1/2 为网络子系统；Exp3 含 Zipf×batch GEMV straggler；启动偏差为 N(0,σ²)，σ∈{0,2,4,8} µs。
-- **配置包输出差异**（Exp1，按 batch 分列，不跨 batch 平均 step）：batch=16：POP/RG=**1.010×**，Spray/RG=**2.594×**；batch=256：POP/RG=**1.001×**，Spray/RG=**14.150×**，POP2/RG 平均为 **0.990×**。这是当前配置包的联合差异；plane、path delay、jitter 和 barrier 尚未统一，不能把比值单独归因于目的侧配速（见 §1.1）。
-- **POP 启动开销会被负载摊薄**：batch=16 时 POP/RG=**1.010×**，batch=256 时为 **1.001×**；结果符合“多一次 one-way 启动、稳态节拍与 RG 相同”的模型预期。
-- **瓶颈下界**：CCT/König 中位数为 ub_rg=2.615、ub_rg_pop=2.617、ub_rg_pop2=2.633、packet_spray=9.316；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。
+- **配置包输出差异**（Exp1，按 batch 分列，不跨 batch 平均 step）：batch=16：POP/RG=**1.010×**，Spray/RG=**1.006×**；batch=256：POP/RG=**0.991×**，Spray/RG=**1.587×**，POP2/RG 平均为 **0.990×**。这是当前配置包的联合差异；plane、path delay、jitter 和 barrier 尚未统一，不能把比值单独归因于目的侧配速（见 §1.1）。
+- **POP 启动开销会被负载摊薄**：batch=16 时 POP/RG=**1.010×**，batch=256 时为 **0.991×**；结果符合“多一次 one-way 启动、稳态节拍与 RG 相同”的模型预期。
+- **瓶颈下界**：CCT/König 中位数为 ub_rg=2.580、ub_rg_pop=2.617、ub_rg_pop2=2.633、packet_spray=8.800；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。
 - **拓扑范围**：主矩阵为场景1（Clos+iSLIP）与场景4（Sparse CLOS 512P）。
 - **Exp3**：端到端含 GEMV；`gemv_us` 随 Zipf 热点与 batch 变化。
 - 当前 UB_RG 配置包的 CCT 更接近自定义 König 下界；与 Spray 的比值是**配置包联合差异**，不是“仅改目的侧准入”的受控因果结论（原因见 §1.1）。
@@ -139,7 +139,7 @@ CLI：`--scheme=ub_rg|ub_rg_pop|ub_rg_pop2|packet_spray|islip`；`--start-skew-u
 | 3 Roundtrip+GEMV | roundtrip | 1→{32,64,128}; 4→{128,256,512} | 256（S1 iSLIP 另含 128/512） | 同左 | 上列 | 同左 | 同左 |
 | 3 PDF | roundtrip | 同上 | 16,64,128,256,512 | 同左 | 每格 96 seeds | σ=4µs | 同左 |
 
-引擎：**packet**；成功汇总运行数：**584**。原始结果：`results/ub_rg_packet/`。
+引擎：**packet**；成功汇总运行数：**610**。原始结果：`results/ub_rg_packet/`。
 > 上表对齐当前 runner：仅场景1+4；启动偏差为 N(0,σ²)（σ∈{0,2,4,8}）；场景1 含 iSLIP；Exp3 输出 gemv_us/e2e_us。旧场景2/3 结果请忽略。
 > 逐包引擎按风险路径裁剪且当前完整度不足；行为级引擎覆盖完整主矩阵与 PDF。本报告方案对比仅使用本引擎结果，不与行为级混比。实验3 系统 CCT PDF 若本引擎样本未齐，报告自动回退到行为级多 seed 结果。
 ## 3. 实验1：倾斜专家流量下的 Dispatch
@@ -151,10 +151,10 @@ CLI：`--scheme=ub_rg|ub_rg_pop|ub_rg_pop2|packet_spray|islip`；`--start-skew-u
              cct_us                                  hot_p99                                  lat_p99                                  step_us                             throughput_GBs
 scheme packet_spray  ub_rg ub_rg_pop ub_rg_pop2 packet_spray  ub_rg ub_rg_pop ub_rg_pop2 packet_spray  ub_rg ub_rg_pop ub_rg_pop2 packet_spray  ub_rg ub_rg_pop ub_rg_pop2   packet_spray    ub_rg ub_rg_pop ub_rg_pop2
 zipf_s
-0.0           42.99  25.89     26.19      25.26        30.96   4.86      5.16       5.06        30.70   4.83      5.13       4.96        44.99  26.29     26.59      25.66        3003.73  6386.99   6255.08    6781.90
-0.3           67.89  28.85     29.15      28.38        54.94   8.13      8.43       7.96        47.25   6.24      6.54       6.17        69.89  29.25     29.55      28.78        1740.17  4848.30   4781.47    4937.89
-0.7          212.12  46.13     46.43      45.78       180.77  24.37     24.67      23.87       156.70  21.92     22.22      21.23       214.12  46.53     46.83      46.18         554.36  2568.48   2551.60    2587.36
-0.9          468.99  59.80     60.10      59.47       339.36  32.81     33.11      32.01       290.85  30.95     31.25      30.23       470.99  60.20     60.50      59.87         262.67  1969.23   1959.35    1980.35
+0.0           25.03  25.89     26.19      25.26         6.41   4.86      5.16       5.06         6.34   4.83      5.13       4.96        27.03  26.29     26.59      25.66        7091.64  6386.99   6255.08    6781.90
+0.3           26.67  28.85     29.15      28.38         9.51   8.13      8.43       7.96         8.08   6.24      6.54       6.17        28.67  29.25     29.55      28.78        5574.26  4848.30   4781.47    4937.89
+0.7           40.72  46.13     46.43      45.78        30.14  24.37     24.67      23.87        27.03  21.92     22.22      21.23        42.72  46.53     46.83      46.18        2928.76  2568.48   2551.60    2587.36
+0.9           51.92  59.80     60.10      59.47        42.37  32.81     33.11      32.01        40.19  30.95     31.25      30.23        53.92  60.20     60.50      59.87        2270.26  1969.23   1959.35    1980.35
 ```
 **batch=256 对比表**
 
@@ -162,10 +162,10 @@ zipf_s
              cct_us                                   hot_p99                                   lat_p99                                   step_us                              throughput_GBs
 scheme packet_spray   ub_rg ub_rg_pop ub_rg_pop2 packet_spray   ub_rg ub_rg_pop ub_rg_pop2 packet_spray   ub_rg ub_rg_pop ub_rg_pop2 packet_spray   ub_rg ub_rg_pop ub_rg_pop2   packet_spray     ub_rg ub_rg_pop ub_rg_pop2
 zipf_s
-0.0          417.63  162.97    163.27     162.52       381.13   67.14     67.44      68.40       351.07   56.69     56.99      55.97       419.63  163.37    163.67     162.92        4500.90  11552.86  11531.55   11649.34
-0.3         3801.59  250.14    250.44     249.40      2376.45  125.03    125.33     125.05       394.90   64.62     64.92      63.78      3803.59  250.54    250.84     249.80         494.49   7512.39   7503.39    7534.45
-0.7        15516.33  658.89    659.19     657.25      1189.91  201.68    201.98     200.97       787.32  115.72    116.02     114.38     15518.33  659.29    659.59     657.65         121.18   2851.92   2850.62    2858.97
-0.9        26977.15  948.63    948.93     934.67      1200.96  223.66    223.96     222.93      1439.62  217.89    218.19     218.20     26979.15  949.03    949.33     935.07          69.65   1981.96   1981.33    2011.89
+0.0          119.82  162.97    163.27     162.52       102.73   67.14     67.44      68.40        92.72   56.69     56.99      55.97       121.82  163.37    163.67     162.92       15825.54  11552.86  11531.55   11649.34
+0.3          244.88  250.14    250.44     249.40       218.58  125.03    125.33     125.05        96.12   64.62     64.92      63.78       246.88  250.54    250.84     249.80        7676.85   7512.39   7503.39    7534.45
+0.7         1487.17  658.89    659.19     657.25       217.81  201.68    201.98     200.97       144.35  115.72    116.02     114.38      1489.17  659.29    659.59     657.65        1291.17   2851.92   2850.62    2858.97
+0.9         2785.49  948.63    948.93     934.67       229.72  223.66    223.96     222.93       255.99  217.89    218.19     218.20      2787.49  949.03    949.33     935.07         694.04   1981.96   1981.33    2011.89
 ```
 ![exp1_dispatch_s1_bar_step_vs_zipf_b16_nsk0.png](../results/ub_rg_packet/figures/exp1_dispatch_s1_bar_step_vs_zipf_b16_nsk0.png)
 ![exp1_dispatch_s1_bar_step_vs_zipf_b16_nsk2.png](../results/ub_rg_packet/figures/exp1_dispatch_s1_bar_step_vs_zipf_b16_nsk2.png)
@@ -193,11 +193,11 @@ zipf_s
 **batch=256 对比表**
 
 ```
-             cct_us                         hot_p99                        lat_p99                       step_us                    throughput_GBs
-scheme packet_spray    ub_rg ub_rg_pop packet_spray   ub_rg ub_rg_pop packet_spray  ub_rg ub_rg_pop packet_spray    ub_rg ub_rg_pop   packet_spray     ub_rg ub_rg_pop
+             cct_us                         hot_p99                       lat_p99                       step_us                    throughput_GBs
+scheme packet_spray    ub_rg ub_rg_pop packet_spray  ub_rg ub_rg_pop packet_spray  ub_rg ub_rg_pop packet_spray    ub_rg ub_rg_pop   packet_spray     ub_rg ub_rg_pop
 zipf_s
-0.0          204.19   199.93    200.48       127.30  103.69    104.24       122.79  83.56     84.11       208.19   201.13    201.68       36809.26  37594.87  37491.73
-0.9        14230.92  9051.58       NaN       101.17   70.42       NaN        50.11  35.27       NaN     14234.92  9052.78       NaN         528.15    830.03       NaN
+0.0          209.45   210.58    200.48       124.12  99.38    104.24       111.33  77.83     84.11       213.45   211.78    201.68       35908.57  35784.57  37491.73
+0.9        14015.00  8325.16       NaN       101.53  66.47       NaN        45.97  31.41       NaN     14019.00  8326.36       NaN         536.42    909.28       NaN
 ```
 ![exp1_dispatch_s4_bar_step_vs_zipf_b16_nsk0.png](../results/ub_rg_packet/figures/exp1_dispatch_s4_bar_step_vs_zipf_b16_nsk0.png)
 ![exp1_dispatch_s4_bar_step_vs_zipf_b16_nsk2.png](../results/ub_rg_packet/figures/exp1_dispatch_s4_bar_step_vs_zipf_b16_nsk2.png)
@@ -262,10 +262,10 @@ zipf_s
 
 ```
              cct_us               hot_p99              lat_p99             step_us          throughput_GBs
-scheme packet_spray    ub_rg packet_spray   ub_rg packet_spray  ub_rg packet_spray    ub_rg   packet_spray    ub_rg
+scheme packet_spray    ub_rg packet_spray   ub_rg packet_spray  ub_rg packet_spray    ub_rg   packet_spray     ub_rg
 zipf_s
-0.0          200.86   199.09       148.22  124.37        120.7  83.50       204.86   200.29        37419.5  37753.5
-0.9             NaN  7524.45          NaN  129.82          NaN  90.48          NaN  7525.65            NaN    998.9
+0.0          208.75   211.59       147.24  121.25       111.87  77.87       212.75   212.79       36057.59  35647.08
+0.9        13114.80  6527.96       154.43  111.83       167.43  81.69     13118.80  6529.16         572.76   1178.85
 ```
 ![exp2_combine_s4_bar_step_vs_zipf_b16_nsk0.png](../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b16_nsk0.png)
 ![exp2_combine_s4_bar_step_vs_zipf_b16_nsk2.png](../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b16_nsk2.png)
@@ -474,55 +474,56 @@ scenario ep_size zipf_s
 ![exp3_pdf_compare_s0.png](../results/ub_rg/figures/exp3_pdf_compare_s0.png)
 ### 5.x Roundtrip Step vs EP（汇总）
 ![exp3_s1_step_vs_ep.png](../results/ub_rg_packet/figures/exp3_s1_step_vs_ep.png)
+![exp3_s4_step_vs_ep.png](../results/ub_rg_packet/figures/exp3_s4_step_vs_ep.png)
 ## 6. 方案对比摘要
 > 下列 step 均值均按 **batch 分列**，不跨 batch 平均。
-- **场景1 batch=16** 平均 step（共有参数格）：UB_RG=40.6µs vs POP=40.9µs（POP/RG=1.01×） vs Spray=200.0µs（Spray/RG=4.93×）
-- **场景1 batch=256** 平均 step（共有参数格）：UB_RG=505.6µs vs POP=505.9µs（POP/RG=1.00×） vs Spray=11680.2µs（Spray/RG=23.10×）
+- **场景1 batch=16** 平均 step（共有参数格）：UB_RG=40.6µs vs POP=40.9µs（POP/RG=1.01×） vs Spray=38.1µs（Spray/RG=0.94×）
+- **场景1 batch=256** 平均 step（共有参数格）：UB_RG=505.6µs vs POP=505.9µs（POP/RG=1.00×） vs Spray=1161.3µs（Spray/RG=2.30×）
 - **场景1 batch=16** ub_rg CCT/König：mean=3.326，median=2.210
 - **场景1 batch=16** ub_rg_pop CCT/König：mean=3.357，median=2.232
 - **场景1 batch=16** ub_rg_pop2 CCT/König：mean=3.270，median=2.121
-- **场景1 batch=16** packet_spray CCT/König：mean=10.757，median=9.632
+- **场景1 batch=16** packet_spray CCT/König：mean=3.086，median=1.896
 - **场景1 batch=256** ub_rg CCT/König：mean=2.472，median=2.186
 - **场景1 batch=256** ub_rg_pop CCT/König：mean=2.475，median=2.188
 - **场景1 batch=256** ub_rg_pop2 CCT/König：mean=2.459，median=2.164
-- **场景1 batch=256** packet_spray CCT/König：mean=37.562，median=39.962
+- **场景1 batch=256** packet_spray CCT/König：mean=4.023，median=3.762
 - **场景4 batch=16** 平均 step（共有参数格）：UB_RG=80.4µs vs POP=81.0µs（POP/RG=1.01×） vs Spray=84.3µs（Spray/RG=1.05×）
 - **场景4 batch=16** ub_rg CCT/König：mean=0.513，median=0.235
 - **场景4 batch=16** ub_rg_pop CCT/König：mean=0.521，median=0.239
 - **场景4 batch=16** ub_rg_pop2 CCT/König：mean=0.503，median=0.235
 - **场景4 batch=16** packet_spray CCT/König：mean=0.507，median=0.242
-- **场景4 batch=256** ub_rg CCT/König：mean=0.706，median=0.706
+- **场景4 batch=256** ub_rg CCT/König：mean=0.692，median=0.678
 - **场景4 batch=256** ub_rg_pop CCT/König：mean=0.635，median=0.635
-- **场景4 batch=256** packet_spray CCT/König：mean=0.936，median=0.936
+- **场景4 batch=256** packet_spray CCT/König：mean=0.935，median=0.934
 ## 7. 双引擎对比（逐包 vs 行为级）
 在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。
-对齐样本 **2336** 组；step 比值（packet/behavioral）均值=2.615，中位数=0.856。
+对齐样本 **2440** 组；step 比值（packet/behavioral）均值=1.840，中位数=0.878。
 ```
           exp  scenario       scheme     mode  batch  zipf_s  ep_size  step_packet  p99_packet  step_behav  p99_behav  step_ratio
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       63.439      49.862      11.855      7.131       5.351
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       63.439      49.862      20.058     14.955       3.163
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       63.439      49.862      28.936     25.646       2.192
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       63.439      49.862      51.752     48.319       1.226
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       67.491      49.567      11.855      7.131       5.693
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       67.491      49.567      20.058     14.955       3.365
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       67.491      49.567      28.936     25.646       2.332
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       67.491      49.567      51.752     48.319       1.304
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       70.714      47.183      11.855      7.131       5.965
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       70.714      47.183      20.058     14.955       3.525
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       70.714      47.183      28.936     25.646       2.444
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       70.714      47.183      51.752     48.319       1.366
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       77.924      42.393      11.855      7.131       6.573
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       77.924      42.393      20.058     14.955       3.885
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       77.924      42.393      28.936     25.646       2.693
-exp1_dispatch         1 packet_spray dispatch     16     0.3      128       77.924      42.393      51.752     48.319       1.506
-exp1_dispatch         1 packet_spray dispatch     16     0.7      128      222.284     177.540      24.901     19.030       8.927
-exp1_dispatch         1 packet_spray dispatch     16     0.7      128      222.284     177.540      31.957     26.270       6.956
-exp1_dispatch         1 packet_spray dispatch     16     0.7      128      222.284     177.540      40.384     34.656       5.504
-exp1_dispatch         1 packet_spray dispatch     16     0.7      128      222.284     177.540      58.591     51.716       3.794
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       15.987      11.645      11.855      7.131       1.349
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       15.987      11.645      20.058     14.955       0.797
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       15.987      11.645      28.936     25.646       0.552
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       15.987      11.645      51.752     48.319       0.309
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       18.500       9.330      11.855      7.131       1.561
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       18.500       9.330      20.058     14.955       0.922
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       18.500       9.330      28.936     25.646       0.639
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       18.500       9.330      51.752     48.319       0.357
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       28.599       6.151      11.855      7.131       2.412
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       28.599       6.151      20.058     14.955       1.426
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       28.599       6.151      28.936     25.646       0.988
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       28.599       6.151      51.752     48.319       0.553
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       51.599       5.176      11.855      7.131       4.352
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       51.599       5.176      20.058     14.955       2.572
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       51.599       5.176      28.936     25.646       1.783
+exp1_dispatch         1 packet_spray dispatch     16     0.3      128       51.599       5.176      51.752     48.319       0.997
+exp1_dispatch         1 packet_spray dispatch     16     0.7      128       37.825      34.035      24.901     19.030       1.519
+exp1_dispatch         1 packet_spray dispatch     16     0.7      128       37.825      34.035      31.957     26.270       1.184
+exp1_dispatch         1 packet_spray dispatch     16     0.7      128       37.825      34.035      40.384     34.656       0.937
+exp1_dispatch         1 packet_spray dispatch     16     0.7      128       37.825      34.035      58.591     51.716       0.646
 ```
 若该比值显著偏离 1，不能仅解释为“逐包栈静态开销”。逐包引擎含真实CBFC/缓冲与控制面，行为级折叠了 byte buffer；两引擎 plane 映射也不一致。在统一输入、完成守恒和异常门禁通过前，这里是**交叉验证对照**，不是行为级绝对值校准。
-- **packet** batch=16 同参数格平均：POP/RG=1.009×，Spray/RG=2.276×
-- **packet** batch=256 同参数格平均：POP/RG=1.001×，Spray/RG=7.209×
+- **packet** batch=16 同参数格平均：POP/RG=1.009×，Spray/RG=1.482×
+- **packet** batch=256 同参数格平均：POP/RG=0.999×，Spray/RG=4.086×
 - **behavioral** batch=16 同参数格平均：POP/RG=1.002×，Spray/RG=0.858×
 - **behavioral** batch=64 同参数格平均：POP/RG=1.000×，Spray/RG=1.136×
 - **behavioral** batch=128 同参数格平均：POP/RG=1.000×，Spray/RG=1.144×
