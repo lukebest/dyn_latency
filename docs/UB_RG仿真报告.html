@@ -6,7 +6,7 @@
 <ul>
 <li><strong>配置包输出差异</strong>（Exp1，按 batch 分列，不跨 batch 平均 step）：batch=16：POP/RG=<strong>1.010×</strong>，Spray/RG=<strong>1.006×</strong>；batch=256：POP/RG=<strong>0.991×</strong>，Spray/RG=<strong>1.587×</strong>，POP2/RG 平均为 <strong>0.990×</strong>。这是当前配置包的联合差异；plane、path delay、jitter 和 barrier 尚未统一，不能把比值单独归因于目的侧配速（见 §1.1）。</li>
 <li><strong>POP 启动开销会被负载摊薄</strong>：batch=16 时 POP/RG=<strong>1.010×</strong>，batch=256 时为 <strong>0.991×</strong>；结果符合“多一次 one-way 启动、稳态节拍与 RG 相同”的模型预期。</li>
-<li><strong>瓶颈下界</strong>：CCT/König 中位数为 ub_rg=2.580、ub_rg_pop=2.617、ub_rg_pop2=2.633、packet_spray=8.800；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。</li>
+<li><strong>瓶颈下界</strong>：CCT/König 中位数为 ub_rg=2.575、ub_rg_pop=2.617、ub_rg_pop2=2.633、packet_spray=8.800；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。</li>
 <li><strong>拓扑范围</strong>：主矩阵为场景1（Clos+iSLIP）与场景4（Sparse CLOS 512P）。</li>
 <li><strong>Exp3</strong>：端到端含 GEMV；<code>gemv_us</code> 随 Zipf 热点与 batch 变化。</li>
 <li>当前 UB_RG 配置包的 CCT 更接近自定义 König 下界；与 Spray 的比值是<strong>配置包联合差异</strong>，不是“仅改目的侧准入”的受控因果结论（原因见 §1.1）。</li>
@@ -69,7 +69,7 @@
 <br/>
 <p>对齐 <a href='./UB_RG实验设计.md'>UB_RG实验设计.md</a> 与 <a href='./场景4_Sparse_CLOS_512P_设计说明.md'>场景4_Sparse_CLOS_512P_设计说明.md</a>；本报告由 逐包引擎（<code>ub_rg-packet-experiment</code> + <code>UbRgExperimentApp</code>） 驱动。</p>
 <br/>
-<blockquote>逐包场景4拓扑若未就绪，则逐包仅用于场景1 协议调试。</blockquote>
+<blockquote>主矩阵含场景1与场景4；场景4 使用 <code>s4_n512</code> case（Sparse CLOS CSV）的逐包结果。</blockquote>
 <br/>
 <table>
 <thead><tr><th>场景</th><th>拓扑</th><th>NPU</th><th>交换</th><th>备注</th></tr></thead>
@@ -166,9 +166,9 @@
 <tr><td>3 PDF</td><td>roundtrip</td><td>同上</td><td>16,64,128,256,512</td><td>同左</td><td>每格 96 seeds</td><td>σ=4µs</td><td>同左</td></tr>
 </tbody></table>
 <br/>
-<p>引擎：<strong>packet</strong>；成功汇总运行数：<strong>610</strong>。原始结果：<code>results/ub_rg_packet/</code>。</p>
+<p>引擎：<strong>packet</strong>；成功汇总运行数：<strong>611</strong>。原始结果：<code>results/ub_rg_packet/</code>。</p>
 <blockquote>上表对齐当前 runner：仅场景1+4；启动偏差为 N(0,σ²)（σ∈{0,2,4,8}）；场景1 含 iSLIP；Exp3 输出 gemv_us/e2e_us。旧场景2/3 结果请忽略。</blockquote>
-<blockquote>逐包引擎按风险路径裁剪且当前完整度不足；行为级引擎覆盖完整主矩阵与 PDF。本报告方案对比仅使用本引擎结果，不与行为级混比。实验3 系统 CCT PDF 若本引擎样本未齐，报告自动回退到行为级多 seed 结果。</blockquote>
+<blockquote>逐包引擎按风险路径裁剪（S4 主扫为 ub_rg/packet_spray × 部分 Zipf/σ；若干 ep512 曾 timeout）。本报告<strong>只含本引擎</strong>表与图，不回退嵌入行为级 PDF/KPI。</blockquote>
 <h2>3. 实验1：倾斜专家流量下的 Dispatch</h2>
 <blockquote>下表按 <strong>batch 分列</strong>；不同 batch 的 <code>step_us</code> 不放在同一张表。</blockquote>
 <blockquote><strong>读图（Exp1/2 汇总图均为分组柱状，不再用多线折线）</strong></blockquote>
@@ -233,9 +233,7 @@ zipf_s
 <p><img alt='exp1_dispatch_s4_bar_step_vs_zipf_b16_nsk4.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s4_bar_step_vs_zipf_b16_nsk4.png'></p>
 <p><img alt='exp1_dispatch_s4_bar_step_vs_zipf_b16_nsk8.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s4_bar_step_vs_zipf_b16_nsk8.png'></p>
 <p><img alt='exp1_dispatch_s4_bar_step_vs_zipf_b256_nsk0.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s4_bar_step_vs_zipf_b256_nsk0.png'></p>
-<p><img alt='exp1_dispatch_s4_bar_step_vs_zipf_b256_nsk2.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s4_bar_step_vs_zipf_b256_nsk2.png'></p>
 <p><img alt='exp1_dispatch_s4_bar_step_vs_zipf_b256_nsk4.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s4_bar_step_vs_zipf_b256_nsk4.png'></p>
-<p><img alt='exp1_dispatch_s4_bar_step_vs_zipf_b256_nsk8.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s4_bar_step_vs_zipf_b256_nsk8.png'></p>
 <p><img alt='exp1_dispatch_s4_hotcold_p99_vs_s.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s4_hotcold_p99_vs_s.png'></p>
 <p><img alt='exp1_dispatch_s4_step_vs_batch.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s4_step_vs_batch.png'></p>
 <p><img alt='exp1_dispatch_s4_throughput_vs_s.png' src='../results/ub_rg_packet/figures/exp1_dispatch_s4_throughput_vs_s.png'></p>
@@ -303,9 +301,7 @@ zipf_s
 <p><img alt='exp2_combine_s4_bar_step_vs_zipf_b16_nsk4.png' src='../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b16_nsk4.png'></p>
 <p><img alt='exp2_combine_s4_bar_step_vs_zipf_b16_nsk8.png' src='../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b16_nsk8.png'></p>
 <p><img alt='exp2_combine_s4_bar_step_vs_zipf_b256_nsk0.png' src='../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b256_nsk0.png'></p>
-<p><img alt='exp2_combine_s4_bar_step_vs_zipf_b256_nsk2.png' src='../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b256_nsk2.png'></p>
 <p><img alt='exp2_combine_s4_bar_step_vs_zipf_b256_nsk4.png' src='../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b256_nsk4.png'></p>
-<p><img alt='exp2_combine_s4_bar_step_vs_zipf_b256_nsk8.png' src='../results/ub_rg_packet/figures/exp2_combine_s4_bar_step_vs_zipf_b256_nsk8.png'></p>
 <p><img alt='exp2_combine_s4_hotcold_p99_vs_s.png' src='../results/ub_rg_packet/figures/exp2_combine_s4_hotcold_p99_vs_s.png'></p>
 <p><img alt='exp2_combine_s4_step_vs_batch.png' src='../results/ub_rg_packet/figures/exp2_combine_s4_step_vs_batch.png'></p>
 <p><img alt='exp2_combine_s4_throughput_vs_s.png' src='../results/ub_rg_packet/figures/exp2_combine_s4_throughput_vs_s.png'></p>
@@ -317,189 +313,11 @@ zipf_s
 <li><strong>场景4</strong> Sparse CLOS：EP ∈ {128, 256, 512}；PDF batch∈{16,64,128,256,512}</li>
 </ul>
 <p>每场景单独出 PDF（每个 (EP, Zipf S) 一张）；另附跨场景对比图（S1-EP128 / S4-EP512）。<strong>颜色区分方案</strong>（ub_rg / ub_rg_pop / ub_rg_pop2 / packet_spray / islip），<strong>线型区分 batch</strong>（16 实线、64 虚线、128 点划、256 密虚线、512 点线）。</p>
-<p>（当前引擎尚无 exp3_pdf；下图暂用 <strong>behavioral</strong> 引擎样本）</p>
-<p><strong>系统 CCT 样本统计（µs，mean/std/count）</strong>——按 batch 分表，不把不同 batch 混在一张表里。</p>
-<p><strong>batch=16</strong></p>
-<br/>
-<pre><code>                          mean                                             std                                         count
-scheme                   islip packet_spray   ub_rg ub_rg_pop ub_rg_pop2 islip packet_spray ub_rg ub_rg_pop ub_rg_pop2 islip packet_spray ub_rg ub_rg_pop ub_rg_pop2
-scenario ep_size zipf_s
-1        32      0.0     39.80        41.61   39.78     39.78      39.79  4.37         4.25  4.37      4.37       4.37  96.0         96.0  96.0      96.0       96.0
-                 0.3     40.39        42.37   40.40     40.40      40.40  4.42         4.15  4.41      4.41       4.42  96.0         96.0  96.0      96.0       96.0
-                 0.7     42.71        45.40   42.71     42.71      42.72  4.33         4.21  4.33      4.33       4.33  96.0         96.0  96.0      96.0       96.0
-                 0.9     43.91        46.72   43.91     43.91      43.91  4.37         4.33  4.37      4.37       4.36  96.0         96.0  96.0      96.0       96.0
-         64      0.0     45.46        47.60   45.46     45.46      45.43  3.99         3.88  3.98      3.98       3.97  96.0         96.0  96.0      96.0       96.0
-                 0.3     46.54        49.26   46.52     46.52      46.54  3.90         3.75  3.90      3.90       3.90  96.0         96.0  96.0      96.0       96.0
-                 0.7     51.22        57.51   51.22     51.22      51.22  4.21         4.16  4.20      4.20       4.19  96.0         96.0  96.0      96.0       96.0
-                 0.9     54.85        62.67   54.85     54.85      54.85  4.49         4.24  4.48      4.48       4.48  96.0         96.0  96.0      96.0       96.0
-         128     0.0     49.44        51.76   49.44     49.44      49.44  3.63         3.66  3.61      3.61       3.63  96.0         96.0  96.0      96.0       96.0
-                 0.3     50.79        54.60   50.78     50.78      50.78  3.62         3.65  3.62      3.62       3.62  96.0         96.0  96.0      96.0       96.0
-                 0.7     61.98        74.74   61.97     61.97      61.96  4.22         4.26  4.19      4.19       4.20  96.0         96.0  96.0      96.0       96.0
-                 0.9     71.46        89.73   71.44     71.56      71.45  4.26         4.55  4.23      4.21       4.27  96.0         96.0  96.0      96.0       96.0
-4        128     0.0       NaN        51.83   49.46     49.46      49.49   NaN         3.68  3.63      3.63       3.61   NaN         96.0  96.0      96.0       96.0
-                 0.3       NaN        54.52   50.77     50.77      50.76   NaN         3.66  3.62      3.62       3.64   NaN         96.0  96.0      96.0       96.0
-                 0.7       NaN        75.88   62.08     62.08      62.05   NaN         4.41  4.13      4.13       4.14   NaN         96.0  96.0      96.0       96.0
-                 0.9       NaN        91.56   72.17     72.37      72.16   NaN         4.61  4.20      4.18       4.23   NaN         96.0  96.0      96.0       96.0
-         256     0.0       NaN        55.08   52.55     52.55      52.55   NaN         3.64  3.53      3.53       3.51   NaN         96.0  96.0      96.0       96.0
-                 0.3       NaN        59.50   54.48     54.48      54.48   NaN         3.84  3.77      3.77       3.76   NaN         96.0  96.0      96.0       96.0
-                 0.7       NaN       104.41   84.28     84.67      84.28   NaN         5.33  4.75      4.73       4.79   NaN         96.0  96.0      96.0       96.0
-                 0.9       NaN       141.10  122.03    122.44     122.00   NaN         5.35  4.61      4.59       4.67   NaN         96.0  96.0      96.0       96.0
-         512     0.0       NaN        58.45   56.29     56.29      56.28   NaN         3.35  3.14      3.14       3.13   NaN         96.0  96.0      96.0       96.0
-                 0.3       NaN        64.44   58.46     58.46      58.46   NaN         4.10  3.75      3.75       3.75   NaN         96.0  96.0      96.0       96.0
-                 0.7       NaN       150.14  131.48    131.89     131.47   NaN         5.63  6.46      6.45       6.49   NaN         96.0  96.0      96.0       96.0
-                 0.9       NaN       229.26  214.88    215.28     214.86   NaN         5.84  6.14      6.13       6.16   NaN         96.0  96.0      96.0       96.0
-</code></pre>
-<p><strong>batch=64</strong></p>
-<br/>
-<pre><code>                           mean                                             std                                          count
-scheme                    islip packet_spray   ub_rg ub_rg_pop ub_rg_pop2 islip packet_spray  ub_rg ub_rg_pop ub_rg_pop2 islip packet_spray ub_rg ub_rg_pop ub_rg_pop2
-scenario ep_size zipf_s
-1        32      0.0      54.96        66.01   54.95     54.95      54.96  4.45         4.08   4.43      4.43       4.45  96.0         96.0  96.0      96.0       96.0
-                 0.3      60.54        74.68   60.53     60.53      60.55  4.55         4.86   4.55      4.55       4.54  96.0         96.0  96.0      96.0       96.0
-                 0.7      77.51        96.52   77.50     77.51      77.52  4.87         5.15   4.88      4.87       4.88  96.0         96.0  96.0      96.0       96.0
-                 0.9      84.67       104.73   84.67     84.67      84.67  4.89         5.45   4.88      4.87       4.86  96.0         96.0  96.0      96.0       96.0
-         64      0.0      60.97        72.59   60.95     60.95      60.98  4.02         3.57   4.01      4.01       4.02  96.0         96.0  96.0      96.0       96.0
-                 0.3      70.19        87.89   70.18     70.18      70.17  4.17         4.32   4.17      4.17       4.17  96.0         96.0  96.0      96.0       96.0
-                 0.7     110.88       139.19  110.88    111.18     110.88  4.42         5.02   4.41      4.41       4.41  96.0         96.0  96.0      96.0       96.0
-                 0.9     135.69       164.48  135.70    136.01     135.69  4.41         4.87   4.40      4.38       4.42  96.0         96.0  96.0      96.0       96.0
-         128     0.0      64.83        77.84   64.85     64.85      64.84  3.50         3.49   3.52      3.52       3.51  96.0         96.0  96.0      96.0       96.0
-                 0.3      79.08       102.00   79.07     79.07      79.10  4.09         4.31   4.08      4.08       4.09  96.0         96.0  96.0      96.0       96.0
-                 0.7     175.91       204.95  175.92    176.23     175.90  4.69         5.39   4.70      4.68       4.71  96.0         96.0  96.0      96.0       96.0
-                 0.9     237.46       267.06  237.46    237.77     237.46  5.00         5.02   5.00      4.97       5.00  96.0         96.0  96.0      96.0       96.0
-4        128     0.0        NaN        78.28   65.32     65.32      65.32   NaN         3.43   3.62      3.62       3.62   NaN         96.0  96.0      96.0       96.0
-                 0.3        NaN       103.54   79.45     79.45      79.46   NaN         4.40   4.07      4.08       4.05   NaN         96.0  96.0      96.0       96.0
-                 0.7        NaN       211.71  180.57    180.99     180.58   NaN         5.62   5.07      5.05       5.12   NaN         96.0  96.0      96.0       96.0
-                 0.9        NaN       276.68  246.09    246.51     246.08   NaN         5.12   5.76      5.74       5.81   NaN         96.0  96.0      96.0       96.0
-         256     0.0        NaN        82.38   68.51     68.51      68.52   NaN         3.73   3.51      3.51       3.51   NaN         96.0  96.0      96.0       96.0
-                 0.3        NaN       119.70   90.07     90.17      90.05   NaN         4.90   4.98      4.94       5.01   NaN         96.0  96.0      96.0       96.0
-                 0.7        NaN       319.99  295.79    296.21     295.78   NaN         5.65   8.24      8.23       8.25   NaN         96.0  96.0      96.0       96.0
-                 0.9        NaN       467.70  449.90    450.31     449.91   NaN         6.01   7.89      7.87       7.93   NaN         96.0  96.0      96.0       96.0
-         512     0.0        NaN        85.43   72.12     72.12      72.13   NaN         3.69   3.35      3.35       3.36   NaN         96.0  96.0      96.0       96.0
-                 0.3        NaN       137.97  106.21    106.59     106.20   NaN         5.71   6.03      6.04       6.03   NaN         96.0  96.0      96.0       96.0
-                 0.7        NaN       493.95  481.74    482.15     481.72   NaN         7.19  10.50     10.49      10.52   NaN         96.0  96.0      96.0       96.0
-                 0.9        NaN       811.65  817.55    817.95     817.52   NaN         7.30  10.50     10.49      10.52   NaN         96.0  96.0      96.0       96.0
-</code></pre>
-<p><strong>batch=128</strong></p>
-<br/>
-<pre><code>                           mean                                              std                                          count
-scheme                    islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2 islip packet_spray  ub_rg ub_rg_pop ub_rg_pop2 islip packet_spray ub_rg ub_rg_pop ub_rg_pop2
-scenario ep_size zipf_s
-1        32      0.0      74.80       100.63    74.79     74.79      74.78  4.55         4.48   4.54      4.54       4.54  96.0         96.0  96.0      96.0       96.0
-                 0.3      90.25       123.68    90.25     90.26      90.27  5.04         5.20   5.04      5.03       5.03  96.0         96.0  96.0      96.0       96.0
-                 0.7     129.37       169.59   129.38    129.57     129.40  4.76         5.78   4.74      4.70       4.76  96.0         96.0  96.0      96.0       96.0
-                 0.9     145.10       187.14   145.09    145.33     145.10  4.51         5.66   4.50      4.46       4.50  96.0         96.0  96.0      96.0       96.0
-         64      0.0      80.94       107.83    80.92     80.92      80.90  4.04         3.72   4.04      4.04       4.05  96.0         96.0  96.0      96.0       96.0
-                 0.3     106.64       146.75   106.64    106.66     106.65  4.32         4.28   4.32      4.30       4.32  96.0         96.0  96.0      96.0       96.0
-                 0.7     208.27       251.49   208.28    208.59     208.28  4.68         5.07   4.66      4.64       4.67  96.0         96.0  96.0      96.0       96.0
-                 0.9     257.70       301.72   257.70    258.01     257.70  4.80         5.20   4.78      4.77       4.78  96.0         96.0  96.0      96.0       96.0
-         128     0.0      84.91       113.06    84.93     84.93      84.92  3.89         3.38   3.90      3.90       3.89  96.0         96.0  96.0      96.0       96.0
-                 0.3     126.06       171.32   126.06    126.32     126.05  4.57         4.58   4.59      4.58       4.59  96.0         96.0  96.0      96.0       96.0
-                 0.7     336.24       379.50   336.23    336.54     336.23  5.11         5.40   5.12      5.11       5.12  96.0         96.0  96.0      96.0       96.0
-                 0.9     459.18       504.11   459.18    459.49     459.17  4.96         5.45   4.96      4.95       4.97  96.0         96.0  96.0      96.0       96.0
-4        128     0.0        NaN       115.04    86.17     86.17      86.18   NaN         3.40   3.69      3.69       3.70   NaN         96.0  96.0      96.0       96.0
-                 0.3        NaN       175.64   128.15    128.53     128.15   NaN         4.92   5.08      5.09       5.07   NaN         96.0  96.0      96.0       96.0
-                 0.7        NaN       393.84   346.85    347.26     346.82   NaN         5.49   7.69      7.67       7.71   NaN         96.0  96.0      96.0       96.0
-                 0.9        NaN       524.72   479.09    479.51     479.07   NaN         5.53   7.17      7.15       7.20   NaN         96.0  96.0      96.0       96.0
-         256     0.0        NaN       119.69    89.55     89.55      89.56   NaN         3.77   3.64      3.64       3.63   NaN         96.0  96.0      96.0       96.0
-                 0.3        NaN       205.85   159.42    159.83     159.40   NaN         6.01   6.88      6.87       6.92   NaN         96.0  96.0      96.0       96.0
-                 0.7        NaN       607.74   577.60    578.02     577.56   NaN         6.58  11.02     11.01      11.05   NaN         96.0  96.0      96.0       96.0
-                 0.9        NaN       903.72   885.32    885.73     885.28   NaN         6.49  10.06     10.04      10.10   NaN         96.0  96.0      96.0       96.0
-         512     0.0        NaN       123.42    92.76     92.76      92.76   NaN         3.96   3.22      3.22       3.22   NaN         96.0  96.0      96.0       96.0
-                 0.3        NaN       242.33   197.31    197.71     197.31   NaN         6.87   7.98      7.97       7.99   NaN         96.0  96.0      96.0       96.0
-                 0.7        NaN       954.49   950.40    950.81     950.40   NaN         8.76  13.85     13.85      13.86   NaN         96.0  96.0      96.0       96.0
-                 0.9        NaN      1588.36  1619.88   1620.29    1619.90   NaN         8.35  14.71     14.70      14.73   NaN         96.0  96.0      96.0       96.0
-</code></pre>
-<p><strong>batch=256</strong></p>
-<br/>
-<pre><code>                           mean                                              std                                          count
-scheme                    islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2 islip packet_spray  ub_rg ub_rg_pop ub_rg_pop2 islip packet_spray ub_rg ub_rg_pop ub_rg_pop2
-scenario ep_size zipf_s
-1        32      0.0     113.46       171.71   113.48    113.48     113.46  4.68         4.85   4.69      4.69       4.70  96.0         96.0  96.0      96.0       96.0
-                 0.3     152.46       224.75   152.46    152.55     152.46  5.16         5.33   5.14      5.10       5.15  96.0         96.0  96.0      96.0       96.0
-                 0.7     244.52       318.18   244.53    244.85     244.53  5.06         6.64   5.06      5.04       5.04  96.0         96.0  96.0      96.0       96.0
-                 0.9     277.76       352.89   277.77    278.08     277.77  4.60         6.20   4.60      4.58       4.60  96.0         96.0  96.0      96.0       96.0
-         64      0.0     119.69       179.39   119.69    119.69     119.71  3.90         4.03   3.92      3.92       3.92  96.0         96.0  96.0      96.0       96.0
-                 0.3     189.13       265.99   189.13    189.43     189.12  4.59         4.77   4.59      4.58       4.60  96.0         96.0  96.0      96.0       96.0
-                 0.7     402.00       476.66   402.00    402.31     402.01  4.96         5.73   4.97      4.97       4.95  96.0         96.0  96.0      96.0       96.0
-                 0.9     501.71       578.41   501.71    502.02     501.72  4.59         6.32   4.60      4.59       4.57  96.0         96.0  96.0      96.0       96.0
-         128     0.0     123.96       185.57   123.96    123.96     123.96  3.96         3.41   3.96      3.96       3.95  96.0         96.0  96.0      96.0       96.0
-                 0.3     234.82       313.14   234.82    235.13     234.83  6.90         5.16   6.90      6.89       6.92  96.0         96.0  96.0      96.0       96.0
-                 0.7     653.85       729.72   653.85    654.16     653.86  6.90         7.18   6.92      6.90       6.95  96.0         96.0  96.0      96.0       96.0
-                 0.9     900.47       978.94   900.47    900.78     900.49  6.17         6.26   6.19      6.18       6.21  96.0         96.0  96.0      96.0       96.0
-4        128     0.0        NaN       189.85   127.73    127.73     127.72   NaN         3.60   3.73      3.73       3.74   NaN         96.0  96.0      96.0       96.0
-                 0.3        NaN       322.72   240.29    240.71     240.30   NaN         5.81   7.51      7.49       7.53   NaN         96.0  96.0      96.0       96.0
-                 0.7        NaN       759.53   681.07    681.48     681.06   NaN         7.46  11.15     11.13      11.17   NaN         96.0  96.0      96.0       96.0
-                 0.9        NaN      1022.80   945.99    946.40     945.98   NaN         8.16   8.74      8.72       8.77   NaN         96.0  96.0      96.0       96.0
-         256     0.0        NaN       195.30   130.05    130.05     130.06   NaN         4.27   3.26      3.26       3.27   NaN         96.0  96.0      96.0       96.0
-                 0.3        NaN       380.62   304.11    304.52     304.11   NaN         7.69   9.43      9.43       9.46   NaN         96.0  96.0      96.0       96.0
-                 0.7        NaN      1184.78  1141.74   1142.15    1141.73   NaN         8.93  14.22     14.22      14.22   NaN         96.0  96.0      96.0       96.0
-                 0.9        NaN      1774.80  1756.82   1757.23    1756.82   NaN         9.65  14.17     14.15      14.20   NaN         96.0  96.0      96.0       96.0
-         512     0.0        NaN       200.36   135.37    135.37     135.35   NaN         4.09   3.31      3.31       3.31   NaN         96.0  96.0      96.0       96.0
-                 0.3        NaN       451.43   377.35    377.76     377.34   NaN         8.23  10.93     10.92      10.94   NaN         96.0  96.0      96.0       96.0
-                 0.7        NaN      1873.71  1882.51   1882.91    1882.49   NaN        10.92  19.84     19.83      19.85   NaN         96.0  96.0      96.0       96.0
-                 0.9        NaN      3142.09  3222.79   3223.20    3222.78   NaN        11.70  20.29     20.28      20.31   NaN         96.0  96.0      96.0       96.0
-</code></pre>
-<p><strong>batch=512</strong></p>
-<br/>
-<pre><code>                            mean                                              std                                          count
-scheme                     islip packet_spray    ub_rg ub_rg_pop ub_rg_pop2 islip packet_spray  ub_rg ub_rg_pop ub_rg_pop2 islip packet_spray ub_rg ub_rg_pop ub_rg_pop2
-scenario ep_size zipf_s
-1        32      0.0      190.21       316.30   190.20    190.20     190.20  4.97         5.18   4.98      4.98       4.98  96.0         96.0  96.0      96.0       96.0
-                 0.3      287.02       428.28   287.02    287.33     287.03  4.88         5.90   4.88      4.88       4.88  96.0         96.0  96.0      96.0       96.0
-                 0.7      476.68       616.32   476.68    477.00     476.69  5.02         6.50   5.00      4.99       5.00  96.0         96.0  96.0      96.0       96.0
-                 0.9      544.26       685.37   544.27    544.59     544.27  4.48         6.48   4.47      4.45       4.47  96.0         96.0  96.0      96.0       96.0
-         64      0.0      196.98       324.99   196.97    196.97     196.99  3.97         4.28   3.97      3.97       3.97  96.0         96.0  96.0      96.0       96.0
-                 0.3      361.71       507.10   361.71    362.02     361.72  6.11         6.01   6.12      6.10       6.13  96.0         96.0  96.0      96.0       96.0
-                 0.7      786.64       928.47   786.64    786.95     786.63  6.59         6.73   6.60      6.59       6.60  96.0         96.0  96.0      96.0       96.0
-                 0.9      987.80      1130.40   987.81    988.12     987.79  5.28         7.05   5.30      5.29       5.29  96.0         96.0  96.0      96.0       96.0
-         128     0.0      201.31       331.62   201.28    201.28     201.29  4.00         4.16   4.00      4.00       4.02  96.0         96.0  96.0      96.0       96.0
-                 0.3      451.62       597.73   451.61    451.92     451.61  7.56         6.47   7.57      7.56       7.58  96.0         96.0  96.0      96.0       96.0
-                 0.7     1288.34      1429.08  1288.35   1288.65    1288.35  9.65         7.58   9.66      9.65       9.65  96.0         96.0  96.0      96.0       96.0
-                 0.9     1784.92      1928.84  1784.91   1785.22    1784.93  7.68         8.07   7.70      7.68       7.69  96.0         96.0  96.0      96.0       96.0
-4        128     0.0         NaN       342.46   212.23    212.23     212.23   NaN         4.23   4.03      4.03       4.04   NaN         96.0  96.0      96.0       96.0
-                 0.3         NaN       620.32   465.26    465.67     465.26   NaN         6.99  10.59     10.59      10.59   NaN         96.0  96.0      96.0       96.0
-                 0.7         NaN      1496.12  1349.92   1350.33    1349.93   NaN        10.97  15.27     15.26      15.27   NaN         96.0  96.0      96.0       96.0
-                 0.9         NaN      2022.25  1879.42   1879.84    1879.44   NaN        12.24  13.20     13.19      13.21   NaN         96.0  96.0      96.0       96.0
-         256     0.0         NaN       348.84   213.43    213.43     213.44   NaN         4.22   3.81      3.81       3.82   NaN         96.0  96.0      96.0       96.0
-                 0.3         NaN       733.33   591.66    592.07     591.66   NaN         8.86  12.39     12.39      12.38   NaN         96.0  96.0      96.0       96.0
-                 0.7         NaN      2339.69  2266.62   2267.03    2266.59   NaN        14.22  21.69     21.70      21.68   NaN         96.0  96.0      96.0       96.0
-                 0.9         NaN      3522.74  3499.85   3500.26    3499.83   NaN        13.37  18.08     18.07      18.10   NaN         96.0  96.0      96.0       96.0
-         512     0.0         NaN       353.80   219.41    219.41     219.42   NaN         4.45   3.85      3.85       3.85   NaN         96.0  96.0      96.0       96.0
-                 0.3         NaN       868.98   741.09    741.50     741.07   NaN         7.94  15.69     15.69      15.68   NaN         96.0  96.0      96.0       96.0
-                 0.7         NaN      3712.24  3750.00   3750.40    3749.96   NaN        14.20  30.36     30.35      30.38   NaN         96.0  96.0      96.0       96.0
-                 0.9         NaN      6249.05  6433.22   6433.63    6433.18   NaN        16.04  26.17     26.16      26.20   NaN         96.0  96.0      96.0       96.0
-</code></pre>
+<p>_（本引擎尚无 <code>exp3_pdf</code> 系统 CCT 样本；Exp3 请看下方 roundtrip step 汇总。补齐：<code>python3 run_ub_rg_experiments.py --engine packet --exp3-pdf</code>）_</p>
 <h3>5.1 场景1 PDF</h3>
-<p><img alt='exp3_pdf_s1_ep128_s0.3.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep128_s0.3.png'></p>
-<p><img alt='exp3_pdf_s1_ep128_s0.7.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep128_s0.7.png'></p>
-<p><img alt='exp3_pdf_s1_ep128_s0.9.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep128_s0.9.png'></p>
-<p><img alt='exp3_pdf_s1_ep128_s0.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep128_s0.png'></p>
-<p><img alt='exp3_pdf_s1_ep32_s0.3.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep32_s0.3.png'></p>
-<p><img alt='exp3_pdf_s1_ep32_s0.7.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep32_s0.7.png'></p>
-<p><img alt='exp3_pdf_s1_ep32_s0.9.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep32_s0.9.png'></p>
-<p><img alt='exp3_pdf_s1_ep32_s0.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep32_s0.png'></p>
-<p><img alt='exp3_pdf_s1_ep64_s0.3.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep64_s0.3.png'></p>
-<p><img alt='exp3_pdf_s1_ep64_s0.7.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep64_s0.7.png'></p>
-<p><img alt='exp3_pdf_s1_ep64_s0.9.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep64_s0.9.png'></p>
-<p><img alt='exp3_pdf_s1_ep64_s0.png' src='../results/ub_rg/figures/exp3_pdf_s1_ep64_s0.png'></p>
+<p>_（无本引擎 PDF 样本）_</p>
 <h3>5.4 场景4 PDF</h3>
-<p><img alt='exp3_pdf_s4_ep128_s0.3.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep128_s0.3.png'></p>
-<p><img alt='exp3_pdf_s4_ep128_s0.7.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep128_s0.7.png'></p>
-<p><img alt='exp3_pdf_s4_ep128_s0.9.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep128_s0.9.png'></p>
-<p><img alt='exp3_pdf_s4_ep128_s0.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep128_s0.png'></p>
-<p><img alt='exp3_pdf_s4_ep256_s0.3.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep256_s0.3.png'></p>
-<p><img alt='exp3_pdf_s4_ep256_s0.7.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep256_s0.7.png'></p>
-<p><img alt='exp3_pdf_s4_ep256_s0.9.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep256_s0.9.png'></p>
-<p><img alt='exp3_pdf_s4_ep256_s0.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep256_s0.png'></p>
-<p><img alt='exp3_pdf_s4_ep512_s0.3.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep512_s0.3.png'></p>
-<p><img alt='exp3_pdf_s4_ep512_s0.7.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep512_s0.7.png'></p>
-<p><img alt='exp3_pdf_s4_ep512_s0.9.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep512_s0.9.png'></p>
-<p><img alt='exp3_pdf_s4_ep512_s0.png' src='../results/ub_rg/figures/exp3_pdf_s4_ep512_s0.png'></p>
-<h3>5.4 跨场景对比 PDF（S1-EP128 / S4-EP512）</h3>
-<p><img alt='exp3_pdf_compare_s0.3.png' src='../results/ub_rg/figures/exp3_pdf_compare_s0.3.png'></p>
-<p><img alt='exp3_pdf_compare_s0.7.png' src='../results/ub_rg/figures/exp3_pdf_compare_s0.7.png'></p>
-<p><img alt='exp3_pdf_compare_s0.9.png' src='../results/ub_rg/figures/exp3_pdf_compare_s0.9.png'></p>
-<p><img alt='exp3_pdf_compare_s0.png' src='../results/ub_rg/figures/exp3_pdf_compare_s0.png'></p>
+<p>_（无本引擎 PDF 样本）_</p>
 <h3>5.x Roundtrip Step vs EP（汇总）</h3>
 <blockquote><strong>读图</strong>：每个面板一个 Zipf S；横轴 EP size，颜色=方案（log y）。对比同一偏斜下方案随 EP 的 roundtrip step，不再把 scheme×S 叠成折线。</blockquote>
 <p><img alt='exp3_s1_step_vs_ep.png' src='../results/ub_rg_packet/figures/exp3_s1_step_vs_ep.png'></p>
@@ -528,7 +346,7 @@ scenario ep_size zipf_s
 </ul>
 <h2>7. 双引擎对比（逐包 vs 行为级）</h2>
 <p>在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。</p>
-<p>对齐样本 <strong>2440</strong> 组；step 比值（packet/behavioral）均值=1.840，中位数=0.878。</p>
+<p>对齐样本 <strong>2444</strong> 组；step 比值（packet/behavioral）均值=1.838，中位数=0.877。</p>
 <pre><code>          exp  scenario       scheme     mode  batch  zipf_s  ep_size  step_packet  p99_packet  step_behav  p99_behav  step_ratio
 exp1_dispatch         1 packet_spray dispatch     16     0.3      128       15.987      11.645      11.855      7.131       1.349
 exp1_dispatch         1 packet_spray dispatch     16     0.3      128       15.987      11.645      20.058     14.955       0.797
@@ -554,7 +372,7 @@ exp1_dispatch         1 packet_spray dispatch     16     0.7      128       37.8
 <p>若该比值显著偏离 1，不能仅解释为“逐包栈静态开销”。逐包引擎含真实CBFC/缓冲与控制面，行为级折叠了 byte buffer；两引擎 plane 映射也不一致。在统一输入、完成守恒和异常门禁通过前，这里是<strong>交叉验证对照</strong>，不是行为级绝对值校准。</p>
 <ul>
 <li><strong>packet</strong> batch=16 同参数格平均：POP/RG=1.009×，Spray/RG=1.482×</li>
-<li><strong>packet</strong> batch=256 同参数格平均：POP/RG=0.999×，Spray/RG=4.086×</li>
+<li><strong>packet</strong> batch=256 同参数格平均：POP/RG=0.999×，Spray/RG=4.091×</li>
 <li><strong>behavioral</strong> batch=16 同参数格平均：POP/RG=1.002×，Spray/RG=0.858×</li>
 <li><strong>behavioral</strong> batch=64 同参数格平均：POP/RG=1.000×，Spray/RG=1.136×</li>
 <li><strong>behavioral</strong> batch=128 同参数格平均：POP/RG=1.000×，Spray/RG=1.144×</li>

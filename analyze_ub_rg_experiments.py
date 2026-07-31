@@ -366,19 +366,37 @@ def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
     for stale in figs_dir.glob(f"{exp}_s*_bar_step_vs_batch_*.png"):
         stale.unlink()
     figs = []
+    # Drop stale bar figures for (batch,σ) cells that no longer have data.
+    keep_names: set[str] = set()
     for scenario in sorted(sub["scenario"].unique()):
         s = sub[sub["scenario"] == scenario]
-        schemes = schemes_in(s)
-        if not schemes:
-            continue
         batches = sorted(s["batch"].unique())
         skews = sorted(s["start_skew_us"].unique())
-        zipfs = sorted(s["zipf_s"].unique())
-        # One bar chart per batch × skew (schemes × Zipf).
+        # One bar chart per batch × skew — x/schemes taken from THIS cell only,
+        # so a C-filter matrix (e.g. Zipf∈{0,0.9}) does not leave empty slots
+        # for Zipf values that only exist under another batch.
         for batch in batches:
             for skew in skews:
                 cell = s[(s["batch"] == batch) & np.isclose(s["start_skew_us"], skew)]
+                cell = cell[cell["step_us"].notna() & (cell["step_us"] > 0)]
                 if cell.empty:
+                    continue
+                zipfs = sorted(cell["zipf_s"].unique())
+                schemes = schemes_in(cell)
+                # Prefer schemes that have a bar at every Zipf tick — avoids
+                # legend entries with holes (e.g. leftover ub_rg_pop at S=0 only).
+                complete = []
+                for sch in schemes:
+                    ok = True
+                    for zs in zipfs:
+                        g = cell[(cell["scheme"] == sch) & np.isclose(cell["zipf_s"], zs)]
+                        if g.empty or not (g["step_us"] > 0).any():
+                            ok = False
+                            break
+                    if ok:
+                        complete.append(sch)
+                schemes = complete if complete else schemes
+                if not schemes or not zipfs:
                     continue
                 fig, ax = plt.subplots(figsize=(8.5, 4.8))
                 x = np.arange(len(zipfs))
@@ -388,7 +406,6 @@ def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
                     for zs in zipfs:
                         g = cell[(cell["scheme"] == scheme) & np.isclose(cell["zipf_s"], zs)]
                         v = float(g["step_us"].mean()) if not g.empty else np.nan
-                        # Log scale rejects non-positive heights.
                         ys.append(v if (v == v and v > 0) else np.nan)
                     ax.bar(
                         x + i * width - 0.4 + width / 2,
@@ -400,10 +417,11 @@ def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
                 ax.set_xticks(x)
                 ax.set_xticklabels([f"{z:g}" for z in zipfs])
                 ax.set_yscale("log")
+                cov = ",".join(f"{z:g}" for z in zipfs)
                 style_ax(
                     ax,
                     f"{tag} S{int(scenario)} bar: step_us vs Zipf "
-                    f"(batch={int(batch)}, σ={skew:g}µs, log y)",
+                    f"(batch={int(batch)}, σ={skew:g}µs, Zipf∈{{{cov}}}, log y)",
                     "Zipf S",
                     "Step (µs, log)",
                 )
@@ -415,6 +433,10 @@ def plot_exp12_bars(df: pd.DataFrame, exp: str, tag: str, figs_dir: Path):
                 fig.savefig(path, dpi=140)
                 plt.close(fig)
                 figs.append(path)
+                keep_names.add(path.name)
+    for stale in figs_dir.glob(f"{exp}_s*_bar_step_vs_zipf_b*_nsk*.png"):
+        if stale.name not in keep_names:
+            stale.unlink()
     return figs
 
 
@@ -904,7 +926,7 @@ def topology_and_scheme_md(engine: str) -> str:
     scenario_scope_note = (
         "主矩阵仅跑场景1与场景4；场景4 行为级按 Sparse CLOS 路径类（PFM / SW-S / SW-a-b）建模。"
         if engine != "packet"
-        else "逐包场景4拓扑若未就绪，则逐包仅用于场景1 协议调试。"
+        else "主矩阵含场景1与场景4；场景4 使用 `s4_n512` case（Sparse CLOS CSV）的逐包结果。"
     )
     return f"""### 2.2 组网方案
 
@@ -1313,10 +1335,9 @@ def write_report(
     )
     if engine == "packet":
         lines.append(
-            "> 逐包引擎按风险路径裁剪且当前完整度不足；"
-            "行为级引擎覆盖完整主矩阵与 PDF。"
-            "本报告方案对比仅使用本引擎结果，不与行为级混比。"
-            "实验3 系统 CCT PDF 若本引擎样本未齐，报告自动回退到行为级多 seed 结果。\n"
+            "> 逐包引擎按风险路径裁剪（S4 主扫为 ub_rg/packet_spray × 部分 Zipf/σ；"
+            "若干 ep512 曾 timeout）。"
+            "本报告**只含本引擎**表与图，不回退嵌入行为级 PDF/KPI。\n"
         )
     else:
         lines.append(
@@ -1403,21 +1424,9 @@ def write_report(
     pdf_df = df[df["exp"] == "exp3_pdf"].copy()
     pdf_df = pdf_df[pdf_df["cct_us"].notna() & (pdf_df["cct_us"] > 0)]
     pdf_figs_dir = figs_dir
-    pdf_note = ""
-    # If this engine has no exp3_pdf yet, fall back to the peer engine's samples/figures.
-    if pdf_df.empty and peer_df is not None and not peer_df.empty:
-        peer_pdf = peer_df[peer_df["exp"] == "exp3_pdf"].copy()
-        peer_pdf = peer_pdf[peer_pdf["cct_us"].notna() & (peer_pdf["cct_us"] > 0)]
-        if not peer_pdf.empty:
-            pdf_df = peer_pdf
-            peer_engine = str(peer_pdf["engine"].iloc[0]) if "engine" in peer_pdf.columns else "peer"
-            peer_root = ROOT / "results" / ("ub_rg_packet" if peer_engine == "packet" else "ub_rg")
-            if (peer_root / "figures").exists():
-                pdf_figs_dir = peer_root / "figures"
-            pdf_note = f"（当前引擎尚无 exp3_pdf；下图暂用 **{peer_engine}** 引擎样本）\n"
+    # Do not fall back to the peer engine: a packet report must not embed
+    # behavioral PDF figures (and vice versa). Missing PDF stays explicitly empty.
     if not pdf_df.empty:
-        if pdf_note:
-            lines.append(pdf_note)
         lines.append(
             "**系统 CCT 样本统计（µs，mean/std/count）**——"
             "按 batch 分表，不把不同 batch 混在一张表里。\n"
@@ -1432,19 +1441,38 @@ def write_report(
             )
             lines.append(f"**batch={int(b)}**\n\n")
             lines.append("```\n" + clean_table(stats.round(2).to_string()) + "\n```\n")
-        for sc in sorted(pdf_df["scenario"].unique()):
+        report_scenarios = sorted(df["scenario"].dropna().unique())
+        for sc in report_scenarios:
             lines.append(f"### 5.{int(sc)} 场景{int(sc)} PDF\n")
+            sc_pdf = pdf_df[pdf_df["scenario"] == sc]
             sc_figs = sorted(pdf_figs_dir.glob(f"exp3_pdf_s{int(sc)}_ep*_s*.png"))
-            if sc_figs:
+            if sc_pdf.empty:
+                lines.append(
+                    f"_（场景{int(sc)} 尚无本引擎 `exp3_pdf` 样本；"
+                    f"勿与另一引擎混读。可用 "
+                    f"`run_ub_rg_experiments.py --engine {engine} --exp3-pdf --scenario {int(sc)}` 补齐。）_\n"
+                )
+            elif sc_figs:
                 for p in sc_figs:
                     lines.append(md_img(p) + "\n")
             else:
                 lines.append("_（该场景 PDF 样本尚未齐）_\n")
         lines.append("### 5.4 跨场景对比 PDF（S1-EP128 / S4-EP512）\n")
-        for p in sorted(pdf_figs_dir.glob("exp3_pdf_compare_s*.png")):
-            lines.append(md_img(p) + "\n")
+        compare_figs = sorted(pdf_figs_dir.glob("exp3_pdf_compare_s*.png"))
+        if compare_figs:
+            for p in compare_figs:
+                lines.append(md_img(p) + "\n")
+        else:
+            lines.append("_（跨场景对比 PDF 尚未生成）_\n")
     else:
-        lines.append("_（exp3_pdf 系统 CCT 样本尚未生成，运行 `run_ub_rg_experiments.py --exp3-pdf`）_\n")
+        lines.append(
+            f"_（本引擎尚无 `exp3_pdf` 系统 CCT 样本；"
+            f"Exp3 请看下方 roundtrip step 汇总。补齐："
+            f"`python3 run_ub_rg_experiments.py --engine {engine} --exp3-pdf`）_\n"
+        )
+        for sc in sorted(df["scenario"].dropna().unique()):
+            lines.append(f"### 5.{int(sc)} 场景{int(sc)} PDF\n")
+            lines.append("_（无本引擎 PDF 样本）_\n")
     lines.append("### 5.x Roundtrip Step vs EP（汇总）\n")
     lines.append(
         "> **读图**：每个面板一个 Zipf S；横轴 EP size，颜色=方案（log y）。"
