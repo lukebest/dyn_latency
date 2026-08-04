@@ -4,7 +4,7 @@
 > 结论适用于场景1/4；Exp1/2 为网络子系统；Exp3 含 Zipf×batch GEMV straggler；启动偏差为 N(0,σ²)，σ∈{0,2,4,8} µs。
 - **配置包输出差异**（Exp1，按 batch 分列，不跨 batch 平均 step）：batch=16：POP/RG=**1.010×**，Spray/RG=**1.006×**；batch=256：POP/RG=**0.991×**，Spray/RG=**1.587×**，POP2/RG 平均为 **0.990×**。这是当前配置包的联合差异；plane、path delay、jitter 和 barrier 尚未统一，不能把比值单独归因于目的侧配速（见 §1.1）。
 - **POP 启动开销会被负载摊薄**：batch=16 时 POP/RG=**1.010×**，batch=256 时为 **0.991×**；结果符合“多一次 one-way 启动、稳态节拍与 RG 相同”的模型预期。
-- **瓶颈下界**：CCT/König 中位数为 ub_rg=2.575、ub_rg_pop=2.617、ub_rg_pop2=2.633、packet_spray=8.800；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。
+- **瓶颈下界**：CCT/König 中位数为 ub_rg=2.622、ub_rg_pop=2.617、ub_rg_pop2=2.633、packet_spray=2.511；它证明输出符合当前方程，但不是排除混杂后的硬件性能验证。
 - **拓扑范围**：主矩阵为场景1（Clos+iSLIP）与场景4（Sparse CLOS 512P）。
 - **Exp3**：端到端含 GEMV；`gemv_us` 随 Zipf 热点与 batch 变化。
 - 当前 UB_RG 配置包的 CCT 更接近自定义 König 下界；与 Spray 的比值是**配置包联合差异**，不是“仅改目的侧准入”的受控因果结论（原因见 §1.1）。
@@ -139,7 +139,7 @@ CLI：`--scheme=ub_rg|ub_rg_pop|ub_rg_pop2|packet_spray|islip`；`--start-skew-u
 | 2 PDF | roundtrip | 同上 | 16,64,128,256,512 | 同左 | 每格 96 seeds | σ=4µs | 同左 |
 > 本报告不单独展示 Combine（`exp2_combine`）扫参；Combine 仅作为 Exp3 roundtrip 的后半段计入系统 CCT。
 
-引擎：**packet**；成功汇总运行数：**611**。原始结果：`results/ub_rg_packet/`。
+引擎：**packet**；成功汇总运行数：**1387**。原始结果：`results/ub_rg_packet/`。
 > 上表对齐当前 runner：仅场景1+4；启动偏差为 N(0,σ²)（σ∈{0,2,4,8}）；场景1 含 iSLIP；Exp3 输出 gemv_us/e2e_us。旧场景2/3 结果请忽略。
 > 逐包引擎按风险路径裁剪（S4 主扫为 ub_rg/packet_spray × 部分 Zipf/σ；若干 ep512 曾 timeout）。本报告**只含本引擎**表与图，不回退嵌入行为级 PDF/KPI。
 ## 3. 实验1：倾斜专家流量下的 Dispatch
@@ -203,6 +203,8 @@ zipf_s
 scheme packet_spray    ub_rg ub_rg_pop packet_spray  ub_rg ub_rg_pop packet_spray  ub_rg ub_rg_pop packet_spray    ub_rg ub_rg_pop   packet_spray     ub_rg ub_rg_pop
 zipf_s
 0.0          209.45   210.58    200.48       124.12  99.38    104.24       111.33  77.83     84.11       213.45   211.78    201.68       35908.57  35784.57  37491.73
+0.3          733.86   591.37       NaN       150.73  92.37       NaN       134.58  74.31       NaN       737.86   592.57       NaN       10246.05  12716.28       NaN
+0.7         4799.99  4792.24       NaN       108.89  70.19       NaN        62.51  47.46       NaN      4803.99  4793.44       NaN        1567.21   1568.42       NaN
 0.9        14015.00  8325.16       NaN       101.53  66.47       NaN        45.97  31.41       NaN     14019.00  8326.36       NaN         536.42    909.28       NaN
 ```
 ![exp1_dispatch_s4_bar_step_vs_zipf_b16_nsk0.png](../results/ub_rg_packet/figures/exp1_dispatch_s4_bar_step_vs_zipf_b16_nsk0.png)
@@ -220,11 +222,62 @@ zipf_s
 - **场景1** 单层 Clos：EP ∈ {32, 64, 128}；PDF batch∈{16,64,128,256,512}（含 iSLIP）
 - **场景4** Sparse CLOS：EP ∈ {128, 256, 512}；PDF batch∈{16,64,128,256,512}
 每场景单独出 PDF（每个 (EP, Zipf S) 一张）；另附跨场景对比图（S1-EP128 / S4-EP512）。**颜色区分方案**（ub_rg / ub_rg_pop / ub_rg_pop2 / packet_spray / islip），**线型区分 batch**（16 实线、64 虚线、128 点划、256 密虚线、512 点线）。
-_（本引擎尚无 `exp3_pdf` 系统 CCT 样本；Exp3 请看下方 roundtrip step 汇总。补齐：`python3 run_ub_rg_experiments.py --engine packet --exp3-pdf`）_
+**系统 CCT 样本统计（µs，mean/std/count）**——按 batch 分表，不把不同 batch 混在一张表里。
+**batch=16**
+
+```
+                                mean                  std               count
+scheme                  packet_spray   ub_rg packet_spray  ub_rg packet_spray ub_rg
+scenario ep_size zipf_s
+1        32      0.0           40.92   42.25         4.37   4.21           16    16
+                 0.9           45.85   51.05         4.59   4.66           16    16
+         64      0.0           44.93   45.96         3.77   3.78           16    16
+                 0.9           67.68   88.84         4.93  11.44           16    16
+         128     0.0           49.59   50.72         3.18   3.23           16    16
+                 0.9          111.70  135.56         5.42   6.70           16    16
+4        128     0.0           63.85  264.95         3.16   3.13           16    16
+                 0.9          282.01  459.21         5.82   6.99           16    16
+         256     0.0           57.28  258.24         2.98   2.97           16    16
+                 0.9          268.38  441.72         6.34   6.79           16    16
+         512     0.0           56.76   57.81         5.05   5.12           16    16
+                 0.9          322.70  354.78         4.99   8.83           16    16
+```
+**batch=256**
+
+```
+                                mean                    std                 count
+scheme                  packet_spray     ub_rg packet_spray    ub_rg packet_spray ub_rg
+scenario ep_size zipf_s
+1        32      0.0          224.54    329.45         3.46     8.92           16    16
+                 0.9          642.54    707.28        12.63    15.12           16    16
+         64      0.0          231.00    324.69         3.62     9.97           16    16
+                 0.9         1790.14   1277.08       125.46    23.81           16    16
+         128     0.0          238.44    327.62         3.89     7.23           16    16
+                 0.9         3825.50   2339.82      1915.64    69.70           16    16
+4        128     0.0         6462.98   1192.80       851.68   257.05           16    16
+                 0.9        14745.33  10980.46      2008.65  1357.19           16    16
+         256     0.0          881.05    386.20        20.44   180.25           16    16
+                 0.9        13491.05  13610.83      1978.56  1830.18           16    16
+         512     0.0          439.99    451.86         5.19     5.60           16    16
+                 0.9        20040.14   7841.92      7295.78   660.82           16    16
+```
 ### 4.1 场景1 PDF
-_（无本引擎 PDF 样本）_
+![exp3_pdf_s1_ep128_s0.9.png](../results/ub_rg_packet/figures/exp3_pdf_s1_ep128_s0.9.png)
+![exp3_pdf_s1_ep128_s0.png](../results/ub_rg_packet/figures/exp3_pdf_s1_ep128_s0.png)
+![exp3_pdf_s1_ep32_s0.9.png](../results/ub_rg_packet/figures/exp3_pdf_s1_ep32_s0.9.png)
+![exp3_pdf_s1_ep32_s0.png](../results/ub_rg_packet/figures/exp3_pdf_s1_ep32_s0.png)
+![exp3_pdf_s1_ep64_s0.9.png](../results/ub_rg_packet/figures/exp3_pdf_s1_ep64_s0.9.png)
+![exp3_pdf_s1_ep64_s0.png](../results/ub_rg_packet/figures/exp3_pdf_s1_ep64_s0.png)
 ### 4.4 场景4 PDF
-_（无本引擎 PDF 样本）_
+![exp3_pdf_s4_ep128_s0.9.png](../results/ub_rg_packet/figures/exp3_pdf_s4_ep128_s0.9.png)
+![exp3_pdf_s4_ep128_s0.png](../results/ub_rg_packet/figures/exp3_pdf_s4_ep128_s0.png)
+![exp3_pdf_s4_ep256_s0.9.png](../results/ub_rg_packet/figures/exp3_pdf_s4_ep256_s0.9.png)
+![exp3_pdf_s4_ep256_s0.png](../results/ub_rg_packet/figures/exp3_pdf_s4_ep256_s0.png)
+![exp3_pdf_s4_ep512_s0.9.png](../results/ub_rg_packet/figures/exp3_pdf_s4_ep512_s0.9.png)
+![exp3_pdf_s4_ep512_s0.png](../results/ub_rg_packet/figures/exp3_pdf_s4_ep512_s0.png)
+### 4.9 跨场景对比 PDF（S1-EP128 / S4-EP512）
+![exp3_pdf_compare_s0.9.png](../results/ub_rg_packet/figures/exp3_pdf_compare_s0.9.png)
+![exp3_pdf_compare_s0.png](../results/ub_rg_packet/figures/exp3_pdf_compare_s0.png)
 ### 4.x Roundtrip Step vs EP（汇总）
 > **读图**：每个面板一个 Zipf S；横轴 EP size，颜色=方案（log y）。对比同一偏斜下方案随 EP 的 roundtrip step，不再把 scheme×S 叠成折线。
 ![exp3_s1_step_vs_ep.png](../results/ub_rg_packet/figures/exp3_s1_step_vs_ep.png)
@@ -246,12 +299,12 @@ _（无本引擎 PDF 样本）_
 - **场景4 batch=16** ub_rg_pop CCT/König：mean=0.521，median=0.239
 - **场景4 batch=16** ub_rg_pop2 CCT/König：mean=0.503，median=0.235
 - **场景4 batch=16** packet_spray CCT/König：mean=0.507，median=0.242
-- **场景4 batch=256** ub_rg CCT/König：mean=0.692，median=0.678
+- **场景4 batch=256** ub_rg CCT/König：mean=0.633，median=0.678
 - **场景4 batch=256** ub_rg_pop CCT/König：mean=0.635，median=0.635
-- **场景4 batch=256** packet_spray CCT/König：mean=0.935，median=0.934
+- **场景4 batch=256** packet_spray CCT/König：mean=0.782，median=0.684
 ## 6. 双引擎对比（逐包 vs 行为级）
 在相同 (scenario, scheme, mode, batch, zipf_s, ep_size) 键上对齐 step_us / lat_p99。
-对齐样本 **2444** 组；step 比值（packet/behavioral）均值=1.838，中位数=0.877。
+对齐样本 **76204** 组；step 比值（packet/behavioral）均值=2.310，中位数=1.216。
 ```
           exp  scenario       scheme     mode  batch  zipf_s  ep_size  step_packet  p99_packet  step_behav  p99_behav  step_ratio
 exp1_dispatch         1 packet_spray dispatch     16     0.3      128       15.987      11.645      11.855      7.131       1.349
@@ -276,8 +329,8 @@ exp1_dispatch         1 packet_spray dispatch     16     0.7      128       37.8
 exp1_dispatch         1 packet_spray dispatch     16     0.7      128       37.825      34.035      58.591     51.716       0.646
 ```
 若该比值显著偏离 1，不能仅解释为“逐包栈静态开销”。逐包引擎含真实CBFC/缓冲与控制面，行为级折叠了 byte buffer；两引擎 plane 映射也不一致。在统一输入、完成守恒和异常门禁通过前，这里是**交叉验证对照**，不是行为级绝对值校准。
-- **packet** batch=16 同参数格平均：POP/RG=1.009×，Spray/RG=1.482×
-- **packet** batch=256 同参数格平均：POP/RG=0.999×，Spray/RG=4.091×
+- **packet** batch=16 同参数格平均：POP/RG=1.009×，Spray/RG=1.186×
+- **packet** batch=256 同参数格平均：POP/RG=0.999×，Spray/RG=3.269×
 - **behavioral** batch=16 同参数格平均：POP/RG=1.002×，Spray/RG=0.858×
 - **behavioral** batch=64 同参数格平均：POP/RG=1.000×，Spray/RG=1.136×
 - **behavioral** batch=128 同参数格平均：POP/RG=1.000×，Spray/RG=1.144×
