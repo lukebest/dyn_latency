@@ -1150,13 +1150,23 @@ def _sys1_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
         spray_step = float(spray["step_time_us"])
         rg_step = float(rg["step_time_us"])
         ratio = rg_step / spray_step
+        if ratio < 1.0:
+            verdict = (
+                f"`ub_rg` step 约为 Spray 的 **{ratio:.1f}×**（更快），"
+                "串行 Wide-EP 主锚点上逐包证据支持 `ub_rg` 相对 Spray 降 step。"
+            )
+        elif ratio > 1.0:
+            verdict = (
+                f"`ub_rg` step 约为 Spray 的 **{ratio:.1f}×**（更慢），"
+                "串行 Wide-EP 下逐包证据不支持 `ub_rg` 相对 Spray 加速。"
+            )
+        else:
+            verdict = "`ub_rg` 与 Spray step 在主锚点上基本持平。"
         lines.append(
             f"- 主锚点（B=256、S=0.5、L=60、EP=128）：Packet Spray step="
             f"{spray_step:.1f} µs、吞吐 {float(spray['throughput_tokens_s']):.1f} "
             f"token/s/device；`ub_rg` step={rg_step:.1f} µs、吞吐 "
-            f"{float(rg['throughput_tokens_s']):.1f}。"
-            f"`ub_rg` step 约为 Spray 的 **{ratio:.1f}×**（更慢），"
-            "串行 Wide-EP 下逐包证据不支持 `ub_rg` 相对 Spray 加速。\n"
+            f"{float(rg['throughput_tokens_s']):.1f}。{verdict}\n"
         )
     if spray0 and spray and spray9:
         lines.append(
@@ -1244,7 +1254,7 @@ def _sys2_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
             f"{'（m=4 相对串行退化）' if s4 < 1 else ''}；"
             "通讯利用率≈1，计算几乎藏不住通讯（mask≈0）。\n"
         )
-        if None not in (d1, c1, d4, c4):
+        if s4 < 1.0 and None not in (d1, c1, d4, c4):
             work1 = float(d1) + float(c1)
             work4 = 4.0 * (float(d4) + float(c4))
             lines.append(
@@ -1336,12 +1346,20 @@ def _sys3_preamble(rows: Sequence[Mapping[str, Any]]) -> list[str]:
         ep_size=None,
     )
     if spray71 and rg71:
+        spray_tc = float(spray71["tc_us"])
+        rg_tc = float(rg71["tc_us"])
+        if rg_tc < spray_tc:
+            tc_verdict = "倾斜负载下 `ub_rg` 的 AFD Tc/step 更低。"
+        elif rg_tc > spray_tc:
+            tc_verdict = "倾斜负载下 Spray 的 AFD Tc/step 明显更低。"
+        else:
+            tc_verdict = "倾斜负载下两方案 AFD Tc 基本持平。"
         lines.append(
-            f"- 7:1、m=2、S=0.5：Spray Tc={float(spray71['tc_us']):.1f} µs、"
+            f"- 7:1、m=2、S=0.5：Spray Tc={spray_tc:.1f} µs、"
             f"step={float(spray71['step_time_us']):.1f} µs；"
-            f"`ub_rg` Tc={float(rg71['tc_us']):.1f} µs、"
+            f"`ub_rg` Tc={rg_tc:.1f} µs、"
             f"step={float(rg71['step_time_us']):.1f} µs。"
-            "倾斜负载下 Spray 的 AFD Tc/step 明显更低。\n"
+            f"{tc_verdict}\n"
         )
     if rg0 and rg71:
         lines.append(
@@ -1517,13 +1535,78 @@ def build_report(
     )
 
     lines.append("## 2. 结论摘要\n")
+    spray_anchor = _find_anchor(
+        by_exp["sys1"], scheme="packet_spray", zipf_s=0.5, microbatches=1
+    )
+    rg_anchor = _find_anchor(
+        by_exp["sys1"], scheme="ub_rg", zipf_s=0.5, microbatches=1
+    )
+    if spray_anchor and rg_anchor:
+        sys1_ratio = float(rg_anchor["step_time_us"]) / float(
+            spray_anchor["step_time_us"]
+        )
+        if sys1_ratio < 1.0:
+            sys1_summary = (
+                f"- Sys1：串行 Wide-EP 主锚点上 `ub_rg` step 约为 Spray 的 "
+                f"{sys1_ratio:.1f}×（更快）。\n"
+            )
+        elif sys1_ratio > 1.0:
+            sys1_summary = (
+                "- Sys1：串行 Wide-EP 下 `ub_rg` 相对 Packet Spray 显著更慢。\n"
+            )
+        else:
+            sys1_summary = (
+                "- Sys1：串行 Wide-EP 主锚点上 `ub_rg` 与 Spray step 基本持平。\n"
+            )
+    else:
+        sys1_summary = "- Sys1：主锚点对比缺失，见后文章节表。\n"
+
+    spray71 = _find_anchor(
+        by_exp["sys3"],
+        scheme="packet_spray",
+        zipf_s=0.5,
+        microbatches=2,
+        attention_devices=112,
+        ffn_devices=16,
+        ep_size=None,
+    )
+    rg71 = _find_anchor(
+        by_exp["sys3"],
+        scheme="ub_rg",
+        zipf_s=0.5,
+        microbatches=2,
+        attention_devices=112,
+        ffn_devices=16,
+        ep_size=None,
+    )
+    if spray71 and rg71:
+        if float(rg71["tc_us"]) < float(spray71["tc_us"]):
+            sys3_summary = (
+                "- Sys3：本轮 AFD 双向掩盖率普遍远低于 100%；"
+                "倾斜负载下 `ub_rg` 的 Tc 通常更低。\n"
+            )
+        elif float(rg71["tc_us"]) > float(spray71["tc_us"]):
+            sys3_summary = (
+                "- Sys3：本轮 AFD 双向掩盖率普遍远低于 100%；"
+                "倾斜负载下 Spray 的 Tc 通常更低。\n"
+            )
+        else:
+            sys3_summary = (
+                "- Sys3：本轮 AFD 双向掩盖率普遍远低于 100%；"
+                "倾斜负载下两方案 Tc 接近。\n"
+            )
+    else:
+        sys3_summary = (
+            "- Sys3：本轮 AFD 双向掩盖率普遍远低于 100%；详见后文章节。\n"
+        )
+
     lines.append(
         "各实验的设计意图与逐点结论见后文 Sys1–Sys3 章首；此处先收束跨实验结论：\n"
         "- 本报告仅含场景1逐包证据；不得外推到未跑拓扑。\n"
-        "- Sys1：串行 Wide-EP 下 `ub_rg` 相对 Packet Spray 显著更慢。\n"
+        f"{sys1_summary}"
         "- Sys2：Spray 上 TBO 有净加速；`ub_rg` 上并非必然获益（通信受限且 "
         "CCT 随 batch 缩小不足线性时，增大 m 可退化）。\n"
-        "- Sys3：本轮 AFD 双向掩盖率普遍远低于 100%；倾斜负载下 Spray 的 Tc 通常更低。\n"
+        f"{sys3_summary}"
         "- 跨实验均值图不对齐部署形态（Wide-EP vs AFD），只作数据可用性概览，"
         "不能直接读成方案排名。B≥1024 未纳入；单 seed CCT 不作跨 seed P99。\n"
     )
